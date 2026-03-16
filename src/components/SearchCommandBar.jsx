@@ -6,7 +6,7 @@ import { loadWorkspace, saveWorkspace, getDefaultWorkspaceData } from '../utils/
 
 export function SearchCommandBar({ searchQuery, onSearchChange, placeholder = 'Search notes…' }) {
   const navigate = useNavigate();
-  const { switchWorkspace } = useWorkspace();
+  const { switchWorkspace, currentWorkspace } = useWorkspace();
   const [value, setValue] = useState(searchQuery);
 
   useEffect(() => {
@@ -24,6 +24,15 @@ export function SearchCommandBar({ searchQuery, onSearchChange, placeholder = 'S
   const applyCommand = useCallback(() => {
     const cmd = value.trim();
     if (!cmd) return;
+    if (cmd === '.') {
+      if (currentWorkspace !== 'home') {
+        switchWorkspace('home');
+        navigate('/');
+      }
+      setValue('');
+      onSearchChange?.('');
+      return;
+    }
     if (cmd.startsWith('..')) {
       if (cmd === '..reset') {
         clearMasterKey();
@@ -60,7 +69,7 @@ export function SearchCommandBar({ searchQuery, onSearchChange, placeholder = 'S
         onSearchChange?.('');
       }
     }
-  }, [value, navigate, onSearchChange, switchWorkspace]);
+  }, [value, navigate, onSearchChange, switchWorkspace, currentWorkspace]);
 
   const handleKeyDown = useCallback(
     (e) => {

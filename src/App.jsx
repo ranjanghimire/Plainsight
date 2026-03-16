@@ -25,6 +25,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/w/:workspace" element={<WorkspacePage />} />
+        <Route path="/ws/:workspace" element={<WorkspacePage />} />
         <Route path="/manage" element={<ManagePage />} />
       </Routes>
     </>
