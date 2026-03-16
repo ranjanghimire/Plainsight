@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CategoryDropdown } from './CategoryDropdown';
+import { formatNoteDate } from '../utils/formatDate';
 
 function TrashIcon() {
   return (
@@ -57,6 +58,11 @@ export function NoteCard({
           onAddNew={onAddCategory}
           triggerLabel="+Add category"
         />
+        {note.createdAt && (
+          <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
+            {formatNoteDate(note.createdAt)}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => onDelete(note.id)}
