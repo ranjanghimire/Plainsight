@@ -42,9 +42,10 @@ export function WorkspaceProvider({ children }) {
 
   const addNote = useCallback((text, category = null) => {
     const id = crypto.randomUUID?.() ?? `n-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const createdAt = new Date().toISOString();
     setData((prev) => ({
       ...prev,
-      notes: [...(prev.notes || []), { id, text, category }],
+      notes: [{ id, text, category, createdAt }, ...(prev.notes || [])],
     }));
     return id;
   }, []);
