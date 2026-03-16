@@ -85,8 +85,14 @@ export function ManagePage() {
                 </>
               ) : (
                 <>
-                  <span className="font-medium text-stone-800 dark:text-stone-200">{name}</span>
-                  <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/ws/${name}`)}
+                    className="flex-1 text-left font-medium text-stone-800 dark:text-stone-200 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer py-1 -my-1 rounded focus:outline-none focus:ring-2 focus:ring-stone-300 dark:focus:ring-stone-600"
+                  >
+                    {name}
+                  </button>
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => {
