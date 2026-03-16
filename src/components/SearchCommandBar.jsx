@@ -14,7 +14,9 @@ export function SearchCommandBar({ searchQuery, onSearchChange, placeholder = 'S
   }, [searchQuery]);
 
   const handleChange = useCallback((e) => {
-    const v = e.target.value;
+    let v = e.target.value;
+    // Normalize for mobile: collapse spaces after dot(s) so dot-commands work with autocorrect/swipe
+    v = v.replace(/^\.\.\s+/, '..').replace(/^\.\s+/, '.');
     setValue(v);
     onSearchChange?.(v);
   }, [onSearchChange]);
