@@ -3,8 +3,9 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { useSearch } from '../hooks/useSearch';
 import { NoteCard } from './NoteCard';
 import { CategoryDropdown } from './CategoryDropdown';
+import { SearchCommandBar } from './SearchCommandBar';
 
-export function NotesView({ searchQuery }) {
+export function NotesView() {
   const {
     data,
     addNote,
@@ -13,24 +14,21 @@ export function NotesView({ searchQuery }) {
     addCategory,
   } = useWorkspace();
 
+  const [inputValue, setInputValue] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(null);
-  const [newNoteText, setNewNoteText] = useState('');
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const notes = data.notes || [];
   const categories = data.categories || [];
-  const filteredBySearch = useSearch(notes, searchQuery);
+  const filteredBySearch = useSearch(notes, inputValue);
   const filteredNotes = useMemo(() => {
     if (!categoryFilter) return filteredBySearch;
     return filteredBySearch.filter((n) => n.category === categoryFilter);
   }, [filteredBySearch, categoryFilter]);
 
-  const handleNewNoteSubmit = (e) => {
-    e?.preventDefault();
-    const text = newNoteText.trim();
-    if (!text) return;
-    addNote(text, categoryFilter);
-    setNewNoteText('');
+  const handleCreateNote = (text) => {
+    if (!text?.trim()) return;
+    addNote(text.trim(), categoryFilter);
   };
 
   const handleInlineAddCategory = () => {
@@ -44,16 +42,11 @@ export function NotesView({ searchQuery }) {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleNewNoteSubmit}>
-        <input
-          type="text"
-          value={newNoteText}
-          onChange={(e) => setNewNoteText(e.target.value)}
-          placeholder="New note…"
-          className="w-full px-4 py-2.5 rounded-lg border border-stone-200 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 focus:border-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 dark:placeholder-stone-500 dark:focus:ring-stone-600"
-          aria-label="New note"
-        />
-      </form>
+      <SearchCommandBar
+        value={inputValue}
+        onChange={setInputValue}
+        onCreateNote={handleCreateNote}
+      />
 
       <div className="flex flex-wrap items-center gap-1.5">
         <button
