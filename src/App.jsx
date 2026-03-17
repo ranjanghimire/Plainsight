@@ -21,7 +21,7 @@ function RedirectWorkspaceOnLoad() {
 function AppHeader() {
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4">
-      <h1 className="text-lg font-medium text-stone-800 dark:text-stone-200">Plainsight</h1>
+      <h1 className="text-2xl font-medium tracking-wider pl-1 text-stone-800 dark:text-stone-200">Plainsight</h1>
     </header>
   );
 }
