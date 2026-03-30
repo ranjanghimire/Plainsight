@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
 
@@ -20,11 +20,35 @@ export function NoteCard({
 }) {
   const [text, setText] = useState(note.text);
   const [isEditing, setIsEditing] = useState(false);
+  const [metaVisible, setMetaVisible] = useState(false);
+  const toggleEditTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (toggleEditTimerRef.current) clearTimeout(toggleEditTimerRef.current);
+    };
+  }, []);
 
   const commitText = () => {
     if (text !== note.text) onUpdate(note.id, { text });
     setIsEditing(false);
   };
+
+  /** Single activate toggles meta; second activate within window opens editor (mouse dblclick + touch double-tap). */
+  const handleTextBodyPointerPick = () => {
+    if (toggleEditTimerRef.current !== null) {
+      clearTimeout(toggleEditTimerRef.current);
+      toggleEditTimerRef.current = null;
+      setIsEditing(true);
+      return;
+    }
+    toggleEditTimerRef.current = setTimeout(() => {
+      toggleEditTimerRef.current = null;
+      setMetaVisible((v) => !v);
+    }, 280);
+  };
+
+  const showMetaRow = metaVisible || isEditing;
 
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-600 dark:bg-stone-800">
@@ -44,12 +68,13 @@ export function NoteCard({
         />
       ) : (
         <p
-          onClick={() => setIsEditing(true)}
-          className="text-stone-700 dark:text-stone-300 whitespace-pre-wrap cursor-text min-h-[1.5em]"
+          onClick={handleTextBodyPointerPick}
+          className="text-stone-700 dark:text-stone-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation"
         >
-          {text || 'Click to edit…'}
+          {text || 'Double-click or double-tap to edit…'}
         </p>
       )}
+      {showMetaRow && (
       <div className="flex items-center justify-between gap-2 mt-2">
         <CategoryDropdown
           categories={categories}
@@ -72,6 +97,7 @@ export function NoteCard({
           <TrashIcon />
         </button>
       </div>
+      )}
     </div>
   );
 }
