@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-ro
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
-import { SettingsDrawer, SettingsGearButton } from './components/SettingsDrawer';
+import { SettingsDrawer, MenuButton } from './components/SettingsDrawer';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
@@ -55,7 +55,7 @@ function AppHeader({ onOpenSettings }) {
       </h1>
       <div className="flex items-center gap-0.5 shrink-0">
         <ArchiveHistoryButton />
-        <SettingsGearButton onOpen={onOpenSettings} />
+        <MenuButton onOpen={onOpenSettings} />
       </div>
     </header>
   );

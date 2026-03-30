@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
-function GearIcon({ className = '' }) {
+function MenuIcon({ className = '' }) {
   return (
     <svg
       className={className}
@@ -14,27 +14,21 @@ function GearIcon({ className = '' }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={1.75}
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.75}
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        d="M5 8h14M5 12h14M5 16h14"
       />
     </svg>
   );
 }
 
-export function SettingsGearButton({ onOpen }) {
+export function MenuButton({ onOpen }) {
   return (
     <button
       type="button"
       onClick={onOpen}
       className="p-2 -mr-2 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700 transition-colors"
-      aria-label="Open settings"
+      aria-label="Open menu"
     >
-      <GearIcon className="w-6 h-6" />
+      <MenuIcon className="w-6 h-6" />
     </button>
   );
 }
@@ -113,7 +107,7 @@ export function SettingsDrawer({ open, onClose }) {
         className={`absolute inset-0 bg-stone-900/40 transition-opacity duration-300 ease-out ${
           entered ? 'opacity-100' : 'opacity-0'
         }`}
-        aria-label="Close settings"
+        aria-label="Close menu"
         onClick={onClose}
       />
       <aside
@@ -123,17 +117,20 @@ export function SettingsDrawer({ open, onClose }) {
           flex flex-col
           ${entered ? 'translate-x-0' : 'translate-x-full'}
         `}
-        aria-label="Settings"
+        aria-labelledby="app-menu-title"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 dark:border-stone-600 shrink-0">
-          <h2 className="text-lg font-medium text-stone-900 dark:text-stone-100">
-            Settings
+          <h2
+            id="app-menu-title"
+            className="text-lg font-medium text-stone-900 dark:text-stone-100"
+          >
+            Menu
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="p-2 -mr-1 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700"
-            aria-label="Close settings"
+            aria-label="Close menu"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -143,7 +140,7 @@ export function SettingsDrawer({ open, onClose }) {
         <div className="flex-1 overflow-y-auto px-5 py-2">
           <div className="border-b border-stone-100 dark:border-stone-700">
             <DrawerSwitch
-              id="settings-dark-mode"
+              id="menu-dark-mode"
               label="Dark mode"
               checked={isDark}
               onChange={setIsDark}
