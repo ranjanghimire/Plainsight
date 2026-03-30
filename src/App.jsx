@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { WorkspaceProvider } from './context/WorkspaceContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { SettingsDrawer, SettingsGearButton } from './components/SettingsDrawer';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
@@ -18,19 +20,28 @@ function RedirectWorkspaceOnLoad() {
   return null;
 }
 
-function AppHeader() {
+function AppHeader({ onOpenSettings }) {
   return (
-    <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4">
-      <h1 className="text-2xl font-medium tracking-wider pl-1 text-stone-800 dark:text-stone-200">Plainsight</h1>
+    <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">
+      <h1 className="text-2xl font-medium tracking-wider pl-1 text-stone-800 dark:text-stone-200">
+        Plainsight
+      </h1>
+      <SettingsGearButton onOpen={onOpenSettings} />
     </header>
   );
 }
 
 function AppRoutes() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
     <>
       <RedirectWorkspaceOnLoad />
-      <AppHeader />
+      <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/w/:workspace" element={<WorkspacePage />} />
@@ -55,11 +66,13 @@ function NavigationLock() {
 
 export default function App() {
   return (
-    <WorkspaceProvider>
-      <BrowserRouter>
-        <NavigationLock />
-        <AppRoutes />
-      </BrowserRouter>
-    </WorkspaceProvider>
+    <ThemeProvider>
+      <WorkspaceProvider>
+        <BrowserRouter>
+          <NavigationLock />
+          <AppRoutes />
+        </BrowserRouter>
+      </WorkspaceProvider>
+    </ThemeProvider>
   );
 }
