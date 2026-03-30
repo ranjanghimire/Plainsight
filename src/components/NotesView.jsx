@@ -1,9 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useSearch } from '../hooks/useSearch';
 import { NoteCard } from './NoteCard';
 import { CategoryDropdown } from './CategoryDropdown';
 import { SearchCommandBar } from './SearchCommandBar';
+
+/** Filter value for notes with no category (distinct from `null` = show all). */
+const UNCATEGORIZED_FILTER = '__uncategorized__';
+
+function noteHasNoCategory(n) {
+  return n.category == null || n.category === '';
+}
 
 export function NotesView() {
   const {
@@ -20,15 +27,32 @@ export function NotesView() {
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const notes = data.notes || [];
   const categories = data.categories || [];
+  const hasUncategorizedNotes = useMemo(
+    () => notes.some(noteHasNoCategory),
+    [notes],
+  );
+  useEffect(() => {
+    if (
+      categoryFilter === UNCATEGORIZED_FILTER &&
+      !hasUncategorizedNotes
+    ) {
+      setCategoryFilter(null);
+    }
+  }, [categoryFilter, hasUncategorizedNotes]);
   const filteredBySearch = useSearch(notes, inputValue);
   const filteredNotes = useMemo(() => {
     if (!categoryFilter) return filteredBySearch;
+    if (categoryFilter === UNCATEGORIZED_FILTER) {
+      return filteredBySearch.filter(noteHasNoCategory);
+    }
     return filteredBySearch.filter((n) => n.category === categoryFilter);
   }, [filteredBySearch, categoryFilter]);
 
   const handleCreateNote = (text) => {
     if (!text?.trim()) return;
-    addNote(text.trim(), categoryFilter);
+    const cat =
+      categoryFilter === UNCATEGORIZED_FILTER ? null : categoryFilter;
+    addNote(text.trim(), cat);
   };
 
   const handleInlineAddCategory = () => {
@@ -66,6 +90,15 @@ export function NotesView() {
             {cat}
           </button>
         ))}
+        {hasUncategorizedNotes && (
+          <button
+            type="button"
+            onClick={() => setCategoryFilter(UNCATEGORIZED_FILTER)}
+            className={`px-2.5 py-1 rounded-md text-sm ${categoryFilter === UNCATEGORIZED_FILTER ? 'bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200' : 'bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-stone-700 dark:text-stone-300 dark:hover:bg-stone-600'}`}
+          >
+            Undefined
+          </button>
+        )}
         {showInlineAddCategory ? (
           <span className="inline-flex items-center gap-1">
             <input
@@ -108,7 +141,11 @@ export function NotesView() {
             onUpdate={updateNote}
             onDelete={deleteNote}
             onAddCategory={addCategory}
-            defaultCategory={categoryFilter}
+            defaultCategory={
+              categoryFilter === UNCATEGORIZED_FILTER
+                ? null
+                : categoryFilter
+            }
           />
         ))}
       </div>
