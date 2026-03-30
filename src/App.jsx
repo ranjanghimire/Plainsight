@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-ro
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
-import { SettingsDrawer, MenuButton } from './components/SettingsDrawer';
+import { MenuPanel, MenuButton } from './components/MenuPanel';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
@@ -68,7 +68,7 @@ function AppRoutes() {
     <>
       <RedirectWorkspaceOnLoad />
       <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
-      <SettingsDrawer
+      <MenuPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />

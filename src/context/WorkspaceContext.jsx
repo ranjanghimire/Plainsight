@@ -5,44 +5,139 @@ import {
   loadWorkspace,
   saveWorkspace,
   getDefaultWorkspaceData,
+  loadAppState,
+  saveAppStatePartial,
+  VISIBLE_WS_PREFIX,
 } from '../utils/storage';
 
 const WorkspaceContext = createContext(null);
 
+function isWorkspaceDataEmpty(d) {
+  return (
+    !d.notes?.length &&
+    !d.categories?.length &&
+    !Object.keys(d.archivedNotes || {}).length
+  );
+}
+
 export function WorkspaceProvider({ children }) {
-  const [currentWorkspace, setCurrentWorkspace] = useState('home');
-  const [data, setData] = useState(() => loadWorkspace('workspace_home'));
+  const appInitial = loadAppState();
+  const initialKey = appInitial.lastActiveStorageKey || 'workspace_home';
+  let initialData = loadWorkspace(initialKey);
+  if (isWorkspaceDataEmpty(initialData)) {
+    initialData = getDefaultWorkspaceData();
+    saveWorkspace(initialKey, initialData);
+  }
 
-  const workspaceKey = getWorkspaceKey(currentWorkspace);
+  const [activeStorageKey, setActiveStorageKey] = useState(initialKey);
+  const [visibleWorkspaces, setVisibleWorkspaces] = useState(
+    appInitial.visibleWorkspaces,
+  );
+  const [data, setData] = useState(initialData);
+  const [currentWorkspace, setCurrentWorkspace] = useState(() => {
+    if (initialKey === 'workspace_home') return 'home';
+    if (initialKey.startsWith(VISIBLE_WS_PREFIX)) {
+      const entry = appInitial.visibleWorkspaces.find(
+        (e) => e.key === initialKey,
+      );
+      if (entry?.id === 'home') return 'home';
+      return entry ? `visible:${entry.id}` : 'home';
+    }
+    return getWorkspaceNameFromKey(initialKey);
+  });
+  const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
 
-  const load = useCallback((name) => {
-    const key = getWorkspaceKey(name);
-    setData(loadWorkspace(key));
-    setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
+  const workspaceKey = activeStorageKey;
+
+  const bumpWorkspaceSwitch = useCallback(() => {
+    setWorkspaceSwitchGeneration((g) => g + 1);
   }, []);
 
   const save = useCallback(() => {
-    saveWorkspace(workspaceKey, data);
-  }, [workspaceKey, data]);
+    saveWorkspace(activeStorageKey, data);
+  }, [activeStorageKey, data]);
 
   useEffect(() => {
     save();
-  }, [data, workspaceKey, save]);
+  }, [data, activeStorageKey, save]);
 
-  const switchWorkspace = useCallback((name) => {
-    const key = getWorkspaceKey(name);
-    let nextData = loadWorkspace(key);
-    if (
-      !nextData.notes?.length &&
-      !nextData.categories?.length &&
-      !Object.keys(nextData.archivedNotes || {}).length
-    ) {
-      nextData = getDefaultWorkspaceData();
-      saveWorkspace(key, nextData);
-    }
-    setData(nextData);
-    setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
-  }, []);
+  const load = useCallback(
+    (name) => {
+      const key = getWorkspaceKey(name);
+      let nextData = loadWorkspace(key);
+      if (isWorkspaceDataEmpty(nextData)) {
+        nextData = getDefaultWorkspaceData();
+        saveWorkspace(key, nextData);
+      }
+      setActiveStorageKey(key);
+      setData(nextData);
+      setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
+      saveAppStatePartial({ lastActiveStorageKey: key });
+      bumpWorkspaceSwitch();
+    },
+    [bumpWorkspaceSwitch],
+  );
+
+  const switchWorkspace = useCallback(
+    (name) => {
+      const key = getWorkspaceKey(name);
+      let nextData = loadWorkspace(key);
+      if (isWorkspaceDataEmpty(nextData)) {
+        nextData = getDefaultWorkspaceData();
+        saveWorkspace(key, nextData);
+      }
+      setActiveStorageKey(key);
+      setData(nextData);
+      setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
+      saveAppStatePartial({ lastActiveStorageKey: key });
+      bumpWorkspaceSwitch();
+    },
+    [bumpWorkspaceSwitch],
+  );
+
+  const switchVisibleWorkspace = useCallback(
+    (entry) => {
+      let nextData = loadWorkspace(entry.key);
+      if (isWorkspaceDataEmpty(nextData)) {
+        nextData = getDefaultWorkspaceData();
+        saveWorkspace(entry.key, nextData);
+      }
+      setActiveStorageKey(entry.key);
+      setData(nextData);
+      setCurrentWorkspace(entry.id === 'home' ? 'home' : `visible:${entry.id}`);
+      saveAppStatePartial({ lastActiveStorageKey: entry.key });
+      bumpWorkspaceSwitch();
+    },
+    [bumpWorkspaceSwitch],
+  );
+
+  const createVisibleWorkspace = useCallback(
+    (displayName) => {
+      const name = displayName.trim();
+      if (!name) return null;
+      const id =
+        crypto.randomUUID?.() ??
+        `vw-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      const key = `${VISIBLE_WS_PREFIX}${id}`;
+      const fresh = getDefaultWorkspaceData();
+      saveWorkspace(key, fresh);
+      const entry = { id, name, key };
+      setVisibleWorkspaces((prev) => {
+        const next = [...prev, entry];
+        saveAppStatePartial({
+          visibleWorkspaces: next,
+          lastActiveStorageKey: key,
+        });
+        return next;
+      });
+      setActiveStorageKey(key);
+      setData(fresh);
+      setCurrentWorkspace(`visible:${id}`);
+      bumpWorkspaceSwitch();
+      return entry;
+    },
+    [bumpWorkspaceSwitch],
+  );
 
   const addNote = useCallback((text, category = null) => {
     const id = crypto.randomUUID?.() ?? `n-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -58,7 +153,7 @@ export function WorkspaceProvider({ children }) {
     setData((prev) => ({
       ...prev,
       notes: (prev.notes || []).map((n) =>
-        n.id === id ? { ...n, ...updates } : n
+        n.id === id ? { ...n, ...updates } : n,
       ),
     }));
   }, []);
@@ -183,7 +278,7 @@ export function WorkspaceProvider({ children }) {
         ...prev,
         categories: (prev.categories || []).filter((c) => c !== name),
         notes: (prev.notes || []).map((n) =>
-          n.category === name ? { ...n, category: null } : n
+          n.category === name ? { ...n, category: null } : n,
         ),
         archivedNotes: arch,
       };
@@ -203,10 +298,10 @@ export function WorkspaceProvider({ children }) {
       return {
         ...prev,
         categories: (prev.categories || []).map((c) =>
-          c === oldName ? trimmed : c
+          c === oldName ? trimmed : c,
         ),
         notes: (prev.notes || []).map((n) =>
-          n.category === oldName ? { ...n, category: trimmed } : n
+          n.category === oldName ? { ...n, category: trimmed } : n,
         ),
         archivedNotes: arch,
       };
@@ -216,10 +311,15 @@ export function WorkspaceProvider({ children }) {
   const value = {
     currentWorkspace,
     workspaceKey,
+    activeStorageKey,
     data,
+    visibleWorkspaces,
+    workspaceSwitchGeneration,
     load,
     save,
     switchWorkspace,
+    switchVisibleWorkspace,
+    createVisibleWorkspace,
     addNote,
     updateNote,
     deleteNote,

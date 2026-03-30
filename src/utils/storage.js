@@ -1,6 +1,85 @@
 const WORKSPACE_PREFIX = 'workspace_';
 const MASTER_KEY = 'masterKey';
 
+/** App-level state: visible workspace list + last active storage key */
+export const APP_STATE_KEY = 'plainsight_app_state';
+
+/** Storage keys for workspaces created from the Menu (not dot-commands) */
+export const VISIBLE_WS_PREFIX = 'ws_visible_';
+
+export function defaultVisibleWorkspaces() {
+  return [{ id: 'home', name: 'Home', key: 'workspace_home' }];
+}
+
+function normalizeVisibleEntry(x) {
+  if (!x || typeof x !== 'object') return null;
+  const id = typeof x.id === 'string' ? x.id : null;
+  const name = typeof x.name === 'string' ? x.name : null;
+  const key = typeof x.key === 'string' ? x.key : null;
+  if (!id || !name || !key) return null;
+  return { id, name, key };
+}
+
+export function normalizeVisibleWorkspacesList(arr) {
+  const raw = Array.isArray(arr)
+    ? arr.map(normalizeVisibleEntry).filter(Boolean)
+    : [];
+  const homeIdx = raw.findIndex(
+    (e) => e.id === 'home' || e.key === 'workspace_home',
+  );
+  let home =
+    homeIdx >= 0
+      ? { ...raw[homeIdx], id: 'home', name: 'Home', key: 'workspace_home' }
+      : null;
+  if (!home) home = defaultVisibleWorkspaces()[0];
+  const rest = raw.filter(
+    (e) => e.id !== 'home' && e.key !== 'workspace_home',
+  );
+  return [home, ...rest];
+}
+
+export function loadAppState() {
+  try {
+    const raw = localStorage.getItem(APP_STATE_KEY);
+    if (!raw) {
+      return {
+        visibleWorkspaces: defaultVisibleWorkspaces(),
+        lastActiveStorageKey: 'workspace_home',
+      };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      visibleWorkspaces: normalizeVisibleWorkspacesList(
+        parsed.visibleWorkspaces,
+      ),
+      lastActiveStorageKey:
+        typeof parsed.lastActiveStorageKey === 'string'
+          ? parsed.lastActiveStorageKey
+          : 'workspace_home',
+    };
+  } catch {
+    return {
+      visibleWorkspaces: defaultVisibleWorkspaces(),
+      lastActiveStorageKey: 'workspace_home',
+    };
+  }
+}
+
+export function saveAppState(visibleWorkspaces, lastActiveStorageKey) {
+  localStorage.setItem(
+    APP_STATE_KEY,
+    JSON.stringify({ visibleWorkspaces, lastActiveStorageKey }),
+  );
+}
+
+export function saveAppStatePartial(updates) {
+  const prev = loadAppState();
+  saveAppState(
+    updates.visibleWorkspaces ?? prev.visibleWorkspaces,
+    updates.lastActiveStorageKey ?? prev.lastActiveStorageKey,
+  );
+}
+
 export function getWorkspaceKey(name) {
   const slug = name.toLowerCase().trim().replace(/\s+/g, '_');
   return slug === 'home' ? 'workspace_home' : `${WORKSPACE_PREFIX}${slug}`;
