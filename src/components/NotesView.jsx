@@ -72,7 +72,7 @@ export function NotesView() {
         onCreateNote={handleCreateNote}
       />
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
         <button
           type="button"
           onClick={() => setCategoryFilter(null)}
