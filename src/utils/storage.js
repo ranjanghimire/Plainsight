@@ -20,6 +20,25 @@ export function getAllWorkspaceKeys() {
   return keys;
 }
 
+function normalizeArchivedNotes(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!v || typeof v !== 'object') continue;
+    const text = typeof v.text === 'string' ? v.text : k;
+    const lastDeletedAt =
+      typeof v.lastDeletedAt === 'number' && Number.isFinite(v.lastDeletedAt)
+        ? v.lastDeletedAt
+        : Date.now();
+    const category =
+      v.category === undefined || v.category === null || v.category === ''
+        ? undefined
+        : String(v.category);
+    out[text] = { text, category, lastDeletedAt };
+  }
+  return out;
+}
+
 export function loadWorkspace(key) {
   try {
     const raw = localStorage.getItem(key);
@@ -28,6 +47,7 @@ export function loadWorkspace(key) {
     return {
       categories: Array.isArray(data.categories) ? data.categories : [],
       notes: Array.isArray(data.notes) ? data.notes : [],
+      archivedNotes: normalizeArchivedNotes(data.archivedNotes),
     };
   } catch {
     return getDefaultWorkspaceData();
@@ -43,7 +63,7 @@ export function deleteWorkspace(key) {
 }
 
 export function getDefaultWorkspaceData() {
-  return { categories: [], notes: [] };
+  return { categories: [], notes: [], archivedNotes: {} };
 }
 
 export function getMasterKey() {

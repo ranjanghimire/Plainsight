@@ -81,13 +81,18 @@ export function SettingsDrawer({ open, onClose }) {
 
   useEffect(() => {
     if (open) {
-      setMounted(true);
-      const id = requestAnimationFrame(() => setEntered(true));
+      const id = requestAnimationFrame(() => {
+        setMounted(true);
+        requestAnimationFrame(() => setEntered(true));
+      });
       return () => cancelAnimationFrame(id);
     }
-    setEntered(false);
-    const t = window.setTimeout(() => setMounted(false), DRAWER_MS);
-    return () => window.clearTimeout(t);
+    const t0 = window.setTimeout(() => setEntered(false), 0);
+    const t1 = window.setTimeout(() => setMounted(false), DRAWER_MS);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
   }, [open]);
 
   useEffect(() => {

@@ -10,18 +10,38 @@ function TrashIcon() {
   );
 }
 
+function RestoreIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
+}
+
 export function NoteCard({
   note,
   categories,
   onUpdate,
   onDelete,
   onAddCategory,
-  defaultCategory,
+  variant = 'active',
+  onRestore,
+  onArchivedUpdate,
+  onPermanentDeleteArchived,
+  archiveAnimating = false,
 }) {
   const [text, setText] = useState(note.text);
   const [isEditing, setIsEditing] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
   const toggleEditTimerRef = useRef(null);
+  const archivedEditKeyRef = useRef(note.text);
+
+  const isArchived = variant === 'archived';
 
   useEffect(() => {
     return () => {
@@ -30,6 +50,13 @@ export function NoteCard({
   }, []);
 
   const commitText = () => {
+    if (isArchived) {
+      if (text !== note.text) {
+        onArchivedUpdate?.(archivedEditKeyRef.current, { text });
+      }
+      setIsEditing(false);
+      return;
+    }
     if (text !== note.text) onUpdate(note.id, { text });
     setIsEditing(false);
   };
@@ -39,6 +66,7 @@ export function NoteCard({
     if (toggleEditTimerRef.current !== null) {
       clearTimeout(toggleEditTimerRef.current);
       toggleEditTimerRef.current = null;
+      if (isArchived) archivedEditKeyRef.current = note.text;
       setIsEditing(true);
       return;
     }
@@ -50,8 +78,23 @@ export function NoteCard({
 
   const showMetaRow = metaVisible || isEditing;
 
+  const shellClass = isArchived
+    ? 'rounded-lg border border-neutral-200 bg-neutral-100 text-neutral-600 p-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
+    : 'rounded-lg border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-600 dark:bg-stone-800';
+
+  const bodyTextClass = isArchived
+    ? 'text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation'
+    : 'text-stone-700 dark:text-stone-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation';
+
+  const deletedAtIso =
+    note.lastDeletedAt != null
+      ? new Date(note.lastDeletedAt).toISOString()
+      : null;
+
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-600 dark:bg-stone-800">
+    <div
+      className={`${shellClass} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
+    >
       {isEditing ? (
         <textarea
           value={text}
@@ -63,14 +106,15 @@ export function NoteCard({
               commitText();
             }
           }}
-          className="w-full min-h-[80px] px-2 py-1.5 text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200"
+          className={
+            isArchived
+              ? 'w-full min-h-[80px] px-2 py-1.5 text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600'
+              : 'w-full min-h-[80px] px-2 py-1.5 text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200'
+          }
           autoFocus
         />
       ) : (
-        <p
-          onClick={handleTextBodyPointerPick}
-          className="text-stone-700 dark:text-stone-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation"
-        >
+        <p onClick={handleTextBodyPointerPick} className={bodyTextClass}>
           {text || 'Double-click or double-tap to edit…'}
         </p>
       )}
@@ -79,23 +123,53 @@ export function NoteCard({
         <CategoryDropdown
           categories={categories}
           currentCategory={note.category}
-          onSelect={(cat) => onUpdate(note.id, { category: cat })}
+          onSelect={(cat) =>
+            isArchived
+              ? onArchivedUpdate?.(note.text, { category: cat })
+              : onUpdate(note.id, { category: cat })
+          }
           onAddNew={onAddCategory}
           triggerLabel="+Add category"
         />
-        {note.createdAt && (
+        {isArchived && deletedAtIso ? (
+          <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
+            {formatNoteDate(deletedAtIso)}
+          </span>
+        ) : null}
+        {!isArchived && note.createdAt ? (
           <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
             {formatNoteDate(note.createdAt)}
           </span>
+        ) : null}
+        {isArchived ? (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onRestore?.(note.text)}
+              className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+              aria-label="Restore note"
+            >
+              <RestoreIcon />
+            </button>
+            <button
+              type="button"
+              onClick={() => onPermanentDeleteArchived?.(note.text)}
+              className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
+              aria-label="Delete archived note permanently"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onDelete(note.id)}
+            className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400"
+            aria-label="Delete note"
+          >
+            <TrashIcon />
+          </button>
         )}
-        <button
-          type="button"
-          onClick={() => onDelete(note.id)}
-          className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400"
-          aria-label="Delete note"
-        >
-          <TrashIcon />
-        </button>
       </div>
       )}
     </div>

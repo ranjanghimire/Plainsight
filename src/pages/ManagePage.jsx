@@ -10,7 +10,8 @@ export function ManagePage() {
 
   useEffect(() => {
     const keys = getAllWorkspaceKeys().filter((k) => k !== 'workspace_home');
-    setWorkspaces(keys);
+    const t = window.setTimeout(() => setWorkspaces(keys), 0);
+    return () => window.clearTimeout(t);
   }, []);
 
   const handleRename = (key, newName) => {

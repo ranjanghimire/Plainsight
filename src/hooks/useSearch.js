@@ -1,5 +1,3 @@
-import { useState, useCallback } from 'react';
-
 export function useSearch(notes, searchQuery) {
   const filtered =
     !searchQuery || !searchQuery.trim()

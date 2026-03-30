@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  @keyframes plainsight-restore-out {
+    to {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+  }
+  .animate-plainsight-restore-out {
+    animation: plainsight-restore-out 0.2s ease-out forwards;
+  }
+}
+
 body {
   @apply bg-stone-50 text-stone-800 antialiased dark:bg-stone-900 dark:text-stone-200;
   margin: 0;
