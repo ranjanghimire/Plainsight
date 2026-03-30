@@ -53,10 +53,13 @@ export function CategoryChips({
             onChange={(e) => setInlineNewCategoryName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleInlineAddCategory();
-              if (e.key === 'Escape') setShowInlineAddCategory(false);
+              if (e.key === 'Escape') {
+                setInlineNewCategoryName('');
+                setShowInlineAddCategory(false);
+              }
             }}
             placeholder="New category"
-            className="w-28 px-2 py-1 text-sm rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
+            className="w-28 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
             autoFocus
           />
           <button
@@ -65,6 +68,16 @@ export function CategoryChips({
             className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
           >
             Add
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setInlineNewCategoryName('');
+              setShowInlineAddCategory(false);
+            }}
+            className="px-2 py-1 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
+          >
+            Cancel
           </button>
         </span>
       ) : (

@@ -73,7 +73,7 @@ export function ManagePage() {
                       if (e.key === 'Enter') handleRename(key, editName);
                       if (e.key === 'Escape') setEditingKey(null);
                     }}
-                    className="flex-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-200"
+                    className="flex-1 px-2 py-1 text-base rounded border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-200"
                     autoFocus
                   />
                   <button

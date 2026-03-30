@@ -83,7 +83,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
   return (
     <input
       type="text"
-      className="w-full px-4 py-2.5 rounded-lg border border-stone-200 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 focus:border-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 dark:placeholder-stone-500 dark:focus:ring-stone-600"
+      className="w-full px-4 py-2.5 text-base rounded-lg border border-stone-200 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 focus:border-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 dark:placeholder-stone-500 dark:focus:ring-stone-600"
       placeholder="New note..."
       value={value}
       onChange={handleChange}

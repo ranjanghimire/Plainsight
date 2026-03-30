@@ -69,7 +69,7 @@ export function CategoryDropdown({
                   if (e.key === 'Escape') setShowNewInput(false);
                 }}
                 placeholder="New category"
-                className="flex-1 px-2 py-1 text-sm rounded border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-200"
+                className="flex-1 px-2 py-1 text-base rounded border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-200"
                 autoFocus
               />
               <button

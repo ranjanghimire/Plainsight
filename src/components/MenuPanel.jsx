@@ -215,7 +215,7 @@ export function MenuPanel({ open, onClose }) {
                     }
                   }}
                   placeholder="Workspace name"
-                  className="w-full px-2.5 py-1.5 text-sm rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200"
+                  className="w-full px-2.5 py-1.5 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200"
                   autoFocus
                 />
                 <div className="flex gap-2 justify-end">

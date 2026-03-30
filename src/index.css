@@ -14,6 +14,16 @@
   }
 }
 
+/*
+ * iOS Safari zooms the viewport when focused inputs use font-size < 16px.
+ * Enforce at least 16px on common form controls (Tailwind text-base = 1rem).
+ */
+input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']),
+textarea,
+select {
+  font-size: 1rem;
+}
+
 body {
   @apply bg-stone-50 text-stone-800 antialiased dark:bg-stone-900 dark:text-stone-200;
   margin: 0;
