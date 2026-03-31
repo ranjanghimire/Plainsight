@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { WorkspaceProvider } from './context/WorkspaceContext';
+import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
 import { MenuPanel, MenuButton } from './components/MenuPanel';
@@ -48,10 +48,25 @@ function ArchiveHistoryButton() {
 }
 
 function AppHeader({ onOpenSettings }) {
+  const { currentWorkspace, visibleWorkspaces } = useWorkspace();
+
+  const headerTitle = useMemo(() => {
+    if (currentWorkspace === 'home') return 'Plainsight';
+    if (typeof currentWorkspace === 'string' && currentWorkspace.startsWith('visible:')) {
+      const id = currentWorkspace.slice('visible:'.length);
+      const entry = (visibleWorkspaces || []).find((w) => w.id === id);
+      return entry?.name || 'Workspace';
+    }
+    const slug = typeof currentWorkspace === 'string' ? currentWorkspace : '';
+    const spaced = slug.replace(/_/g, ' ').trim();
+    if (!spaced) return 'Workspace';
+    return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+  }, [currentWorkspace, visibleWorkspaces]);
+
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">
       <h1 className="font-header text-2xl font-semibold tracking-widest lowercase pl-1 text-stone-800 dark:text-stone-200">
-        Plainsight
+        {headerTitle}
       </h1>
       <div className="flex items-center gap-0.5 shrink-0">
         <ArchiveHistoryButton />
