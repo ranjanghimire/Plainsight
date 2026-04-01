@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+import { SyncUpgradeProvider } from './context/SyncUpgradeContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
 import { MenuPanel, MenuButton } from './components/MenuPanel';
@@ -134,12 +135,14 @@ export default function App() {
   return (
     <ThemeProvider>
       <WorkspaceProvider>
-        <BrowserRouter>
-          <ArchiveModeProvider>
-            <NavigationLock />
-            <AppRoutes />
-          </ArchiveModeProvider>
-        </BrowserRouter>
+        <SyncUpgradeProvider>
+          <BrowserRouter>
+            <ArchiveModeProvider>
+              <NavigationLock />
+              <AppRoutes />
+            </ArchiveModeProvider>
+          </BrowserRouter>
+        </SyncUpgradeProvider>
       </WorkspaceProvider>
     </ThemeProvider>
   );

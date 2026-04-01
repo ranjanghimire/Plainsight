@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useSyncUpgrade } from '../context/SyncUpgradeContext';
 
 function MenuIcon({ className = '' }) {
   return (
@@ -79,6 +80,7 @@ export function MenuPanel({ open, onClose }) {
     switchVisibleWorkspace,
     createVisibleWorkspace,
   } = useWorkspace();
+  const { syncStatus, syncEmail, beginUpgradeFlow } = useSyncUpgrade();
 
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -173,6 +175,48 @@ export function MenuPanel({ open, onClose }) {
               checked={isDark}
               onChange={setIsDark}
             />
+          </div>
+
+          <div className="border-b border-stone-100 dark:border-stone-700 py-3 px-1 space-y-2">
+            {syncStatus === 'anonymous' ? (
+              <>
+                {/* Future: replace beginUpgradeFlow with a payment step before email verification. */}
+                <button
+                  type="button"
+                  onClick={beginUpgradeFlow}
+                  className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Upgrade to sync
+                </button>
+              </>
+            ) : null}
+            {syncStatus === 'pending' ? (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
+                  Sync pending — verify email
+                </p>
+                <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
+                  Check your inbox to finish enabling sync.
+                </p>
+                {syncEmail ? (
+                  <p className="text-xs text-stone-600 dark:text-stone-300 truncate" title={syncEmail}>
+                    {syncEmail}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {syncStatus === 'verified' ? (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
+                  Sync enabled
+                </p>
+                {syncEmail ? (
+                  <p className="text-xs text-stone-600 dark:text-stone-300 truncate" title={syncEmail}>
+                    {syncEmail}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5">
