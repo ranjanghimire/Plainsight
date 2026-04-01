@@ -91,7 +91,7 @@ export function EnableSyncModal({ open, onClose, onSubmit }) {
           ) : null}
           {submitted ? (
             <p className="text-sm text-stone-600 dark:text-stone-400">
-              Check your email to finish enabling sync.
+              Check your email to continue.
             </p>
           ) : null}
           <div className="flex justify-end gap-2 pt-1">

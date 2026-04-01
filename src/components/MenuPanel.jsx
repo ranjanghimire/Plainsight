@@ -193,10 +193,10 @@ export function MenuPanel({ open, onClose }) {
             {syncStatus === 'pending' ? (
               <div className="space-y-1">
                 <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
-                  Sync pending — verify email
+                  Sync pending — check your email
                 </p>
                 <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
-                  Check your inbox to finish enabling sync.
+                  Check your inbox to continue.
                 </p>
                 {syncEmail ? (
                   <p className="text-xs text-stone-600 dark:text-stone-300 truncate" title={syncEmail}>

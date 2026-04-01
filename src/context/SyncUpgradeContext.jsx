@@ -28,10 +28,25 @@ function writeStored(syncStatus, syncEmail) {
   }
 }
 
-function sessionIndicatesVerifiedEmail(session) {
-  const user = session?.user;
-  if (!user?.email) return false;
-  return !!(user.email_confirmed_at || user.confirmed_at);
+function isEmailAlreadyInUse(error) {
+  if (!error?.message) return false;
+  const m = error.message.toLowerCase();
+  return (
+    m.includes('already in use') ||
+    m.includes('already registered') ||
+    m.includes('user already exists') ||
+    m.includes('has already been registered')
+  );
+}
+
+function reconcileVerifiedFromSession(session, setSyncStatus, setSyncEmail) {
+  if (!session?.user) return;
+  const email = session.user.email;
+  const confirmed = session.user.email_confirmed_at || session.user.confirmed_at;
+  if (email && confirmed) {
+    setSyncStatus('verified');
+    setSyncEmail(email);
+  }
 }
 
 const SyncUpgradeContext = createContext(null);
@@ -46,33 +61,19 @@ export function SyncUpgradeProvider({ children }) {
     writeStored(syncStatus, syncEmail);
   }, [syncStatus, syncEmail]);
 
-  const reconcileSession = useCallback((session) => {
-    if (sessionIndicatesVerifiedEmail(session)) {
-      const email = session.user.email;
-      setSyncStatus('verified');
-      setSyncEmail(email ?? null);
-    }
-  }, []);
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      reconcileSession(data.session);
+      reconcileVerifiedFromSession(data.session, setSyncStatus, setSyncEmail);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (
-        event === 'USER_UPDATED' ||
-        event === 'SIGNED_IN' ||
-        event === 'TOKEN_REFRESHED'
-      ) {
-        reconcileSession(session);
-      }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      reconcileVerifiedFromSession(session, setSyncStatus, setSyncEmail);
     });
 
     return () => subscription.unsubscribe();
-  }, [reconcileSession]);
+  }, []);
 
   /**
    * Entry point for “Upgrade to sync”. Today this opens the email modal; later this can
@@ -87,13 +88,33 @@ export function SyncUpgradeProvider({ children }) {
     if (!trimmed) {
       return { error: 'Please enter your email.' };
     }
-    const { error } = await supabase.auth.updateUser({ email: trimmed });
-    if (error) {
-      return { error: error.message };
+
+    const { error: upgradeError } = await supabase.auth.updateUser({
+      email: trimmed,
+    });
+
+    if (!upgradeError) {
+      setSyncStatus('pending');
+      setSyncEmail(trimmed);
+      return { error: null };
     }
-    setSyncStatus('pending');
-    setSyncEmail(trimmed);
-    return { error: null };
+
+    if (isEmailAlreadyInUse(upgradeError)) {
+      const { error: signInError } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (signInError) {
+        return { error: signInError.message };
+      }
+      setSyncStatus('pending');
+      setSyncEmail(trimmed);
+      return { error: null };
+    }
+
+    return { error: upgradeError.message };
   }, []);
 
   const value = {
