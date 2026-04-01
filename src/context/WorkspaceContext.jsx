@@ -1,4 +1,5 @@
 import { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import {
   getWorkspaceKey,
   getWorkspaceNameFromKey,
@@ -8,7 +9,46 @@ import {
   loadAppState,
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
+  getOrCreateWorkspaceIdForStorageKey,
+  setWorkspaceIdMapping,
 } from '../utils/storage';
+import { queueFullSync } from '../sync/syncHelpers';
+import { supabase } from '../sync/supabaseClient';
+import {
+  getLocalNoteTombstones,
+  getLocalWorkspaces,
+  saveLocalNoteTombstones,
+  saveLocalWorkspaces,
+} from '../sync/localDB';
+
+async function ensureWorkspaceRow({ storageKey, name, kind }) {
+  const now = new Date().toISOString();
+  const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const row = {
+    id,
+    owner_id: user.id,
+    name,
+    kind,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const existing = await getLocalWorkspaces();
+  const idx = existing.findIndex((w) => w.id === id);
+  const next = [...existing];
+  if (idx >= 0) {
+    next[idx] = { ...next[idx], ...row, owner_id: user.id };
+  } else {
+    next.push(row);
+  }
+  await saveLocalWorkspaces(next);
+}
 
 const WorkspaceContext = createContext(null);
 
@@ -61,6 +101,29 @@ export function WorkspaceProvider({ children }) {
     save();
   }, [data, activeStorageKey, save]);
 
+  useEffect(() => {
+    const key = activeStorageKey;
+    const isHome = key === 'workspace_home';
+    const visibleEntry = visibleWorkspaces.find((e) => e.key === key);
+    const name = isHome
+      ? 'Home'
+      : visibleEntry
+        ? visibleEntry.name
+        : getWorkspaceNameFromKey(key);
+    const kind = visibleEntry ? 'visible' : isHome ? 'visible' : 'hidden';
+    void ensureWorkspaceRow({ storageKey: key, name, kind });
+  }, [activeStorageKey, visibleWorkspaces]);
+
+  useEffect(() => {
+    const onSync = () => {
+      const app = loadAppState();
+      setVisibleWorkspaces(app.visibleWorkspaces);
+      setData(loadWorkspace(activeStorageKey));
+    };
+    window.addEventListener('plainsight:full-sync', onSync);
+    return () => window.removeEventListener('plainsight:full-sync', onSync);
+  }, [activeStorageKey]);
+
   const load = useCallback(
     (name) => {
       const key = getWorkspaceKey(name);
@@ -68,12 +131,19 @@ export function WorkspaceProvider({ children }) {
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
         saveWorkspace(key, nextData);
+        // Hidden/dot workspaces are created lazily on first open.
+        void ensureWorkspaceRow({
+          storageKey: key,
+          name: name === 'home' ? 'Home' : name,
+          kind: name === 'home' ? 'visible' : 'hidden',
+        });
       }
       setActiveStorageKey(key);
       setData(nextData);
       setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
       saveAppStatePartial({ lastActiveStorageKey: key });
       bumpWorkspaceSwitch();
+      queueFullSync();
     },
     [bumpWorkspaceSwitch],
   );
@@ -85,12 +155,18 @@ export function WorkspaceProvider({ children }) {
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
         saveWorkspace(key, nextData);
+        void ensureWorkspaceRow({
+          storageKey: key,
+          name: name === 'home' ? 'Home' : name,
+          kind: name === 'home' ? 'visible' : 'hidden',
+        });
       }
       setActiveStorageKey(key);
       setData(nextData);
       setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
       saveAppStatePartial({ lastActiveStorageKey: key });
       bumpWorkspaceSwitch();
+      queueFullSync();
     },
     [bumpWorkspaceSwitch],
   );
@@ -101,12 +177,18 @@ export function WorkspaceProvider({ children }) {
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
         saveWorkspace(entry.key, nextData);
+        void ensureWorkspaceRow({
+          storageKey: entry.key,
+          name: entry.name,
+          kind: 'visible',
+        });
       }
       setActiveStorageKey(entry.key);
       setData(nextData);
       setCurrentWorkspace(entry.id === 'home' ? 'home' : `visible:${entry.id}`);
       saveAppStatePartial({ lastActiveStorageKey: entry.key });
       bumpWorkspaceSwitch();
+      queueFullSync();
     },
     [bumpWorkspaceSwitch],
   );
@@ -115,13 +197,14 @@ export function WorkspaceProvider({ children }) {
     (displayName) => {
       const name = displayName.trim();
       if (!name) return null;
-      const id =
-        crypto.randomUUID?.() ??
-        `vw-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      const id = uuidv4();
       const key = `${VISIBLE_WS_PREFIX}${id}`;
+      setWorkspaceIdMapping(key, id);
       const fresh = getDefaultWorkspaceData();
       saveWorkspace(key, fresh);
       const entry = { id, name, key };
+      // Create the workspace row (with owner_id) at creation time.
+      void ensureWorkspaceRow({ storageKey: key, name, kind: 'visible' });
       setVisibleWorkspaces((prev) => {
         const next = [...prev, entry];
         saveAppStatePartial({
@@ -134,28 +217,35 @@ export function WorkspaceProvider({ children }) {
       setData(fresh);
       setCurrentWorkspace(`visible:${id}`);
       bumpWorkspaceSwitch();
+      queueFullSync();
       return entry;
     },
     [bumpWorkspaceSwitch],
   );
 
   const addNote = useCallback((text, category = null) => {
-    const id = crypto.randomUUID?.() ?? `n-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const createdAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    const id = uuidv4();
     setData((prev) => ({
       ...prev,
-      notes: [{ id, text, category, createdAt }, ...(prev.notes || [])],
+      notes: [
+        { id, text, category, createdAt: now, updatedAt: now },
+        ...(prev.notes || []),
+      ],
     }));
+    queueFullSync();
     return id;
   }, []);
 
   const updateNote = useCallback((id, updates) => {
+    const now = new Date().toISOString();
     setData((prev) => ({
       ...prev,
       notes: (prev.notes || []).map((n) =>
-        n.id === id ? { ...n, ...updates } : n,
+        n.id === id ? { ...n, ...updates, updatedAt: now } : n,
       ),
     }));
+    queueFullSync();
   }, []);
 
   const deleteNote = useCallback((id) => {
@@ -181,7 +271,23 @@ export function WorkspaceProvider({ children }) {
         archivedNotes: arch,
       };
     });
-  }, []);
+    // Record a tombstone so sync can delete the Supabase row.
+    try {
+      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+      const deletedAt = new Date().toISOString();
+      void (async () => {
+        const existing = await getLocalNoteTombstones(workspaceId);
+        const next = [
+          { id, workspace_id: workspaceId, deleted_at: deletedAt },
+          ...existing.filter((t) => t.id !== id),
+        ];
+        await saveLocalNoteTombstones(workspaceId, next);
+      })();
+    } catch {
+      /* ignore */
+    }
+    queueFullSync();
+  }, [activeStorageKey]);
 
   const restoreArchivedNote = useCallback((textKey, resolvedCategory) => {
     setData((prev) => {
@@ -189,10 +295,8 @@ export function WorkspaceProvider({ children }) {
       const entry = arch[textKey];
       if (!entry) return prev;
       delete arch[textKey];
-      const id =
-        crypto.randomUUID?.() ??
-        `n-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const createdAt = new Date(Date.now()).toISOString();
+      const now = new Date().toISOString();
+      const id = uuidv4();
       const note = {
         id,
         text: entry.text,
@@ -200,7 +304,8 @@ export function WorkspaceProvider({ children }) {
           resolvedCategory === undefined || resolvedCategory === null
             ? null
             : resolvedCategory,
-        createdAt,
+        createdAt: now,
+        updatedAt: now,
       };
       return {
         ...prev,
@@ -208,6 +313,7 @@ export function WorkspaceProvider({ children }) {
         notes: [note, ...(prev.notes || [])],
       };
     });
+    queueFullSync();
   }, []);
 
   const updateArchivedNote = useCallback((textKey, updates) => {
@@ -234,6 +340,7 @@ export function WorkspaceProvider({ children }) {
       }
       return { ...prev, archivedNotes: arch };
     });
+    queueFullSync();
   }, []);
 
   const permanentlyDeleteArchived = useCallback((textKey) => {
@@ -243,6 +350,7 @@ export function WorkspaceProvider({ children }) {
       delete arch[textKey];
       return { ...prev, archivedNotes: arch };
     });
+    queueFullSync();
   }, []);
 
   const removeArchivedByTextKeys = useCallback((textKeys) => {
@@ -254,6 +362,7 @@ export function WorkspaceProvider({ children }) {
       }
       return { ...prev, archivedNotes: arch };
     });
+    queueFullSync();
   }, []);
 
   const addCategory = useCallback((name) => {

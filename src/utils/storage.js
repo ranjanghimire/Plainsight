@@ -80,6 +80,200 @@ export function saveAppStatePartial(updates) {
   );
 }
 
+const WORKSPACE_ID_MAP_KEY = 'plainsight_workspace_id_map';
+const WORKSPACE_ID_REVERSE_PREFIX = '__wsid__:'; // map[__wsid__:<uuid>] = <storageKey>
+
+function readWorkspaceIdMap() {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_ID_MAP_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeWorkspaceIdMap(map) {
+  try {
+    localStorage.setItem(WORKSPACE_ID_MAP_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
+
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(s) {
+  return typeof s === 'string' && UUID_V4_RE.test(s);
+}
+
+function fallbackUuid() {
+  // RFC4122 v4-ish fallback for older browsers.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export function generateUuid() {
+  return crypto?.randomUUID?.() ?? fallbackUuid();
+}
+
+/**
+ * Resolve workspace storage key (e.g. workspace_home) from Supabase workspace UUID.
+ */
+export function getStorageKeyForWorkspaceId(workspaceId) {
+  const map = readWorkspaceIdMap();
+  const reverse = map[`${WORKSPACE_ID_REVERSE_PREFIX}${workspaceId}`];
+  if (typeof reverse === 'string' && reverse) return reverse;
+  for (const [storageKey, id] of Object.entries(map)) {
+    if (storageKey.startsWith(WORKSPACE_ID_REVERSE_PREFIX)) continue;
+    if (id === workspaceId) return storageKey;
+  }
+  return null; // not found
+}
+
+function migrateWorkspaceNotesForSync(data) {
+  const notes = Array.isArray(data.notes) ? data.notes : [];
+  let changed = false;
+  const now = new Date().toISOString();
+  const nextNotes = notes.map((n) => {
+    if (!n || typeof n !== 'object') return n;
+    const o = { ...n };
+    if (!isUuid(o.id)) {
+      o.id = generateUuid();
+      changed = true;
+    }
+    if (!o.createdAt) {
+      o.createdAt = now;
+      changed = true;
+    }
+    if (!o.updatedAt) {
+      o.updatedAt = o.createdAt;
+      changed = true;
+    }
+    return o;
+  });
+  const next = { ...data, notes: nextNotes };
+  return { next, changed };
+}
+
+/**
+ * Stable mapping from local workspace storage key to a Supabase workspace UUID.
+ * This allows local-only workspaces to get a proper UUID immediately.
+ */
+export function getWorkspaceIdForStorageKey(storageKey) {
+  const map = readWorkspaceIdMap();
+  const v = map[storageKey];
+  return typeof v === 'string' && v ? v : undefined;
+}
+
+/**
+ * Bind a storage key to a workspace UUID (overwrites prior key for this UUID).
+ * Used for remote hydration and creating visible workspaces with stable ids.
+ */
+export function setWorkspaceIdMapping(storageKey, workspaceId) {
+  const map = readWorkspaceIdMap();
+  // Remove any old storageKey that pointed to this workspaceId.
+  for (const [k, v] of Object.entries(map)) {
+    if (k.startsWith(WORKSPACE_ID_REVERSE_PREFIX)) continue;
+    if (v === workspaceId && k !== storageKey) delete map[k];
+  }
+  // Remove any reverse entry that pointed to a different key.
+  for (const [k, v] of Object.entries(map)) {
+    if (!k.startsWith(WORKSPACE_ID_REVERSE_PREFIX)) continue;
+    if (k === `${WORKSPACE_ID_REVERSE_PREFIX}${workspaceId}` && v !== storageKey) {
+      delete map[k];
+    }
+  }
+  map[storageKey] = workspaceId;
+  map[`${WORKSPACE_ID_REVERSE_PREFIX}${workspaceId}`] = storageKey;
+  writeWorkspaceIdMap(map);
+}
+
+export function getOrCreateWorkspaceIdForStorageKey(storageKey) {
+  const map = readWorkspaceIdMap();
+  const existing = map[storageKey];
+  if (typeof existing === 'string' && existing) return existing;
+  const id = generateUuid();
+  map[storageKey] = id;
+  writeWorkspaceIdMap(map);
+  return id;
+}
+
+/**
+ * Deterministic storage key for a merged workspace row (remote or local).
+ * usedKeys tracks keys already assigned in this bind pass.
+ */
+export function assignStorageKeyForRemoteWorkspace(w, usedKeys) {
+  const kind = w.kind;
+  const name = (w.name || '').trim();
+  const take = (key) => {
+    if (usedKeys.has(key)) return null;
+    return key;
+  };
+  if (kind === 'visible' && name.toLowerCase() === 'home') {
+    const k = take('workspace_home');
+    if (k) return k;
+  }
+  if (kind === 'visible') {
+    const k = take(`${VISIBLE_WS_PREFIX}${w.id}`);
+    if (k) return k;
+  }
+  const slug =
+    name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') ||
+    'unnamed';
+  let key = `${WORKSPACE_PREFIX}${slug}`;
+  if (usedKeys.has(key)) {
+    key = `${WORKSPACE_PREFIX}${slug}_${String(w.id || '')
+      .replace(/-/g, '')
+      .slice(0, 12)}`;
+  }
+  return key;
+}
+
+/**
+ * Rebuild storageKey ↔ workspace UUID mappings for all merged workspaces (e.g. after local wipe).
+ */
+export function bindMergedWorkspacesToStorageKeys(workspaces) {
+  if (!Array.isArray(workspaces)) return;
+  const used = new Set();
+  const sorted = [...workspaces].sort((a, b) => {
+    const homeScore = (w) =>
+      w.kind === 'visible' && (w.name || '').trim().toLowerCase() === 'home'
+        ? 0
+        : 1;
+    return homeScore(a) - homeScore(b);
+  });
+  for (const w of sorted) {
+    if (!w?.id) continue;
+    const key = assignStorageKeyForRemoteWorkspace(w, used);
+    setWorkspaceIdMapping(key, w.id);
+    used.add(key);
+  }
+}
+
+/**
+ * Build Menu-visible workspace list from merged Supabase-shaped workspaces.
+ */
+export function rebuildVisibleWorkspacesFromRemote(workspaces) {
+  const visible = (workspaces || []).filter((w) => w.kind === 'visible');
+  const entries = [{ id: 'home', name: 'Home', key: 'workspace_home' }];
+  for (const w of visible) {
+    if ((w.name || '').trim().toLowerCase() === 'home') continue;
+    entries.push({
+      id: w.id,
+      name: w.name,
+      key: `${VISIBLE_WS_PREFIX}${w.id}`,
+    });
+  }
+  return normalizeVisibleWorkspacesList(entries);
+}
+
 export function getWorkspaceKey(name) {
   const slug = name.toLowerCase().trim().replace(/\s+/g, '_');
   return slug === 'home' ? 'workspace_home' : `${WORKSPACE_PREFIX}${slug}`;
@@ -123,11 +317,14 @@ export function loadWorkspace(key) {
     const raw = localStorage.getItem(key);
     if (!raw) return getDefaultWorkspaceData();
     const data = JSON.parse(raw);
-    return {
+    const base = {
       categories: Array.isArray(data.categories) ? data.categories : [],
       notes: Array.isArray(data.notes) ? data.notes : [],
       archivedNotes: normalizeArchivedNotes(data.archivedNotes),
     };
+    const { next, changed } = migrateWorkspaceNotesForSync(base);
+    if (changed) saveWorkspace(key, next);
+    return next;
   } catch {
     return getDefaultWorkspaceData();
   }
