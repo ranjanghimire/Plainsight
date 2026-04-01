@@ -18,7 +18,7 @@ import {
 /** Fixed namespace for deterministic archived row ids (v5). */
 const ARCHIVE_ID_NAMESPACE = '018d0e28-8f3a-7000-8000-000000000001';
 
-function archivedRowId(workspaceId: string, text: string): string {
+export function archivedRowIdForText(workspaceId: string, text: string): string {
   return uuidv5(`${workspaceId}\0${text}`, ARCHIVE_ID_NAMESPACE);
 }
 
@@ -155,7 +155,7 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
           : Date.now();
       const iso = new Date(t).toISOString();
       return {
-        id: archivedRowId(workspaceId, text),
+        id: archivedRowIdForText(workspaceId, text),
         workspace_id: workspaceId,
         text,
         category_id: categoryId,

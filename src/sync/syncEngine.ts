@@ -16,6 +16,7 @@ import {
 } from './supabaseClient';
 import {
   getLocalArchivedNotes,
+  getLocalArchivedNoteTombstones,
   getLocalCategories,
   getLocalNoteTombstones,
   getLocalNotes,
@@ -23,6 +24,7 @@ import {
   getLocalWorkspacePins,
   saveLocalArchivedNotes,
   saveLocalCategories,
+  saveLocalArchivedNoteTombstones,
   saveLocalNoteTombstones,
   saveLocalNotes,
   saveLocalWorkspaces,
@@ -50,6 +52,7 @@ import {
   rebuildVisibleWorkspacesFromRemote,
   saveAppState,
 } from '../utils/storage';
+import { notifyHydrationComplete } from './hydrationBridge';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -168,6 +171,22 @@ export async function pushArchivedNotes(localArchived: ArchivedNote[]): Promise<
   }
 }
 
+export async function pushArchivedDeletes(
+  workspaceId: string,
+  archivedIds: string[],
+): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+  try {
+    const ids = (archivedIds || []).filter((id) => isUuid(id));
+    if (ids.length === 0) return { ok: true };
+    const res = await supabase.from('archived_notes').delete().in('id', ids).select('*');
+    console.log('pushArchivedDeletes result:', { workspaceId, ...res });
+    if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: mkError('Failed to delete archived notes', e) };
+  }
+}
+
 export async function pushNoteDeletes(
   workspaceId: string,
   noteIds: string[],
@@ -264,7 +283,7 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
 export async function fullSync(
   workspaceIds?: string[],
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  console.log("FULLSYNC START");
+  let syncSucceeded = false;
 
   try {
     const ownerId = await getOwnerId();
@@ -278,8 +297,6 @@ export async function fullSync(
       };
     }
     const remoteWorkspaces = (remoteWorkspacesRes.data || []) as Workspace[];
-
-    console.log("REMOTE WORKSPACES:", remoteWorkspaces);
 
     // Pull remote pins (workspace_pins is owned via RLS)
     const remotePins = await pullWorkspacePins();
@@ -329,8 +346,6 @@ export async function fullSync(
     const nextVisible = rebuildVisibleWorkspacesFromRemote(mergedWorkspacesWithOwner);
     const appPrev = loadAppState();
     saveAppState(nextVisible, appPrev.lastActiveStorageKey);
-
-    console.log("AFTER HYDRATION:", mergedWorkspaces);
 
     // Ensure every merged workspace has a UI blob key present
     for (const w of mergedWorkspacesWithOwner) {
@@ -385,18 +400,21 @@ export async function fullSync(
     const localNotes: Record<string, Note[]> = {};
     const localArchived: Record<string, ArchivedNote[]> = {};
     const localNoteTombstones: Record<string, { id: string; deleted_at: string }[]> = {};
+    const localArchivedTombstones: Record<string, { id: string; deleted_at: string }[]> = {};
 
     for (const wid of ids) {
-      const [cats, notes, arch, tombs] = await Promise.all([
+      const [cats, notes, arch, tombs, archTombs] = await Promise.all([
         getLocalCategories(wid),
         getLocalNotes(wid),
         getLocalArchivedNotes(wid),
         getLocalNoteTombstones(wid),
+        getLocalArchivedNoteTombstones(wid),
       ]);
       localCategories[wid] = cats;
       localNotes[wid] = notes;
       localArchived[wid] = arch;
       localNoteTombstones[wid] = tombs;
+      localArchivedTombstones[wid] = archTombs;
     }
 
     // Merge
@@ -419,6 +437,16 @@ export async function fullSync(
       mergedNotes[wid] = {
         ...mergedNotes[wid],
         merged: mergedNotes[wid].merged.filter((n) => !tombIds.has(n.id)),
+      };
+    }
+
+    // Apply tombstones: locally deleted archived notes must not be resurrected by remote merges.
+    for (const wid of ids) {
+      const tombIds = new Set((localArchivedTombstones[wid] || []).map((t) => t.id));
+      if (tombIds.size === 0) continue;
+      mergedArchived[wid] = {
+        ...mergedArchived[wid],
+        merged: mergedArchived[wid].merged.filter((n) => !tombIds.has(n.id)),
       };
     }
 
@@ -453,6 +481,10 @@ export async function fullSync(
       const delRes = await pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return { ok: false, error: delRes.error };
 
+      const archDelIds = (localArchivedTombstones[wid] || []).map((t) => t.id);
+      const archDelRes = await pushArchivedDeletes(wid, archDelIds);
+      if (!archDelRes.ok) return { ok: false, error: archDelRes.error };
+
       const catRes = await pushCategories(cats);
       if (!catRes.ok) return { ok: false, error: catRes.error };
 
@@ -464,11 +496,15 @@ export async function fullSync(
 
       // Clear tombstones after successful remote deletes.
       if (delIds.length) await saveLocalNoteTombstones(wid, []);
+      if (archDelIds.length) await saveLocalArchivedNoteTombstones(wid, []);
     }
 
+    syncSucceeded = true;
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Full sync failed', e) };
+  } finally {
+    notifyHydrationComplete({ ok: syncSucceeded });
   }
 }
 

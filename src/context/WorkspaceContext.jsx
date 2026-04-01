@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import { createContext, useContext, useCallback, useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
   getWorkspaceKey,
@@ -9,17 +9,23 @@ import {
   loadAppState,
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
+  isKeyInVisibleWorkspacesList,
   getOrCreateWorkspaceIdForStorageKey,
+  getWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
 } from '../utils/storage';
 import { queueFullSync } from '../sync/syncHelpers';
+import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { supabase } from '../sync/supabaseClient';
 import {
+  getLocalArchivedNoteTombstones,
   getLocalNoteTombstones,
   getLocalWorkspaces,
+  saveLocalArchivedNoteTombstones,
   saveLocalNoteTombstones,
   saveLocalWorkspaces,
 } from '../sync/localDB';
+import { archivedRowIdForText } from '../sync/workspaceStorageBridge';
 
 async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const now = new Date().toISOString();
@@ -62,7 +68,8 @@ function isWorkspaceDataEmpty(d) {
 
 export function WorkspaceProvider({ children }) {
   const appInitial = loadAppState();
-  const initialKey = appInitial.lastActiveStorageKey || 'workspace_home';
+  // Stay on Home until sync hydrates workspaceIdMap; then restore last visible workspace.
+  const initialKey = 'workspace_home';
   let initialData = loadWorkspace(initialKey);
   if (isWorkspaceDataEmpty(initialData)) {
     initialData = getDefaultWorkspaceData();
@@ -74,18 +81,12 @@ export function WorkspaceProvider({ children }) {
     appInitial.visibleWorkspaces,
   );
   const [data, setData] = useState(initialData);
-  const [currentWorkspace, setCurrentWorkspace] = useState(() => {
-    if (initialKey === 'workspace_home') return 'home';
-    if (initialKey.startsWith(VISIBLE_WS_PREFIX)) {
-      const entry = appInitial.visibleWorkspaces.find(
-        (e) => e.key === initialKey,
-      );
-      if (entry?.id === 'home') return 'home';
-      return entry ? `visible:${entry.id}` : 'home';
-    }
-    return getWorkspaceNameFromKey(initialKey);
-  });
+  const [currentWorkspace, setCurrentWorkspace] = useState('home');
   const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
+  /** False until fullSync finishes (success or failure) so we never restore lastActive against a stale map. */
+  const [hydrationComplete, setHydrationComplete] = useState(false);
+  const restoreRef = useRef(() => {});
+  const didInitialRestoreRef = useRef(false);
 
   const workspaceKey = activeStorageKey;
 
@@ -100,6 +101,74 @@ export function WorkspaceProvider({ children }) {
   useEffect(() => {
     save();
   }, [data, activeStorageKey, save]);
+
+  const restoreWorkspaceAfterHydration = useCallback(() => {
+    const app = loadAppState();
+    setVisibleWorkspaces(app.visibleWorkspaces);
+
+    const last = app.lastActiveStorageKey || 'workspace_home';
+    const inVisibleMenu = isKeyInVisibleWorkspacesList(last, app.visibleWorkspaces);
+
+    if (!inVisibleMenu) {
+      saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
+      let d = loadWorkspace('workspace_home');
+      if (isWorkspaceDataEmpty(d)) {
+        d = getDefaultWorkspaceData();
+        saveWorkspace('workspace_home', d);
+      }
+      setActiveStorageKey('workspace_home');
+      setData(d);
+      setCurrentWorkspace('home');
+      bumpWorkspaceSwitch();
+      return;
+    }
+
+    const mappedId = getWorkspaceIdForStorageKey(last);
+    if (last !== 'workspace_home' && !mappedId) {
+      saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
+      let d = loadWorkspace('workspace_home');
+      if (isWorkspaceDataEmpty(d)) {
+        d = getDefaultWorkspaceData();
+        saveWorkspace('workspace_home', d);
+      }
+      setActiveStorageKey('workspace_home');
+      setData(d);
+      setCurrentWorkspace('home');
+      bumpWorkspaceSwitch();
+      return;
+    }
+
+    let nextData = loadWorkspace(last);
+    if (isWorkspaceDataEmpty(nextData)) {
+      nextData = getDefaultWorkspaceData();
+      saveWorkspace(last, nextData);
+    }
+    setActiveStorageKey(last);
+    setData(nextData);
+    if (last === 'workspace_home') {
+      setCurrentWorkspace('home');
+    } else {
+      const entry = (app.visibleWorkspaces || []).find((e) => e.key === last);
+      setCurrentWorkspace(entry?.id === 'home' ? 'home' : `visible:${entry.id}`);
+    }
+    bumpWorkspaceSwitch();
+  }, [bumpWorkspaceSwitch]);
+
+  useEffect(() => {
+    restoreRef.current = restoreWorkspaceAfterHydration;
+  }, [restoreWorkspaceAfterHydration]);
+
+  useEffect(() => {
+    return subscribeHydrationComplete(() => {
+      queueMicrotask(() => {
+        if (!didInitialRestoreRef.current) {
+          didInitialRestoreRef.current = true;
+          restoreRef.current();
+        }
+        setHydrationComplete(true);
+      });
+    });
+  }, []);
 
   useEffect(() => {
     const key = activeStorageKey;
@@ -350,8 +419,24 @@ export function WorkspaceProvider({ children }) {
       delete arch[textKey];
       return { ...prev, archivedNotes: arch };
     });
+    // Record a tombstone so sync can delete the Supabase row.
+    try {
+      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+      const deletedAt = new Date().toISOString();
+      const id = archivedRowIdForText(workspaceId, textKey);
+      void (async () => {
+        const existing = await getLocalArchivedNoteTombstones(workspaceId);
+        const next = [
+          { id, workspace_id: workspaceId, deleted_at: deletedAt },
+          ...existing.filter((t) => t.id !== id),
+        ];
+        await saveLocalArchivedNoteTombstones(workspaceId, next);
+      })();
+    } catch {
+      /* ignore */
+    }
     queueFullSync();
-  }, []);
+  }, [activeStorageKey]);
 
   const removeArchivedByTextKeys = useCallback((textKeys) => {
     if (!textKeys?.length) return;
@@ -362,8 +447,24 @@ export function WorkspaceProvider({ children }) {
       }
       return { ...prev, archivedNotes: arch };
     });
+    // Record tombstones so sync can delete the Supabase rows.
+    try {
+      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+      const deletedAt = new Date().toISOString();
+      const ids = textKeys.map((t) => archivedRowIdForText(workspaceId, t));
+      void (async () => {
+        const existing = await getLocalArchivedNoteTombstones(workspaceId);
+        const next = [
+          ...ids.map((id) => ({ id, workspace_id: workspaceId, deleted_at: deletedAt })),
+          ...existing.filter((t) => !ids.includes(t.id)),
+        ];
+        await saveLocalArchivedNoteTombstones(workspaceId, next);
+      })();
+    } catch {
+      /* ignore */
+    }
     queueFullSync();
-  }, []);
+  }, [activeStorageKey]);
 
   const addCategory = useCallback((name) => {
     const trimmed = (name || '').trim();
@@ -421,6 +522,7 @@ export function WorkspaceProvider({ children }) {
     currentWorkspace,
     workspaceKey,
     activeStorageKey,
+    hydrationComplete,
     data,
     visibleWorkspaces,
     workspaceSwitchGeneration,
