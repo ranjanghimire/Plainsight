@@ -1,15 +1,24 @@
 import { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { NotesView } from '../components/NotesView';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { getWorkspaceKey, loadAppState, isKeyInVisibleWorkspacesList } from '../utils/storage';
 
 export function WorkspacePage() {
   const { workspace } = useParams();
-  const { load } = useWorkspace();
+  const navigate = useNavigate();
+  const { load, hydrationComplete } = useWorkspace();
 
   useEffect(() => {
-    if (workspace) load(workspace);
-  }, [workspace, load]);
+    if (!hydrationComplete || !workspace) return;
+    const key = getWorkspaceKey(workspace);
+    const app = loadAppState();
+    if (!isKeyInVisibleWorkspacesList(key, app.visibleWorkspaces)) {
+      navigate('/', { replace: true });
+      return;
+    }
+    load(workspace);
+  }, [workspace, load, hydrationComplete, navigate]);
 
   return (
     <div className="space-y-4">

@@ -38,6 +38,14 @@ export function normalizeVisibleWorkspacesList(arr) {
   return [home, ...rest];
 }
 
+/** True if this localStorage workspace key is a Menu-visible workspace (Home or a visible tab), not hidden/dot. */
+export function isKeyInVisibleWorkspacesList(storageKey, visibleWorkspaces) {
+  if (!storageKey) return false;
+  if (storageKey === 'workspace_home') return true;
+  const list = Array.isArray(visibleWorkspaces) ? visibleWorkspaces : [];
+  return list.some((w) => w.key === storageKey);
+}
+
 export function loadAppState() {
   try {
     const raw = localStorage.getItem(APP_STATE_KEY);

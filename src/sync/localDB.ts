@@ -1,4 +1,5 @@
 import type {
+  ArchivedNoteTombstone,
   ArchivedNote,
   Category,
   Note,
@@ -21,6 +22,7 @@ const KEY = {
   notes: (workspaceId: string) => `plainsight_local_notes_${workspaceId}`,
   noteTombstones: (workspaceId: string) => `plainsight_local_note_tombstones_${workspaceId}`,
   archived: (workspaceId: string) => `plainsight_local_archived_${workspaceId}`,
+  archivedTombstones: (workspaceId: string) => `plainsight_local_archived_tombstones_${workspaceId}`,
   pins: 'plainsight_local_workspace_pins',
 } as const;
 
@@ -80,6 +82,14 @@ export async function getLocalArchivedNotes(workspaceId: string): Promise<Archiv
 
 export async function saveLocalArchivedNotes(workspaceId: string, rows: ArchivedNote[]): Promise<void> {
   writeJson(KEY.archived(workspaceId), rows);
+}
+
+export async function getLocalArchivedNoteTombstones(workspaceId: string): Promise<ArchivedNoteTombstone[]> {
+  return readJson<ArchivedNoteTombstone[]>(KEY.archivedTombstones(workspaceId), []);
+}
+
+export async function saveLocalArchivedNoteTombstones(workspaceId: string, rows: ArchivedNoteTombstone[]): Promise<void> {
+  writeJson(KEY.archivedTombstones(workspaceId), rows);
 }
 
 export async function getLocalWorkspacePins(): Promise<WorkspacePin[]> {

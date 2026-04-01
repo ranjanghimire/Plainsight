@@ -1,5 +1,6 @@
 import { fullSync } from './syncEngine';
 import { supabase } from './supabaseClient';
+import { notifyHydrationComplete } from './hydrationBridge';
 
 /**
  * Quiet, non-blocking sync queue.
@@ -54,5 +55,17 @@ export function queueFullSync() {
     timer = null;
     run();
   }, 500);
+}
+
+/**
+ * First-load hydration: run after auth so workspaceIdMap / app state exist before UI restores last workspace.
+ * If sync cannot run (no env / no session), still unblocks the UI.
+ */
+export async function runInitialHydration(): Promise<void> {
+  if (!(await canSync())) {
+    notifyHydrationComplete({ ok: false });
+    return;
+  }
+  await fullSync();
 }
 

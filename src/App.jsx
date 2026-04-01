@@ -4,7 +4,7 @@ import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
 import { MenuPanel, MenuButton } from './components/MenuPanel';
-import { queueFullSync } from './sync/syncHelpers';
+import { runInitialHydration } from './sync/syncHelpers';
 import { supabase } from './sync/supabaseClient';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
@@ -81,20 +81,23 @@ function AppHeader({ onOpenSettings }) {
 function AppRoutes() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // 1. Ensure Supabase auth session exists (anonymous login)
+  // Auth first, then hydrate (workspaceIdMap + app state) before WorkspaceContext restores last workspace.
   useEffect(() => {
-    async function ensureAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
+    let cancelled = false;
+    async function boot() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         await supabase.auth.signInAnonymously();
       }
+      if (cancelled) return;
+      await runInitialHydration();
     }
-    ensureAuth();
-  }, []);
-
-  // 2. Initial sync after auth is guaranteed
-  useEffect(() => {
-    queueFullSync();
+    void boot();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
