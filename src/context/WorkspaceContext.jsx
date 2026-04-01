@@ -14,7 +14,12 @@ import {
 } from '../utils/storage';
 import { queueFullSync } from '../sync/syncHelpers';
 import { supabase } from '../sync/supabaseClient';
-import { getLocalWorkspaces, saveLocalWorkspaces } from '../sync/localDB';
+import {
+  getLocalNoteTombstones,
+  getLocalWorkspaces,
+  saveLocalNoteTombstones,
+  saveLocalWorkspaces,
+} from '../sync/localDB';
 
 async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const now = new Date().toISOString();
@@ -266,8 +271,23 @@ export function WorkspaceProvider({ children }) {
         archivedNotes: arch,
       };
     });
+    // Record a tombstone so sync can delete the Supabase row.
+    try {
+      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+      const deletedAt = new Date().toISOString();
+      void (async () => {
+        const existing = await getLocalNoteTombstones(workspaceId);
+        const next = [
+          { id, workspace_id: workspaceId, deleted_at: deletedAt },
+          ...existing.filter((t) => t.id !== id),
+        ];
+        await saveLocalNoteTombstones(workspaceId, next);
+      })();
+    } catch {
+      /* ignore */
+    }
     queueFullSync();
-  }, []);
+  }, [activeStorageKey]);
 
   const restoreArchivedNote = useCallback((textKey, resolvedCategory) => {
     setData((prev) => {

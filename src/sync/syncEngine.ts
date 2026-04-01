@@ -17,11 +17,13 @@ import {
 import {
   getLocalArchivedNotes,
   getLocalCategories,
+  getLocalNoteTombstones,
   getLocalNotes,
   getLocalWorkspaces,
   getLocalWorkspacePins,
   saveLocalArchivedNotes,
   saveLocalCategories,
+  saveLocalNoteTombstones,
   saveLocalNotes,
   saveLocalWorkspaces,
   saveLocalWorkspacePins,
@@ -163,6 +165,22 @@ export async function pushArchivedNotes(localArchived: ArchivedNote[]): Promise<
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to push archived notes', e) };
+  }
+}
+
+export async function pushNoteDeletes(
+  workspaceId: string,
+  noteIds: string[],
+): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+  try {
+    const ids = (noteIds || []).filter((id) => isUuid(id));
+    if (ids.length === 0) return { ok: true };
+    const res = await supabase.from('notes').delete().in('id', ids).select('*');
+    console.log('pushNoteDeletes result:', { workspaceId, ...res });
+    if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: mkError('Failed to delete notes', e) };
   }
 }
 
@@ -366,16 +384,19 @@ export async function fullSync(
     const localCategories: Record<string, Category[]> = {};
     const localNotes: Record<string, Note[]> = {};
     const localArchived: Record<string, ArchivedNote[]> = {};
+    const localNoteTombstones: Record<string, { id: string; deleted_at: string }[]> = {};
 
     for (const wid of ids) {
-      const [cats, notes, arch] = await Promise.all([
+      const [cats, notes, arch, tombs] = await Promise.all([
         getLocalCategories(wid),
         getLocalNotes(wid),
         getLocalArchivedNotes(wid),
+        getLocalNoteTombstones(wid),
       ]);
       localCategories[wid] = cats;
       localNotes[wid] = notes;
       localArchived[wid] = arch;
+      localNoteTombstones[wid] = tombs;
     }
 
     // Merge
@@ -389,6 +410,16 @@ export async function fullSync(
       mergedCategories[wid] = mergeCategories(localCategories[wid] || [], remoteCategories[wid] || []);
       mergedNotes[wid] = mergeNotes(localNotes[wid] || [], remoteNotes[wid] || []);
       mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || []);
+    }
+
+    // Apply tombstones: locally deleted notes must not be resurrected by remote merges.
+    for (const wid of ids) {
+      const tombIds = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
+      if (tombIds.size === 0) continue;
+      mergedNotes[wid] = {
+        ...mergedNotes[wid],
+        merged: mergedNotes[wid].merged.filter((n) => !tombIds.has(n.id)),
+      };
     }
 
     // Save local merged for the rest of tables (workspaces already persisted above)
@@ -405,25 +436,35 @@ export async function fullSync(
       await hydrateWorkspaceUiFromLocalDb(wid);
     }
 
-    // Push merged (last-write-wins; upsert)
-    const pushResults = await Promise.all([
-      // Push the merged workspace list (remote-priority + local-only kept)
+    // Push merged (ensure category FK order: categories before notes)
+    const basePush = await Promise.all([
       pushWorkspaces(mergedWorkspacesWithOwner),
       pushWorkspacePins(mergedPins.merged),
-      ...ids.flatMap((wid) => {
-        const cats = mergedCategories[wid].merged;
-        const notesAligned = alignNoteCategoryIds(mergedNotes[wid].merged, cats);
-        const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
-        return [
-          pushCategories(cats),
-          pushNotes(notesAligned),
-          pushArchivedNotes(archAligned),
-        ];
-      }),
     ]);
+    const baseFailed = basePush.find((r) => (r as any).ok === false) as { ok: false; error: SyncError } | undefined;
+    if (baseFailed) return { ok: false, error: baseFailed.error };
 
-    const failed = pushResults.find((r) => (r as any).ok === false) as { ok: false; error: SyncError } | undefined;
-    if (failed) return { ok: false, error: failed.error };
+    for (const wid of ids) {
+      const cats = mergedCategories[wid].merged;
+      const notesAligned = alignNoteCategoryIds(mergedNotes[wid].merged, cats);
+      const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
+
+      const delIds = (localNoteTombstones[wid] || []).map((t) => t.id);
+      const delRes = await pushNoteDeletes(wid, delIds);
+      if (!delRes.ok) return { ok: false, error: delRes.error };
+
+      const catRes = await pushCategories(cats);
+      if (!catRes.ok) return { ok: false, error: catRes.error };
+
+      const noteRes = await pushNotes(notesAligned);
+      if (!noteRes.ok) return { ok: false, error: noteRes.error };
+
+      const archRes = await pushArchivedNotes(archAligned);
+      if (!archRes.ok) return { ok: false, error: archRes.error };
+
+      // Clear tombstones after successful remote deletes.
+      if (delIds.length) await saveLocalNoteTombstones(wid, []);
+    }
 
     return { ok: true };
   } catch (e) {

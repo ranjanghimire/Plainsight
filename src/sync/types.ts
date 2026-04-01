@@ -29,6 +29,12 @@ export type Note = {
   updated_at: Timestamptz;
 };
 
+export type NoteTombstone = {
+  id: UUID;
+  workspace_id: UUID;
+  deleted_at: Timestamptz;
+};
+
 export type ArchivedNote = {
   id: UUID;
   workspace_id: UUID;
