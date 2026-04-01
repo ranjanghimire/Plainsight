@@ -80,7 +80,16 @@ export function MenuPanel({ open, onClose }) {
     switchVisibleWorkspace,
     createVisibleWorkspace,
   } = useWorkspace();
-  const { syncStatus, syncEmail, beginUpgradeFlow } = useSyncUpgrade();
+  const {
+    syncStatus,
+    syncEmail,
+    beginUpgradeFlow,
+    beginChangeEmailFromPending,
+    beginChangeEmailFromVerified,
+  } = useSyncUpgrade();
+
+  const changeEmailLinkClass =
+    'text-left text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-300 hover:underline';
 
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -192,9 +201,15 @@ export function MenuPanel({ open, onClose }) {
             ) : null}
             {syncStatus === 'pending' ? (
               <div className="space-y-1">
-                <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
-                  Sync pending — check your email
-                </p>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: '#FFB74D' }}
+                  />
+                  <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
+                    Sync pending — check your email
+                  </p>
+                </div>
                 <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
                   Check your inbox to continue.
                 </p>
@@ -203,18 +218,30 @@ export function MenuPanel({ open, onClose }) {
                     {syncEmail}
                   </p>
                 ) : null}
+                <button type="button" onClick={beginChangeEmailFromPending} className={changeEmailLinkClass}>
+                  Change email
+                </button>
               </div>
             ) : null}
             {syncStatus === 'verified' ? (
               <div className="space-y-1">
-                <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
-                  Sync enabled
-                </p>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: '#4CAF50' }}
+                  />
+                  <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
+                    Sync enabled
+                  </p>
+                </div>
                 {syncEmail ? (
                   <p className="text-xs text-stone-600 dark:text-stone-300 truncate" title={syncEmail}>
                     {syncEmail}
                   </p>
                 ) : null}
+                <button type="button" onClick={beginChangeEmailFromVerified} className={changeEmailLinkClass}>
+                  Change email
+                </button>
               </div>
             ) : null}
           </div>

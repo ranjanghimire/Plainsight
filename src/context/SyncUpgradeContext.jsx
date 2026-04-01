@@ -56,6 +56,7 @@ export function SyncUpgradeProvider({ children }) {
   const [syncStatus, setSyncStatus] = useState(stored.syncStatus);
   const [syncEmail, setSyncEmail] = useState(stored.syncEmail);
   const [enableSyncModalOpen, setEnableSyncModalOpen] = useState(false);
+  const [enableSyncModalInitialEmail, setEnableSyncModalInitialEmail] = useState('');
 
   useEffect(() => {
     writeStored(syncStatus, syncEmail);
@@ -80,7 +81,25 @@ export function SyncUpgradeProvider({ children }) {
    * run a payment step before opening verification.
    */
   const beginUpgradeFlow = useCallback(() => {
+    setEnableSyncModalInitialEmail('');
     setEnableSyncModalOpen(true);
+  }, []);
+
+  const beginChangeEmailFromPending = useCallback(() => {
+    setSyncStatus('anonymous');
+    setSyncEmail(null);
+    setEnableSyncModalInitialEmail('');
+    setEnableSyncModalOpen(true);
+  }, []);
+
+  const beginChangeEmailFromVerified = useCallback(() => {
+    setEnableSyncModalInitialEmail(syncEmail ?? '');
+    setEnableSyncModalOpen(true);
+  }, [syncEmail]);
+
+  const closeEnableSyncModal = useCallback(() => {
+    setEnableSyncModalOpen(false);
+    setEnableSyncModalInitialEmail('');
   }, []);
 
   const submitUpgradeEmail = useCallback(async (email) => {
@@ -121,6 +140,8 @@ export function SyncUpgradeProvider({ children }) {
     syncStatus,
     syncEmail,
     beginUpgradeFlow,
+    beginChangeEmailFromPending,
+    beginChangeEmailFromVerified,
     setEnableSyncModalOpen,
     submitUpgradeEmail,
   };
@@ -130,8 +151,9 @@ export function SyncUpgradeProvider({ children }) {
       {children}
       <EnableSyncModal
         open={enableSyncModalOpen}
-        onClose={() => setEnableSyncModalOpen(false)}
+        onClose={closeEnableSyncModal}
         onSubmit={submitUpgradeEmail}
+        initialEmail={enableSyncModalInitialEmail}
       />
     </SyncUpgradeContext.Provider>
   );

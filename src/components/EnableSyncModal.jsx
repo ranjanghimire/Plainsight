@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export function EnableSyncModal({ open, onClose, onSubmit }) {
+export function EnableSyncModal({ open, onClose, onSubmit, initialEmail = '' }) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -9,13 +9,13 @@ export function EnableSyncModal({ open, onClose, onSubmit }) {
   useEffect(() => {
     if (!open) return undefined;
     const t = window.setTimeout(() => {
-      setEmail('');
+      setEmail(initialEmail);
       setError('');
       setSubmitting(false);
       setSubmitted(false);
     }, 0);
     return () => window.clearTimeout(t);
-  }, [open]);
+  }, [open, initialEmail]);
 
   useEffect(() => {
     if (!open) return undefined;
