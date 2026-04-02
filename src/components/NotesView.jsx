@@ -12,6 +12,10 @@ import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 const CATEGORY_LIST_SWAP_MS = 150;
 const CATEGORY_LIST_FADE_MS = 200;
 
+const ARCHIVE_CLEAR_STAGGER_MS = 60;
+const ARCHIVE_CLEAR_CARD_FADE_MS = 180;
+const ARCHIVE_CLEAR_CONTAINER_FADE_MS = 150;
+
 function noteHasNoCategory(n) {
   return n.category == null || n.category === '';
 }
@@ -90,6 +94,8 @@ export function NotesView() {
     return () => {
       categoryListTimersRef.current.forEach(clearTimeout);
       categoryListTimersRef.current = [];
+      archiveClearTimersRef.current.forEach(clearTimeout);
+      archiveClearTimersRef.current = [];
     };
   }, []);
 
@@ -159,6 +165,10 @@ export function NotesView() {
   };
 
   const [archiveClearKeys, setArchiveClearKeys] = useState(null);
+  const [archiveClearDissolveKeys, setArchiveClearDissolveKeys] = useState({});
+  const [archiveClearListHidden, setArchiveClearListHidden] = useState(false);
+  const [archiveEmptyIntro, setArchiveEmptyIntro] = useState(false);
+  const archiveClearTimersRef = useRef([]);
 
   const openArchiveClearConfirm = useCallback(() => {
     const keys = archivedSorted.map((e) => e.text);
@@ -167,10 +177,38 @@ export function NotesView() {
   }, [archivedSorted]);
 
   const confirmArchiveClear = useCallback(() => {
-    if (archiveClearKeys?.length) {
-      removeArchivedByTextKeys(archiveClearKeys);
-    }
+    const keys = archiveClearKeys?.length ? [...archiveClearKeys] : [];
     setArchiveClearKeys(null);
+    if (!keys.length) return;
+
+    archiveClearTimersRef.current.forEach(clearTimeout);
+    archiveClearTimersRef.current = [];
+
+    keys.forEach((k, i) => {
+      const t = window.setTimeout(() => {
+        setArchiveClearDissolveKeys((prev) => ({ ...prev, [k]: true }));
+      }, i * ARCHIVE_CLEAR_STAGGER_MS);
+      archiveClearTimersRef.current.push(t);
+    });
+
+    const lastStaggerStart = keys.length > 0 ? (keys.length - 1) * ARCHIVE_CLEAR_STAGGER_MS : 0;
+    const afterCardsInvisible = lastStaggerStart + ARCHIVE_CLEAR_CARD_FADE_MS;
+
+    const tGrid = window.setTimeout(() => {
+      setArchiveClearListHidden(true);
+    }, afterCardsInvisible);
+    archiveClearTimersRef.current.push(tGrid);
+
+    const tRemove = window.setTimeout(() => {
+      removeArchivedByTextKeys(keys);
+      setArchiveClearDissolveKeys({});
+      setArchiveClearListHidden(false);
+      setArchiveEmptyIntro(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setArchiveEmptyIntro(false));
+      });
+    }, afterCardsInvisible + ARCHIVE_CLEAR_CONTAINER_FADE_MS);
+    archiveClearTimersRef.current.push(tRemove);
   }, [archiveClearKeys, removeArchivedByTextKeys]);
 
   const cancelArchiveClear = useCallback(() => {
@@ -232,6 +270,15 @@ export function NotesView() {
     return () => window.clearTimeout(t);
   }, [workspaceSwitchGeneration]);
 
+  useEffect(() => {
+    if (archiveMode) return undefined;
+    archiveClearTimersRef.current.forEach(clearTimeout);
+    archiveClearTimersRef.current = [];
+    setArchiveClearDissolveKeys({});
+    setArchiveClearListHidden(false);
+    return undefined;
+  }, [archiveMode]);
+
   return (
     <>
     <div
@@ -275,6 +322,8 @@ export function NotesView() {
             }
             isEmpty={archivedSorted.length === 0}
             emptyText="No archived items for this category"
+            listGridHidden={archiveClearListHidden}
+            emptyIntro={archiveEmptyIntro}
           >
             {archivedSorted.map((entry) => (
               <NoteCard
@@ -295,6 +344,7 @@ export function NotesView() {
                 onArchivedUpdate={updateArchivedNote}
                 onPermanentDeleteArchived={permanentlyDeleteArchived}
                 archiveAnimating={!!restoringKeys[entry.text]}
+                bulkDissolve={!!archiveClearDissolveKeys[entry.text]}
               />
             ))}
           </NoteList>

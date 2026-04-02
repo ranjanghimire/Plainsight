@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
 
+const ACTIVE_DELETE_MS = 180;
+const ARCHIVE_DELETE_MS = 170;
+
 function TrashIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -34,18 +37,22 @@ export function NoteCard({
   onArchivedUpdate,
   onPermanentDeleteArchived,
   archiveAnimating = false,
+  bulkDissolve = false,
 }) {
   const [text, setText] = useState(note.text);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
   const toggleEditTimerRef = useRef(null);
   const archivedEditKeyRef = useRef(note.text);
+  const deleteTimerRef = useRef(null);
 
   const isArchived = variant === 'archived';
 
   useEffect(() => {
     return () => {
       if (toggleEditTimerRef.current) clearTimeout(toggleEditTimerRef.current);
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
     };
   }, []);
 
@@ -63,6 +70,7 @@ export function NoteCard({
 
   /** Single activate toggles meta; second activate within window opens editor (mouse dblclick + touch double-tap). */
   const handleTextBodyPointerPick = () => {
+    if (bulkDissolve || isDeleting) return;
     if (toggleEditTimerRef.current !== null) {
       clearTimeout(toggleEditTimerRef.current);
       toggleEditTimerRef.current = null;
@@ -93,93 +101,125 @@ export function NoteCard({
       ? new Date(note.lastDeletedAt).toISOString()
       : null;
 
+  const outerWrapClass = bulkDissolve
+    ? 'transition-opacity duration-[180ms] ease-out opacity-0 pointer-events-none'
+    : isDeleting && isArchived
+      ? 'transition-all duration-[170ms] ease-out opacity-0 scale-95 pointer-events-none'
+      : isDeleting && !isArchived
+        ? 'transition-all duration-200 ease-out opacity-0 translate-y-[4px] max-h-0 overflow-hidden pointer-events-none'
+        : 'transition-all duration-200 ease-out opacity-100 translate-y-0 max-h-[999px] overflow-visible scale-100';
+
+  const handleDeleteActive = () => {
+    if (isDeleting || bulkDissolve) return;
+    setIsDeleting(true);
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    deleteTimerRef.current = window.setTimeout(() => {
+      deleteTimerRef.current = null;
+      onDelete(note.id);
+    }, ACTIVE_DELETE_MS);
+  };
+
+  const handlePermanentDeleteArchived = () => {
+    if (isDeleting || bulkDissolve) return;
+    setIsDeleting(true);
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    deleteTimerRef.current = window.setTimeout(() => {
+      deleteTimerRef.current = null;
+      onPermanentDeleteArchived?.(note.text);
+    }, ARCHIVE_DELETE_MS);
+  };
+
   return (
-    <div
-      className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
-    >
-      {isEditing ? (
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={commitText}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              commitText();
-            }
-          }}
-          className={
-            isArchived
-              ? 'w-full min-h-[80px] px-2 py-1.5 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600'
-              : 'w-full min-h-[80px] px-2 py-1.5 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200'
-          }
-          autoFocus
-        />
-      ) : (
-        <p onClick={handleTextBodyPointerPick} className={bodyTextClass}>
-          {text || 'Double-click or double-tap to edit…'}
-        </p>
-      )}
+    <div className={outerWrapClass}>
       <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-out ${showMetaRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
       >
-        {/* overflow-hidden only when collapsed so 0fr rows don’t leak; visible when open so CategoryDropdown isn’t clipped */}
-        <div className={`min-h-0 ${showMetaRow ? 'overflow-visible' : 'overflow-hidden'}`}>
-          <div
-            className={`flex items-center justify-between gap-2 pt-2 transition-opacity duration-150 ease-out ${
-              showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            <CategoryDropdown
-              categories={categories}
-              currentCategory={note.category}
-              onSelect={(cat) =>
-                isArchived
-                  ? onArchivedUpdate?.(note.text, { category: cat })
-                  : onUpdate(note.id, { category: cat })
+        {isEditing ? (
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={commitText}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                commitText();
               }
-              onAddNew={onAddCategory}
-              triggerLabel="+Add category"
-            />
-            {isArchived && deletedAtIso ? (
-              <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
-                {formatNoteDate(deletedAtIso)}
-              </span>
-            ) : null}
-            {!isArchived && note.createdAt ? (
-              <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
-                {formatNoteDate(note.createdAt)}
-              </span>
-            ) : null}
-            {isArchived ? (
-              <div className="flex items-center gap-0.5 shrink-0">
+            }}
+            className={
+              isArchived
+                ? 'w-full min-h-[80px] px-2 py-1.5 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600'
+                : 'w-full min-h-[80px] px-2 py-1.5 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200'
+            }
+            autoFocus
+          />
+        ) : (
+          <p onClick={handleTextBodyPointerPick} className={bodyTextClass}>
+            {text || 'Double-click or double-tap to edit…'}
+          </p>
+        )}
+        <div
+          className={`grid transition-[grid-template-rows] duration-200 ease-out ${showMetaRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+          <div className={`min-h-0 ${showMetaRow ? 'overflow-visible' : 'overflow-hidden'}`}>
+            <div
+              className={`flex items-center justify-between gap-2 pt-2 transition-opacity duration-150 ease-out ${
+                showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+              }`}
+            >
+              <CategoryDropdown
+                categories={categories}
+                currentCategory={note.category}
+                onSelect={(cat) =>
+                  isArchived
+                    ? onArchivedUpdate?.(note.text, { category: cat })
+                    : onUpdate(note.id, { category: cat })
+                }
+                onAddNew={onAddCategory}
+                triggerLabel="+Add category"
+              />
+              {isArchived && deletedAtIso ? (
+                <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
+                  {formatNoteDate(deletedAtIso)}
+                </span>
+              ) : null}
+              {!isArchived && note.createdAt ? (
+                <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
+                  {formatNoteDate(note.createdAt)}
+                </span>
+              ) : null}
+              {isArchived ? (
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onRestore?.(note.text)}
+                    disabled={bulkDissolve || isDeleting}
+                    className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 disabled:opacity-40"
+                    aria-label="Restore note"
+                  >
+                    <RestoreIcon />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePermanentDeleteArchived}
+                    disabled={bulkDissolve || isDeleting}
+                    className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
+                    aria-label="Delete archived note permanently"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => onRestore?.(note.text)}
-                  className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  aria-label="Restore note"
-                >
-                  <RestoreIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onPermanentDeleteArchived?.(note.text)}
-                  className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
-                  aria-label="Delete archived note permanently"
+                  onClick={handleDeleteActive}
+                  disabled={isDeleting}
+                  className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
+                  aria-label="Delete note"
                 >
                   <TrashIcon />
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onDelete(note.id)}
-                className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400"
-                aria-label="Delete note"
-              >
-                <TrashIcon />
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

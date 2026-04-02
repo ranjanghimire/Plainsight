@@ -5,6 +5,8 @@ export function NoteList({
   isEmpty,
   emptyText,
   children,
+  listGridHidden = false,
+  emptyIntro = false,
 }) {
   return (
     <div
@@ -32,9 +34,19 @@ export function NoteList({
           </div>
         </div>
       ) : null}
-      <div className="grid gap-3">{children}</div>
+      <div
+        className={`grid gap-3 transition-opacity duration-150 ease-out ${
+          listGridHidden ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        {children}
+      </div>
       {isEmpty ? (
-        <p className="text-neutral-500 dark:text-neutral-500 text-sm py-4 text-center">
+        <p
+          className={`text-neutral-500 dark:text-neutral-500 text-sm py-4 text-center transition-opacity duration-200 ease-out ${
+            emptyIntro ? 'opacity-0' : 'opacity-100'
+          }`}
+        >
           {emptyText}
         </p>
       ) : null}
