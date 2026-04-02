@@ -78,9 +78,11 @@ export function NoteCard({
 
   const showMetaRow = metaVisible || isEditing;
 
-  const shellClass = isArchived
-    ? 'rounded-lg border border-neutral-200 bg-neutral-100 text-neutral-600 p-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
-    : 'rounded-lg border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-600 dark:bg-stone-800';
+  const shellBase = isArchived
+    ? 'rounded-lg border border-neutral-200 bg-neutral-100 text-neutral-600 px-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
+    : 'rounded-lg border border-stone-200 bg-white px-3 shadow-sm dark:border-stone-600 dark:bg-stone-800';
+  const shellPad = showMetaRow ? 'py-4' : 'py-2';
+  const shellTransition = 'transition-all duration-200 ease-out';
 
   const bodyTextClass = isArchived
     ? 'text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation'
@@ -93,7 +95,7 @@ export function NoteCard({
 
   return (
     <div
-      className={`${shellClass} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
+      className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
     >
       {isEditing ? (
         <textarea
@@ -118,60 +120,68 @@ export function NoteCard({
           {text || 'Double-click or double-tap to edit…'}
         </p>
       )}
-      {showMetaRow && (
-      <div className="flex items-center justify-between gap-2 mt-2">
-        <CategoryDropdown
-          categories={categories}
-          currentCategory={note.category}
-          onSelect={(cat) =>
-            isArchived
-              ? onArchivedUpdate?.(note.text, { category: cat })
-              : onUpdate(note.id, { category: cat })
-          }
-          onAddNew={onAddCategory}
-          triggerLabel="+Add category"
-        />
-        {isArchived && deletedAtIso ? (
-          <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
-            {formatNoteDate(deletedAtIso)}
-          </span>
-        ) : null}
-        {!isArchived && note.createdAt ? (
-          <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
-            {formatNoteDate(note.createdAt)}
-          </span>
-        ) : null}
-        {isArchived ? (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => onRestore?.(note.text)}
-              className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-              aria-label="Restore note"
-            >
-              <RestoreIcon />
-            </button>
-            <button
-              type="button"
-              onClick={() => onPermanentDeleteArchived?.(note.text)}
-              className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
-              aria-label="Delete archived note permanently"
-            >
-              <TrashIcon />
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onDelete(note.id)}
-            className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400"
-            aria-label="Delete note"
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${showMetaRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div
+            className={`flex items-center justify-between gap-2 pt-2 transition-opacity duration-150 ease-out ${
+              showMetaRow ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
           >
-            <TrashIcon />
-          </button>
-        )}
+            <CategoryDropdown
+              categories={categories}
+              currentCategory={note.category}
+              onSelect={(cat) =>
+                isArchived
+                  ? onArchivedUpdate?.(note.text, { category: cat })
+                  : onUpdate(note.id, { category: cat })
+              }
+              onAddNew={onAddCategory}
+              triggerLabel="+Add category"
+            />
+            {isArchived && deletedAtIso ? (
+              <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
+                {formatNoteDate(deletedAtIso)}
+              </span>
+            ) : null}
+            {!isArchived && note.createdAt ? (
+              <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
+                {formatNoteDate(note.createdAt)}
+              </span>
+            ) : null}
+            {isArchived ? (
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onRestore?.(note.text)}
+                  className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                  aria-label="Restore note"
+                >
+                  <RestoreIcon />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPermanentDeleteArchived?.(note.text)}
+                  className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
+                  aria-label="Delete archived note permanently"
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onDelete(note.id)}
+                className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400"
+                aria-label="Delete note"
+              >
+                <TrashIcon />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-      )}
     </div>
   );
 }
