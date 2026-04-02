@@ -26,11 +26,11 @@ function RedirectWorkspaceOnLoad() {
 }
 
 function ArchiveHistoryButton() {
-  const { archiveMode, setArchiveMode } = useArchiveMode();
+  const { archiveMode, toggleArchiveMode } = useArchiveMode();
   return (
     <button
       type="button"
-      onClick={() => setArchiveMode((a) => !a)}
+      onClick={toggleArchiveMode}
       aria-pressed={archiveMode}
       aria-label={archiveMode ? 'Exit archive' : 'Archive and history'}
       className={`p-2 rounded-lg transition-colors ${

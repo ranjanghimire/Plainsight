@@ -51,7 +51,7 @@ export function NotesView() {
     workspaceSwitchGeneration,
   } = useWorkspace();
 
-  const { archiveMode } = useArchiveMode();
+  const { archiveMode, archiveViewTransitioning } = useArchiveMode();
 
   const [inputValue, setInputValue] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(null);
@@ -221,21 +221,6 @@ export function NotesView() {
             : categoryFilter
         }`;
 
-  const [archiveFadeOpacity, setArchiveFadeOpacity] = useState(1);
-  const archiveFadeSkipFirst = useRef(true);
-  useEffect(() => {
-    if (archiveFadeSkipFirst.current) {
-      archiveFadeSkipFirst.current = false;
-      return undefined;
-    }
-    const t1 = window.setTimeout(() => setArchiveFadeOpacity(0.92), 0);
-    const t2 = window.setTimeout(() => setArchiveFadeOpacity(1), 180);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [archiveMode]);
-
   useEffect(() => {
     const t = window.setTimeout(() => {
       setCategoryFilter(null);
@@ -248,7 +233,14 @@ export function NotesView() {
   }, [workspaceSwitchGeneration]);
 
   return (
-    <div className="space-y-4">
+    <>
+    <div
+      className={`space-y-4 origin-top transition-all duration-200 ease-out ${
+        archiveViewTransitioning
+          ? 'opacity-0 scale-[0.98] brightness-95'
+          : 'opacity-100 scale-100 brightness-100'
+      }`}
+    >
       <SearchCommandBar
         value={inputValue}
         onChange={setInputValue}
@@ -268,16 +260,12 @@ export function NotesView() {
       />
 
       <div
-        className="transition-opacity duration-200 ease-out"
-        style={{ opacity: archiveFadeOpacity }}
+        className={`transition-all duration-200 ease-out ${
+          categoryListPhase === 'hidden'
+            ? 'opacity-0 translate-y-[3px]'
+            : 'opacity-100 translate-y-0'
+        }`}
       >
-        <div
-          className={`transition-all duration-200 ease-out ${
-            categoryListPhase === 'hidden'
-              ? 'opacity-0 translate-y-[3px]'
-              : 'opacity-100 translate-y-0'
-          }`}
-        >
         {archiveMode ? (
           <NoteList
             archiveMode
@@ -333,57 +321,57 @@ export function NotesView() {
             ))}
           </NoteList>
         )}
-        </div>
       </div>
+    </div>
 
-      {archiveClearKeys ? (
+    {archiveClearKeys ? (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
+        role="presentation"
+      >
+        <button
+          type="button"
+          className="absolute inset-0 cursor-default"
+          aria-label="Dismiss"
+          onClick={cancelArchiveClear}
+        />
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
-          role="presentation"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="archive-clear-title"
+          className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
+          onClick={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="Dismiss"
-            onClick={cancelArchiveClear}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="archive-clear-title"
-            className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
-            onClick={(e) => e.stopPropagation()}
+          <h2
+            id="archive-clear-title"
+            className="text-base font-medium text-stone-900 dark:text-stone-100"
           >
-            <h2
-              id="archive-clear-title"
-              className="text-base font-medium text-stone-900 dark:text-stone-100"
+            Clear archived items
+          </h2>
+          <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
+            Remove {archiveClearKeys.length}{' '}
+            archived {archiveClearKeys.length === 1 ? 'item' : 'items'}{' '}
+            currently shown? This cannot be undone.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={cancelArchiveClear}
+              className="px-3 py-1.5 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
             >
-              Clear archived items
-            </h2>
-            <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-              Remove {archiveClearKeys.length}{' '}
-              archived {archiveClearKeys.length === 1 ? 'item' : 'items'}{' '}
-              currently shown? This cannot be undone.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={cancelArchiveClear}
-                className="px-3 py-1.5 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmArchiveClear}
-                className="px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
-              >
-                Clear
-              </button>
-            </div>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmArchiveClear}
+              className="px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
+            >
+              Clear
+            </button>
           </div>
         </div>
-      ) : null}
-    </div>
+      </div>
+    ) : null}
+    </>
   );
 }
