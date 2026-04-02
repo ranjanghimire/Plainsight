@@ -10,6 +10,7 @@ import {
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
   isKeyInVisibleWorkspacesList,
+  isLegacyHiddenWorkspaceKey,
   getOrCreateWorkspaceIdForStorageKey,
   getWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
@@ -108,8 +109,9 @@ export function WorkspaceProvider({ children }) {
 
     const last = app.lastActiveStorageKey || 'workspace_home';
     const inVisibleMenu = isKeyInVisibleWorkspacesList(last, app.visibleWorkspaces);
+    const legacyHidden = isLegacyHiddenWorkspaceKey(last);
 
-    if (!inVisibleMenu) {
+    if (!inVisibleMenu && !legacyHidden) {
       saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
       let d = loadWorkspace('workspace_home');
       if (isWorkspaceDataEmpty(d)) {
@@ -124,7 +126,7 @@ export function WorkspaceProvider({ children }) {
     }
 
     const mappedId = getWorkspaceIdForStorageKey(last);
-    if (last !== 'workspace_home' && !mappedId) {
+    if (last !== 'workspace_home' && !legacyHidden && !mappedId) {
       saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
       let d = loadWorkspace('workspace_home');
       if (isWorkspaceDataEmpty(d)) {
@@ -149,7 +151,11 @@ export function WorkspaceProvider({ children }) {
       setCurrentWorkspace('home');
     } else {
       const entry = (app.visibleWorkspaces || []).find((e) => e.key === last);
-      setCurrentWorkspace(entry?.id === 'home' ? 'home' : `visible:${entry.id}`);
+      if (entry) {
+        setCurrentWorkspace(entry.id === 'home' ? 'home' : `visible:${entry.id}`);
+      } else {
+        setCurrentWorkspace(getWorkspaceNameFromKey(last));
+      }
     }
     bumpWorkspaceSwitch();
   }, [bumpWorkspaceSwitch]);

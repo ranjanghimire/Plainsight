@@ -46,6 +46,15 @@ export function isKeyInVisibleWorkspacesList(storageKey, visibleWorkspaces) {
   return list.some((w) => w.key === storageKey);
 }
 
+/** Legacy dot/hidden workspaces use keys workspace_<slug> (not workspace_home, not ws_visible_*). */
+export function isLegacyHiddenWorkspaceKey(storageKey) {
+  return (
+    typeof storageKey === 'string' &&
+    storageKey.startsWith(WORKSPACE_PREFIX) &&
+    storageKey !== 'workspace_home'
+  );
+}
+
 export function loadAppState() {
   try {
     const raw = localStorage.getItem(APP_STATE_KEY);

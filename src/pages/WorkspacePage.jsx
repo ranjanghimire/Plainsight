@@ -2,7 +2,12 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { NotesView } from '../components/NotesView';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { getWorkspaceKey, loadAppState, isKeyInVisibleWorkspacesList } from '../utils/storage';
+import {
+  getWorkspaceKey,
+  loadAppState,
+  isKeyInVisibleWorkspacesList,
+  isLegacyHiddenWorkspaceKey,
+} from '../utils/storage';
 
 export function WorkspacePage() {
   const { workspace } = useParams();
@@ -10,13 +15,18 @@ export function WorkspacePage() {
   const { load, hydrationComplete } = useWorkspace();
 
   useEffect(() => {
-    if (!hydrationComplete || !workspace) return;
+    if (!workspace) return;
     const key = getWorkspaceKey(workspace);
     const app = loadAppState();
-    if (!isKeyInVisibleWorkspacesList(key, app.visibleWorkspaces)) {
-      navigate('/', { replace: true });
+    const inMenu = isKeyInVisibleWorkspacesList(key, app.visibleWorkspaces);
+    const legacyHidden = isLegacyHiddenWorkspaceKey(key);
+    if (!inMenu && !legacyHidden) {
+      if (hydrationComplete) navigate('/', { replace: true });
       return;
     }
+    // Menu-visible workspaces (e.g. home) wait for hydration so restore does not overwrite.
+    // Legacy hidden keys from /manage are not in the menu list; load immediately to avoid stale notes.
+    if (!hydrationComplete && !legacyHidden) return;
     load(workspace);
   }, [workspace, load, hydrationComplete, navigate]);
 
