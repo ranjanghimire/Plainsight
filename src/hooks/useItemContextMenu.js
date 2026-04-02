@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-/** Slightly under typical iOS text-selection / callout timing (~500ms) so our menu wins the race. */
-const LONG_PRESS_MS = 380;
+const LONG_PRESS_MS = 450;
 const MOVE_THRESHOLD_PX = 12;
 
 /** Merge into trigger `className` — reduces iOS/Android text selection & system callout on long-press. */
 export const CONTEXT_MENU_TRIGGER_CLASS =
-  'select-none [-webkit-touch-callout:none] touch-none';
+  'select-none [-webkit-touch-callout:none] touch-manipulation';
 
 function clearNativeTextSelection() {
   if (typeof window === 'undefined' || !window.getSelection) return;
@@ -42,6 +41,9 @@ function distance2(ax, ay, bx, by) {
 
 /**
  * Long-press (mobile/coarse) + right-click (fine pointer) → shared menu coordinates + target.
+ *
+ * Note: We do not use non-passive touchstart + preventDefault() on triggers — that blocks iOS
+ * tap-to-activate (synthetic click) and breaks normal taps on workspace rows / chips.
  */
 export function useItemContextMenu() {
   const [menu, setMenu] = useState({
@@ -55,8 +57,6 @@ export function useItemContextMenu() {
   const longPressTimerRef = useRef(null);
   const longPressOriginRef = useRef(null);
   const longPressTargetRef = useRef(null);
-  /** Stable ref callbacks per trigger so React does not churn native listeners each render. */
-  const touchLockRefByKey = useRef(new Map());
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current != null) {
@@ -79,13 +79,7 @@ export function useItemContextMenu() {
     const { x, y } = clampMenuPosition(clientX, clientY);
     setEntered(false);
     setMenu({ open: true, x, y, target });
-    window.requestAnimationFrame(() => {
-      clearNativeTextSelection();
-      window.requestAnimationFrame(() => {
-        clearNativeTextSelection();
-        window.setTimeout(clearNativeTextSelection, 0);
-      });
-    });
+    window.requestAnimationFrame(() => clearNativeTextSelection());
   }, [clearLongPressTimer]);
 
   useEffect(() => {
@@ -118,39 +112,6 @@ export function useItemContextMenu() {
     window.addEventListener('scroll', onScroll, true);
     return () => window.removeEventListener('scroll', onScroll, true);
   }, [clearLongPressTimer]);
-
-  const getTouchLockRef = useCallback((target) => {
-    const key =
-      target.kind === 'workspace'
-        ? `ws:${target.entry.key}`
-        : `cat:${target.name}`;
-    let cb = touchLockRefByKey.current.get(key);
-    if (!cb) {
-      let prevEl = null;
-      let handler = null;
-      cb = (el) => {
-        if (prevEl && handler) {
-          prevEl.removeEventListener('touchstart', handler);
-        }
-        prevEl = el;
-        handler = null;
-        if (!el) return;
-        const mayTouch =
-          typeof window !== 'undefined' &&
-          ((typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
-            'ontouchstart' in window);
-        if (!mayTouch) return;
-        handler = (e) => {
-          if (e.touches.length === 1 && e.cancelable) {
-            e.preventDefault();
-          }
-        };
-        el.addEventListener('touchstart', handler, { passive: false });
-      };
-      touchLockRefByKey.current.set(key, cb);
-    }
-    return cb;
-  }, []);
 
   const bindTrigger = useCallback(
     (target, userOnClick) => {
@@ -188,7 +149,6 @@ export function useItemContextMenu() {
       };
 
       return {
-        ref: getTouchLockRef(target),
         onPointerDown: startLongPress,
         onPointerMove,
         onPointerUp: endLongPressArm,
@@ -209,7 +169,7 @@ export function useItemContextMenu() {
         },
       };
     },
-    [clearLongPressTimer, getTouchLockRef, openMenu],
+    [clearLongPressTimer, openMenu],
   );
 
   return {
