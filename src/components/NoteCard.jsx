@@ -123,10 +123,11 @@ export function NoteCard({
       <div
         className={`grid transition-[grid-template-rows] duration-200 ease-out ${showMetaRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
       >
-        <div className="min-h-0 overflow-hidden">
+        {/* overflow-hidden only when collapsed so 0fr rows don’t leak; visible when open so CategoryDropdown isn’t clipped */}
+        <div className={`min-h-0 ${showMetaRow ? 'overflow-visible' : 'overflow-hidden'}`}>
           <div
             className={`flex items-center justify-between gap-2 pt-2 transition-opacity duration-150 ease-out ${
-              showMetaRow ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
             }`}
           >
             <CategoryDropdown
