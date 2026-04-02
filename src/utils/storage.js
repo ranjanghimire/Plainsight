@@ -229,6 +229,26 @@ export function setWorkspaceIdMapping(storageKey, workspaceId) {
   writeWorkspaceIdMap(map);
 }
 
+/**
+ * Drop storageKey ↔ workspace UUID entries after a workspace is removed (avoids stale sync bindings).
+ */
+export function removeWorkspaceIdMapping(storageKey, workspaceIdArg) {
+  const map = readWorkspaceIdMap();
+  const id =
+    (typeof workspaceIdArg === 'string' && workspaceIdArg
+      ? workspaceIdArg
+      : null) || (storageKey ? map[storageKey] : null);
+  if (!id && !storageKey) return;
+
+  if (storageKey) delete map[storageKey];
+  if (id) delete map[`${WORKSPACE_ID_REVERSE_PREFIX}${id}`];
+  for (const [k, v] of Object.entries(map)) {
+    if (k.startsWith(WORKSPACE_ID_REVERSE_PREFIX)) continue;
+    if (v === id) delete map[k];
+  }
+  writeWorkspaceIdMap(map);
+}
+
 export function getOrCreateWorkspaceIdForStorageKey(storageKey) {
   const map = readWorkspaceIdMap();
   const existing = map[storageKey];

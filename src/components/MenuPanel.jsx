@@ -428,12 +428,19 @@ export function MenuPanel({ open, onClose }) {
         confirmLabel="Delete"
         destructive
         onCancel={() => setPendingDeleteWorkspace(null)}
-        onConfirm={() => {
-          if (pendingDeleteWorkspace) {
-            deleteVisibleWorkspace(pendingDeleteWorkspace);
+        onConfirm={async () => {
+          const w = pendingDeleteWorkspace;
+          if (!w) return;
+          const ok = await deleteVisibleWorkspace(w);
+          if (ok) {
+            setPendingDeleteWorkspace(null);
             navigate('/');
+            onClose();
+          } else {
+            window.alert(
+              'Could not delete this workspace. If you use cloud sync, check your connection and try again. If the problem continues, the database may need related notes removed first.',
+            );
           }
-          setPendingDeleteWorkspace(null);
         }}
       />
     </div>

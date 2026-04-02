@@ -118,6 +118,24 @@ export async function pushWorkspaces(localWorkspaces: Workspace[]): Promise<{ ok
   }
 }
 
+/** Delete one workspace row for the signed-in user (RLS). Call before dropping local menu + IndexedDB row. */
+export async function deleteWorkspaceRemote(
+  workspaceId: string,
+): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+  try {
+    const ownerId = await getOwnerId();
+    if (!ownerId) return { ok: true };
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      return { ok: false, error: mkError('Missing workspace id', new Error()) };
+    }
+    const { error } = await supabase.from('workspaces').delete().eq('id', workspaceId);
+    if (error) return { ok: false, error: mkError(error.message, error) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: mkError('Failed to delete workspace', e) };
+  }
+}
+
 export async function pushCategories(localCategories: Category[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   try {
     const { error } = await supabase

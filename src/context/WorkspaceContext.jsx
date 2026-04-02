@@ -14,9 +14,11 @@ import {
   isLegacyHiddenWorkspaceKey,
   getOrCreateWorkspaceIdForStorageKey,
   getWorkspaceIdForStorageKey,
+  removeWorkspaceIdMapping,
   setWorkspaceIdMapping,
 } from '../utils/storage';
 import { queueFullSync } from '../sync/syncHelpers';
+import { deleteWorkspaceRemote } from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { supabase } from '../sync/supabaseClient';
 import {
@@ -383,8 +385,29 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   const deleteVisibleWorkspace = useCallback(
-    (entry) => {
-      if (entry.id === 'home') return;
+    async (entry) => {
+      if (entry.id === 'home') return false;
+      const workspaceId =
+        getWorkspaceIdForStorageKey(entry.key) || entry.id;
+      if (!workspaceId) return false;
+
+      const remoteDel = await deleteWorkspaceRemote(workspaceId);
+      if (!remoteDel.ok) {
+        console.error('[deleteVisibleWorkspace]', remoteDel.error);
+        return false;
+      }
+
+      try {
+        const localWs = await getLocalWorkspaces();
+        await saveLocalWorkspaces(
+          localWs.filter((w) => w.id !== workspaceId),
+        );
+      } catch {
+        /* ignore */
+      }
+
+      removeWorkspaceIdMapping(entry.key, workspaceId);
+
       const wasActive = activeStorageKey === entry.key;
       const prev = loadAppState();
       const next = (prev.visibleWorkspaces || []).filter((e) => e.key !== entry.key);
@@ -408,6 +431,7 @@ export function WorkspaceProvider({ children }) {
         bumpWorkspaceSwitch();
       }
       queueFullSync();
+      return true;
     },
     [activeStorageKey, bumpWorkspaceSwitch],
   );
