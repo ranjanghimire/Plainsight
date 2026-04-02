@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useSyncUpgrade } from '../context/SyncUpgradeContext';
+import { useItemContextMenu } from '../hooks/useItemContextMenu';
+import { ContextActionPopover } from './ContextActionPopover';
+import { ConfirmDialog } from './ConfirmDialog';
 
 function MenuIcon({ className = '' }) {
   return (
@@ -79,6 +82,8 @@ export function MenuPanel({ open, onClose }) {
     visibleWorkspaces,
     switchVisibleWorkspace,
     createVisibleWorkspace,
+    renameVisibleWorkspace,
+    deleteVisibleWorkspace,
   } = useWorkspace();
   const {
     syncStatus,
@@ -95,6 +100,14 @@ export function MenuPanel({ open, onClose }) {
   const [entered, setEntered] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [workspaceRenameTarget, setWorkspaceRenameTarget] = useState(null);
+  const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState('');
+  const [pendingDeleteWorkspace, setPendingDeleteWorkspace] = useState(null);
+  const wsMenu = useItemContextMenu();
+
+  useEffect(() => {
+    if (!open) wsMenu.closeMenu();
+  }, [open, wsMenu.closeMenu]);
 
   useEffect(() => {
     if (open) {
@@ -115,11 +128,13 @@ export function MenuPanel({ open, onClose }) {
   useEffect(() => {
     if (!mounted) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (wsMenu.menu.open) wsMenu.closeMenu();
+      else onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mounted, onClose]);
+  }, [mounted, onClose, wsMenu.menu.open, wsMenu.closeMenu]);
 
   const handlePickWorkspace = (entry) => {
     switchVisibleWorkspace(entry);
@@ -135,6 +150,20 @@ export function MenuPanel({ open, onClose }) {
     setNewWorkspaceOpen(false);
     navigate('/');
     onClose();
+  };
+
+  const submitWorkspaceRename = () => {
+    if (!workspaceRenameTarget) return;
+    const name = workspaceRenameDraft.trim();
+    if (!name) return;
+    renameVisibleWorkspace(workspaceRenameTarget, name);
+    setWorkspaceRenameTarget(null);
+    setWorkspaceRenameDraft('');
+  };
+
+  const cancelWorkspaceRename = () => {
+    setWorkspaceRenameTarget(null);
+    setWorkspaceRenameDraft('');
   };
 
   if (!mounted) return null;
@@ -253,13 +282,50 @@ export function MenuPanel({ open, onClose }) {
             <div className="border-t border-stone-200 dark:border-stone-600 pt-2 space-y-0.5">
               {visibleWorkspaces.map((entry) => {
                 const active = entry.key === activeStorageKey;
+                const isRenaming = workspaceRenameTarget?.key === entry.key;
+                if (isRenaming) {
+                  return (
+                    <div key={entry.key} className="flex flex-col gap-2 px-1 py-1">
+                      <input
+                        type="text"
+                        value={workspaceRenameDraft}
+                        onChange={(e) => setWorkspaceRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') submitWorkspaceRename();
+                          if (e.key === 'Escape') cancelWorkspaceRename();
+                        }}
+                        className="w-full px-2.5 py-1.5 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200"
+                        autoFocus
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={cancelWorkspaceRename}
+                          className="text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={submitWorkspaceRename}
+                          className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <button
                     key={entry.key}
                     type="button"
-                    onClick={() => handlePickWorkspace(entry)}
+                    {...wsMenu.bindTrigger(
+                      { kind: 'workspace', entry },
+                      () => handlePickWorkspace(entry),
+                    )}
                     className={`
-                      w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors
+                      w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors touch-manipulation
                       ${
                         active
                           ? 'bg-neutral-100 text-neutral-900 border-l-2 border-neutral-400 dark:bg-neutral-800 dark:text-neutral-100'
@@ -321,6 +387,51 @@ export function MenuPanel({ open, onClose }) {
           </div>
         </div>
       </aside>
+
+      <ContextActionPopover
+        open={wsMenu.menu.open}
+        entered={wsMenu.entered}
+        x={wsMenu.menu.x}
+        y={wsMenu.menu.y}
+        showDelete={
+          wsMenu.menu.target?.kind === 'workspace' &&
+          wsMenu.menu.target.entry.id !== 'home'
+        }
+        onRename={() => {
+          const t = wsMenu.menu.target;
+          if (t?.kind === 'workspace') {
+            setWorkspaceRenameTarget(t.entry);
+            setWorkspaceRenameDraft(t.entry.name);
+          }
+        }}
+        onDelete={() => {
+          const t = wsMenu.menu.target;
+          if (t?.kind === 'workspace' && t.entry.id !== 'home') {
+            setPendingDeleteWorkspace(t.entry);
+          }
+        }}
+        onDismiss={wsMenu.closeMenu}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteWorkspace != null}
+        title="Delete workspace"
+        description={
+          pendingDeleteWorkspace
+            ? `Delete “${pendingDeleteWorkspace.name}”? All notes in this workspace will be removed. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setPendingDeleteWorkspace(null)}
+        onConfirm={() => {
+          if (pendingDeleteWorkspace) {
+            deleteVisibleWorkspace(pendingDeleteWorkspace);
+            navigate('/');
+          }
+          setPendingDeleteWorkspace(null);
+        }}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   getWorkspaceNameFromKey,
   loadWorkspace,
   saveWorkspace,
+  deleteWorkspace,
   getDefaultWorkspaceData,
   loadAppState,
   saveAppStatePartial,
@@ -364,6 +365,53 @@ export function WorkspaceProvider({ children }) {
     [bumpWorkspaceSwitch, queueWorkspaceContentTransition],
   );
 
+  const renameVisibleWorkspace = useCallback((entry, newDisplayName) => {
+    const name = (newDisplayName || '').trim();
+    if (!name) return;
+    const prev = loadAppState();
+    const next = (prev.visibleWorkspaces || []).map((e) =>
+      e.key === entry.key ? { ...e, name } : e,
+    );
+    saveAppStatePartial({ visibleWorkspaces: next });
+    setVisibleWorkspaces(next);
+    void ensureWorkspaceRow({
+      storageKey: entry.key,
+      name,
+      kind: 'visible',
+    });
+    queueFullSync();
+  }, []);
+
+  const deleteVisibleWorkspace = useCallback(
+    (entry) => {
+      if (entry.id === 'home') return;
+      const wasActive = activeStorageKey === entry.key;
+      const prev = loadAppState();
+      const next = (prev.visibleWorkspaces || []).filter((e) => e.key !== entry.key);
+      saveAppStatePartial({
+        visibleWorkspaces: next,
+        lastActiveStorageKey: wasActive
+          ? 'workspace_home'
+          : prev.lastActiveStorageKey,
+      });
+      setVisibleWorkspaces(next);
+      deleteWorkspace(entry.key);
+      if (wasActive) {
+        let homeData = loadWorkspace('workspace_home');
+        if (isWorkspaceDataEmpty(homeData)) {
+          homeData = getDefaultWorkspaceData();
+          saveWorkspace('workspace_home', homeData);
+        }
+        setActiveStorageKey('workspace_home');
+        setData(homeData);
+        setCurrentWorkspace('home');
+        bumpWorkspaceSwitch();
+      }
+      queueFullSync();
+    },
+    [activeStorageKey, bumpWorkspaceSwitch],
+  );
+
   const addNote = useCallback((text, category = null) => {
     const now = new Date().toISOString();
     const id = uuidv4();
@@ -607,6 +655,8 @@ export function WorkspaceProvider({ children }) {
     switchWorkspace,
     switchVisibleWorkspace,
     createVisibleWorkspace,
+    renameVisibleWorkspace,
+    deleteVisibleWorkspace,
     addNote,
     updateNote,
     deleteNote,

@@ -48,6 +48,8 @@ export function NotesView() {
     updateNote,
     deleteNote,
     addCategory,
+    renameCategory,
+    deleteCategory,
     restoreArchivedNote,
     updateArchivedNote,
     permanentlyDeleteArchived,
@@ -304,6 +306,9 @@ export function NotesView() {
         inlineNewCategoryName={inlineNewCategoryName}
         setInlineNewCategoryName={setInlineNewCategoryName}
         handleInlineAddCategory={handleInlineAddCategory}
+        renameCategory={renameCategory}
+        deleteCategory={deleteCategory}
+        workspaceSwitchGeneration={workspaceSwitchGeneration}
       />
 
       <div
