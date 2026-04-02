@@ -6,7 +6,7 @@ import { loadWorkspace, saveWorkspace, getDefaultWorkspaceData } from '../utils/
 
 export function SearchCommandBar({ value, onChange, onCreateNote }) {
   const navigate = useNavigate();
-  const { switchWorkspace, currentWorkspace } = useWorkspace();
+  const { switchWorkspace, load, activeStorageKey } = useWorkspace();
 
   const handleChange = useCallback(
     (e) => {
@@ -60,7 +60,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
         onChange?.('');
       }
     }
-  }, [value, navigate, onChange, switchWorkspace, currentWorkspace]);
+  }, [value, navigate, onChange, switchWorkspace, load, activeStorageKey]);
 
   const handleKeyDown = useCallback(
     (e) => {

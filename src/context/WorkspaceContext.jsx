@@ -117,7 +117,7 @@ export function WorkspaceProvider({ children }) {
     setWorkspaceTransitionMode(null);
   }, []);
 
-  const queueWorkspaceContentTransition = useCallback((mode, applyFn) => {
+  const queueWorkspaceContentTransition = useCallback((mode, applyFn, meta) => {
     if (mode !== 'visible' && mode !== 'hidden') {
       applyFn();
       return;
@@ -132,6 +132,11 @@ export function WorkspaceProvider({ children }) {
       workspaceTransitionTimersRef.current = workspaceTransitionTimersRef.current.filter(
         (id) => id !== t,
       );
+      if (meta?.isCancelled?.()) {
+        setWorkspaceContentTransitioning(false);
+        setWorkspaceTransitionMode(null);
+        return;
+      }
       applyFn();
       requestAnimationFrame(() => {
         setWorkspaceContentTransitioning(false);
@@ -271,12 +276,15 @@ export function WorkspaceProvider({ children }) {
   /**
    * @param {string} name
    * @param {'visible' | 'hidden' | null} [uiTransition] Null = immediate (hydration, manage, etc.)
+   * @param {{ isCancelled?: () => boolean }} [transitionMeta] When isCancelled() is true, skip apply (route effect superseded)
    */
   const load = useCallback(
-    (name, uiTransition = null) => {
+    (name, uiTransition = null, transitionMeta) => {
       if (uiTransition === 'visible' || uiTransition === 'hidden') {
-        queueWorkspaceContentTransition(uiTransition, () =>
-          applyNavigateByWorkspaceName(name),
+        queueWorkspaceContentTransition(
+          uiTransition,
+          () => applyNavigateByWorkspaceName(name),
+          transitionMeta,
         );
       } else {
         applyNavigateByWorkspaceName(name);
