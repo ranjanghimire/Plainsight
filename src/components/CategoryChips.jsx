@@ -9,7 +9,7 @@ function chipBase(active) {
 export function CategoryChips({
   categories,
   categoryFilter,
-  setCategoryFilter,
+  onCategoryChange,
   hasUncategorizedNotes,
   showInlineAddCategory,
   setShowInlineAddCategory,
@@ -21,7 +21,7 @@ export function CategoryChips({
     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
       <button
         type="button"
-        onClick={() => setCategoryFilter(null)}
+        onClick={() => onCategoryChange(null)}
         className={`px-2.5 py-1 rounded-md text-sm ${chipBase(categoryFilter === null)}`}
       >
         All
@@ -30,7 +30,7 @@ export function CategoryChips({
         <button
           key={cat}
           type="button"
-          onClick={() => setCategoryFilter(cat)}
+          onClick={() => onCategoryChange(cat)}
           className={`px-2.5 py-1 rounded-md text-sm ${chipBase(categoryFilter === cat)}`}
         >
           {cat}
@@ -39,7 +39,7 @@ export function CategoryChips({
       {hasUncategorizedNotes && (
         <button
           type="button"
-          onClick={() => setCategoryFilter(UNCATEGORIZED_FILTER)}
+          onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
           className={`px-2.5 py-1 rounded-md text-sm ${chipBase(categoryFilter === UNCATEGORIZED_FILTER)}`}
         >
           Undefined

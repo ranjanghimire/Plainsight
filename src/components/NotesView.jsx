@@ -8,6 +8,10 @@ import { CategoryChips } from './CategoryChips';
 import { NoteList } from './NoteList';
 import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 
+/** Fade out → swap filter → fade in; lock blocks overlapping chip taps. */
+const CATEGORY_LIST_SWAP_MS = 150;
+const CATEGORY_LIST_FADE_MS = 200;
+
 function noteHasNoCategory(n) {
   return n.category == null || n.category === '';
 }
@@ -51,6 +55,9 @@ export function NotesView() {
 
   const [inputValue, setInputValue] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [categoryListPhase, setCategoryListPhase] = useState('idle');
+  const categoryListLockRef = useRef(false);
+  const categoryListTimersRef = useRef([]);
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
@@ -78,6 +85,31 @@ export function NotesView() {
     }
     return undefined;
   }, [categoryFilter, hasUncategorizedNotes]);
+
+  useEffect(() => {
+    return () => {
+      categoryListTimersRef.current.forEach(clearTimeout);
+      categoryListTimersRef.current = [];
+    };
+  }, []);
+
+  const applyCategoryFilter = useCallback((next) => {
+    if (next === categoryFilter) return;
+    if (categoryListLockRef.current) return;
+    categoryListLockRef.current = true;
+    setCategoryListPhase('hidden');
+    categoryListTimersRef.current.forEach(clearTimeout);
+    categoryListTimersRef.current = [];
+    const t1 = window.setTimeout(() => {
+      setCategoryFilter(next);
+      setCategoryListPhase('idle');
+      const t2 = window.setTimeout(() => {
+        categoryListLockRef.current = false;
+      }, CATEGORY_LIST_FADE_MS);
+      categoryListTimersRef.current.push(t2);
+    }, CATEGORY_LIST_SWAP_MS);
+    categoryListTimersRef.current.push(t1);
+  }, [categoryFilter]);
 
   const filteredBySearch = useSearch(notes, inputValue);
   const filteredNotes = useMemo(() => {
@@ -121,7 +153,7 @@ export function NotesView() {
     const name = inlineNewCategoryName.trim();
     if (!name) return;
     addCategory(name);
-    setCategoryFilter(name);
+    applyCategoryFilter(name);
     setInlineNewCategoryName('');
     setShowInlineAddCategory(false);
   };
@@ -205,7 +237,13 @@ export function NotesView() {
   }, [archiveMode]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setCategoryFilter(null), 0);
+    const t = window.setTimeout(() => {
+      setCategoryFilter(null);
+      setCategoryListPhase('idle');
+      categoryListLockRef.current = false;
+      categoryListTimersRef.current.forEach(clearTimeout);
+      categoryListTimersRef.current = [];
+    }, 0);
     return () => window.clearTimeout(t);
   }, [workspaceSwitchGeneration]);
 
@@ -231,7 +269,7 @@ export function NotesView() {
       <CategoryChips
         categories={categories}
         categoryFilter={categoryFilter}
-        setCategoryFilter={setCategoryFilter}
+        onCategoryChange={applyCategoryFilter}
         hasUncategorizedNotes={hasUncategorizedNotes}
         showInlineAddCategory={showInlineAddCategory}
         setShowInlineAddCategory={setShowInlineAddCategory}
@@ -244,6 +282,13 @@ export function NotesView() {
         className="transition-opacity duration-200 ease-out"
         style={{ opacity: archiveFadeOpacity * wsFadeOpacity }}
       >
+        <div
+          className={`transition-all duration-200 ease-out ${
+            categoryListPhase === 'hidden'
+              ? 'opacity-0 translate-y-[3px]'
+              : 'opacity-100 translate-y-0'
+          }`}
+        >
         {archiveMode ? (
           <NoteList
             archiveMode
@@ -299,6 +344,7 @@ export function NotesView() {
             ))}
           </NoteList>
         )}
+        </div>
       </div>
 
       {archiveClearKeys ? (
