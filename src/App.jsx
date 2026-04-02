@@ -51,6 +51,29 @@ function ArchiveHistoryButton() {
   );
 }
 
+function WorkspaceContentShell({ children }) {
+  const {
+    workspaceTransitionMode,
+    workspaceContentTransitioning,
+    workspaceTransitionEaseClass,
+  } = useWorkspace();
+  const isOut = workspaceContentTransitioning;
+  const transitionClass =
+    isOut && workspaceTransitionMode === 'hidden'
+      ? 'opacity-80'
+      : isOut && workspaceTransitionMode === 'visible'
+        ? 'opacity-0 translate-y-[2px]'
+        : 'opacity-100 translate-y-0';
+
+  return (
+    <div
+      className={`transition-all ease-out ${workspaceTransitionEaseClass} ${transitionClass}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 function AppHeader({ onOpenSettings }) {
   const { currentWorkspace, visibleWorkspaces } = useWorkspace();
 
@@ -116,12 +139,14 @@ function AppRoutes() {
       <RedirectWorkspaceOnLoad />
       <AppHeader onOpenSettings={openDrawer} />
       <MenuPanel open={settingsOpen} onClose={closeDrawer} />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/w/:workspace" element={<WorkspacePage />} />
-        <Route path="/ws/:workspace" element={<WorkspacePage />} />
-        <Route path="/manage" element={<ManagePage />} />
-      </Routes>
+      <WorkspaceContentShell>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/w/:workspace" element={<WorkspacePage />} />
+          <Route path="/ws/:workspace" element={<WorkspacePage />} />
+          <Route path="/manage" element={<ManagePage />} />
+        </Routes>
+      </WorkspaceContentShell>
     </>
   );
 }

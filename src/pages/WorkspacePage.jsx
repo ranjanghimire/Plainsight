@@ -12,23 +12,31 @@ import {
 export function WorkspacePage() {
   const { workspace } = useParams();
   const navigate = useNavigate();
-  const { load, hydrationComplete } = useWorkspace();
+  const { load, hydrationComplete, cancelPendingWorkspaceContentTransition } =
+    useWorkspace();
 
   useEffect(() => {
-    if (!workspace) return;
+    if (!workspace) return undefined;
     const key = getWorkspaceKey(workspace);
     const app = loadAppState();
     const inMenu = isKeyInVisibleWorkspacesList(key, app.visibleWorkspaces);
     const legacyHidden = isLegacyHiddenWorkspaceKey(key);
     if (!inMenu && !legacyHidden) {
       if (hydrationComplete) navigate('/', { replace: true });
-      return;
+      return undefined;
     }
     // Menu-visible workspaces (e.g. home) wait for hydration so restore does not overwrite.
     // Legacy hidden keys from /manage are not in the menu list; load immediately to avoid stale notes.
-    if (!hydrationComplete && !legacyHidden) return;
-    load(workspace);
-  }, [workspace, load, hydrationComplete, navigate]);
+    if (!hydrationComplete && !legacyHidden) return undefined;
+    load(workspace, 'hidden');
+    return () => cancelPendingWorkspaceContentTransition();
+  }, [
+    workspace,
+    load,
+    hydrationComplete,
+    navigate,
+    cancelPendingWorkspaceContentTransition,
+  ]);
 
   return (
     <div className="space-y-4">

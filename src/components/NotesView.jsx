@@ -247,17 +247,6 @@ export function NotesView() {
     return () => window.clearTimeout(t);
   }, [workspaceSwitchGeneration]);
 
-  const [wsFadeOpacity, setWsFadeOpacity] = useState(1);
-  useEffect(() => {
-    if (workspaceSwitchGeneration === 0) return undefined;
-    const t1 = window.setTimeout(() => setWsFadeOpacity(0.88), 0);
-    const t2 = window.setTimeout(() => setWsFadeOpacity(1), 170);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [workspaceSwitchGeneration]);
-
   return (
     <div className="space-y-4">
       <SearchCommandBar
@@ -280,7 +269,7 @@ export function NotesView() {
 
       <div
         className="transition-opacity duration-200 ease-out"
-        style={{ opacity: archiveFadeOpacity * wsFadeOpacity }}
+        style={{ opacity: archiveFadeOpacity }}
       >
         <div
           className={`transition-all duration-200 ease-out ${

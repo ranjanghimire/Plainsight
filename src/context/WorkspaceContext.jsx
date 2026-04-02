@@ -95,6 +95,52 @@ export function WorkspaceProvider({ children }) {
     setWorkspaceSwitchGeneration((g) => g + 1);
   }, []);
 
+  /** null = idle; drives App shell classes during workspace switches */
+  const [workspaceTransitionMode, setWorkspaceTransitionMode] = useState(null);
+  const [workspaceContentTransitioning, setWorkspaceContentTransitioning] =
+    useState(false);
+  const [workspaceTransitionEaseClass, setWorkspaceTransitionEaseClass] =
+    useState('duration-200');
+  const workspaceTransitionTimersRef = useRef([]);
+
+  useEffect(() => {
+    return () => {
+      workspaceTransitionTimersRef.current.forEach(clearTimeout);
+      workspaceTransitionTimersRef.current = [];
+    };
+  }, []);
+
+  const cancelPendingWorkspaceContentTransition = useCallback(() => {
+    workspaceTransitionTimersRef.current.forEach(clearTimeout);
+    workspaceTransitionTimersRef.current = [];
+    setWorkspaceContentTransitioning(false);
+    setWorkspaceTransitionMode(null);
+  }, []);
+
+  const queueWorkspaceContentTransition = useCallback((mode, applyFn) => {
+    if (mode !== 'visible' && mode !== 'hidden') {
+      applyFn();
+      return;
+    }
+    workspaceTransitionTimersRef.current.forEach(clearTimeout);
+    workspaceTransitionTimersRef.current = [];
+    setWorkspaceTransitionEaseClass(mode === 'hidden' ? 'duration-100' : 'duration-200');
+    setWorkspaceTransitionMode(mode);
+    setWorkspaceContentTransitioning(true);
+    const delay = mode === 'visible' ? 150 : 80;
+    const t = window.setTimeout(() => {
+      workspaceTransitionTimersRef.current = workspaceTransitionTimersRef.current.filter(
+        (id) => id !== t,
+      );
+      applyFn();
+      requestAnimationFrame(() => {
+        setWorkspaceContentTransitioning(false);
+        setWorkspaceTransitionMode(null);
+      });
+    }, delay);
+    workspaceTransitionTimersRef.current.push(t);
+  }, []);
+
   const save = useCallback(() => {
     saveWorkspace(activeStorageKey, data);
   }, [activeStorageKey, data]);
@@ -199,14 +245,13 @@ export function WorkspaceProvider({ children }) {
     return () => window.removeEventListener('plainsight:full-sync', onSync);
   }, [activeStorageKey]);
 
-  const load = useCallback(
+  const applyNavigateByWorkspaceName = useCallback(
     (name) => {
       const key = getWorkspaceKey(name);
       let nextData = loadWorkspace(key);
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
         saveWorkspace(key, nextData);
-        // Hidden/dot workspaces are created lazily on first open.
         void ensureWorkspaceRow({
           storageKey: key,
           name: name === 'home' ? 'Home' : name,
@@ -223,30 +268,32 @@ export function WorkspaceProvider({ children }) {
     [bumpWorkspaceSwitch],
   );
 
+  /**
+   * @param {string} name
+   * @param {'visible' | 'hidden' | null} [uiTransition] Null = immediate (hydration, manage, etc.)
+   */
+  const load = useCallback(
+    (name, uiTransition = null) => {
+      if (uiTransition === 'visible' || uiTransition === 'hidden') {
+        queueWorkspaceContentTransition(uiTransition, () =>
+          applyNavigateByWorkspaceName(name),
+        );
+      } else {
+        applyNavigateByWorkspaceName(name);
+      }
+    },
+    [applyNavigateByWorkspaceName, queueWorkspaceContentTransition],
+  );
+
+  /** Dot-commands: quick opacity dip */
   const switchWorkspace = useCallback(
     (name) => {
-      const key = getWorkspaceKey(name);
-      let nextData = loadWorkspace(key);
-      if (isWorkspaceDataEmpty(nextData)) {
-        nextData = getDefaultWorkspaceData();
-        saveWorkspace(key, nextData);
-        void ensureWorkspaceRow({
-          storageKey: key,
-          name: name === 'home' ? 'Home' : name,
-          kind: name === 'home' ? 'visible' : 'hidden',
-        });
-      }
-      setActiveStorageKey(key);
-      setData(nextData);
-      setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
-      saveAppStatePartial({ lastActiveStorageKey: key });
-      bumpWorkspaceSwitch();
-      queueFullSync();
+      queueWorkspaceContentTransition('hidden', () => applyNavigateByWorkspaceName(name));
     },
-    [bumpWorkspaceSwitch],
+    [applyNavigateByWorkspaceName, queueWorkspaceContentTransition],
   );
 
-  const switchVisibleWorkspace = useCallback(
+  const applySwitchVisibleWorkspace = useCallback(
     (entry) => {
       let nextData = loadWorkspace(entry.key);
       if (isWorkspaceDataEmpty(nextData)) {
@@ -268,34 +315,45 @@ export function WorkspaceProvider({ children }) {
     [bumpWorkspaceSwitch],
   );
 
+  /** Menu-visible workspace tap: fade + lift */
+  const switchVisibleWorkspace = useCallback(
+    (entry) => {
+      queueWorkspaceContentTransition('visible', () =>
+        applySwitchVisibleWorkspace(entry),
+      );
+    },
+    [applySwitchVisibleWorkspace, queueWorkspaceContentTransition],
+  );
+
   const createVisibleWorkspace = useCallback(
     (displayName) => {
       const name = displayName.trim();
       if (!name) return null;
-      const id = uuidv4();
-      const key = `${VISIBLE_WS_PREFIX}${id}`;
-      setWorkspaceIdMapping(key, id);
-      const fresh = getDefaultWorkspaceData();
-      saveWorkspace(key, fresh);
-      const entry = { id, name, key };
-      // Create the workspace row (with owner_id) at creation time.
-      void ensureWorkspaceRow({ storageKey: key, name, kind: 'visible' });
-      setVisibleWorkspaces((prev) => {
-        const next = [...prev, entry];
-        saveAppStatePartial({
-          visibleWorkspaces: next,
-          lastActiveStorageKey: key,
+      queueWorkspaceContentTransition('visible', () => {
+        const id = uuidv4();
+        const key = `${VISIBLE_WS_PREFIX}${id}`;
+        setWorkspaceIdMapping(key, id);
+        const fresh = getDefaultWorkspaceData();
+        saveWorkspace(key, fresh);
+        const entry = { id, name, key };
+        void ensureWorkspaceRow({ storageKey: key, name, kind: 'visible' });
+        setVisibleWorkspaces((prev) => {
+          const next = [...prev, entry];
+          saveAppStatePartial({
+            visibleWorkspaces: next,
+            lastActiveStorageKey: key,
+          });
+          return next;
         });
-        return next;
+        setActiveStorageKey(key);
+        setData(fresh);
+        setCurrentWorkspace(`visible:${id}`);
+        bumpWorkspaceSwitch();
+        queueFullSync();
       });
-      setActiveStorageKey(key);
-      setData(fresh);
-      setCurrentWorkspace(`visible:${id}`);
-      bumpWorkspaceSwitch();
-      queueFullSync();
-      return entry;
+      return null;
     },
-    [bumpWorkspaceSwitch],
+    [bumpWorkspaceSwitch, queueWorkspaceContentTransition],
   );
 
   const addNote = useCallback((text, category = null) => {
@@ -532,6 +590,10 @@ export function WorkspaceProvider({ children }) {
     data,
     visibleWorkspaces,
     workspaceSwitchGeneration,
+    workspaceTransitionMode,
+    workspaceContentTransitioning,
+    workspaceTransitionEaseClass,
+    cancelPendingWorkspaceContentTransition,
     load,
     save,
     switchWorkspace,
