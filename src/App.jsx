@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useDrawerGestures } from './hooks/useDrawerGestures';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { SyncUpgradeProvider } from './context/SyncUpgradeContext';
@@ -81,6 +82,14 @@ function AppHeader({ onOpenSettings }) {
 
 function AppRoutes() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const openDrawer = useCallback(() => setSettingsOpen(true), []);
+  const closeDrawer = useCallback(() => setSettingsOpen(false), []);
+
+  useDrawerGestures({
+    isOpen: settingsOpen,
+    onOpen: openDrawer,
+    onClose: closeDrawer,
+  });
 
   // Auth first, then hydrate (workspaceIdMap + app state) before WorkspaceContext restores last workspace.
   useEffect(() => {
@@ -104,11 +113,8 @@ function AppRoutes() {
   return (
     <>
       <RedirectWorkspaceOnLoad />
-      <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
-      <MenuPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
+      <AppHeader onOpenSettings={openDrawer} />
+      <MenuPanel open={settingsOpen} onClose={closeDrawer} />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/w/:workspace" element={<WorkspacePage />} />
