@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useDrawerGestures } from './hooks/useDrawerGestures';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
@@ -112,6 +112,7 @@ function AppRoutes() {
 
   return (
     <>
+      <BackNavigationLock drawerOpen={settingsOpen} closeDrawer={closeDrawer} />
       <RedirectWorkspaceOnLoad />
       <AppHeader onOpenSettings={openDrawer} />
       <MenuPanel open={settingsOpen} onClose={closeDrawer} />
@@ -125,15 +126,78 @@ function AppRoutes() {
   );
 }
 
-function NavigationLock() {
+const LEFT_EDGE_BACK_SWIPE_PX = 28;
+
+/**
+ * Forces in-app "back" (hardware back, swipe, popstate) to Home + `/`.
+ * When the menu drawer is closed, left-edge touch moves that look like the iOS back-swipe
+ * get preventDefault to reduce Safari starting that navigation (not 100% guaranteed by the OS).
+ */
+function BackNavigationLock({ drawerOpen, closeDrawer }) {
+  const navigate = useNavigate();
+  const { load } = useWorkspace();
+  const loadRef = useRef(load);
+  const closeDrawerRef = useRef(closeDrawer);
+  const drawerOpenRef = useRef(drawerOpen);
+  loadRef.current = load;
+  closeDrawerRef.current = closeDrawer;
+  drawerOpenRef.current = drawerOpen;
+
   useEffect(() => {
-    window.history.pushState(null, '', window.location.href);
-    const handlePopState = () => {
-      window.history.pushState(null, '', window.location.href);
+    const onPopState = () => {
+      closeDrawerRef.current();
+      loadRef.current('home');
+      navigate('/', { replace: true });
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [navigate]);
+
+  useEffect(() => {
+    let fromLeftEdge = false;
+    let startX = 0;
+    let startY = 0;
+
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 1) return;
+      if (drawerOpenRef.current) {
+        fromLeftEdge = false;
+        return;
+      }
+      const t = e.touches[0];
+      fromLeftEdge = t.clientX <= LEFT_EDGE_BACK_SWIPE_PX;
+      startX = t.clientX;
+      startY = t.clientY;
+    };
+
+    const onTouchMove = (e) => {
+      if (!fromLeftEdge || drawerOpenRef.current || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (dx > 12 && Math.abs(dx) > Math.abs(dy)) {
+        e.preventDefault();
+      }
+    };
+
+    const end = () => {
+      fromLeftEdge = false;
+    };
+
+    const root = document.documentElement;
+    root.addEventListener('touchstart', onTouchStart, { passive: true });
+    root.addEventListener('touchmove', onTouchMove, { passive: false });
+    root.addEventListener('touchend', end, { passive: true });
+    root.addEventListener('touchcancel', end, { passive: true });
+
+    return () => {
+      root.removeEventListener('touchstart', onTouchStart);
+      root.removeEventListener('touchmove', onTouchMove);
+      root.removeEventListener('touchend', end);
+      root.removeEventListener('touchcancel', end);
+    };
   }, []);
+
   return null;
 }
 
@@ -144,7 +208,6 @@ export default function App() {
         <SyncUpgradeProvider>
           <BrowserRouter>
             <ArchiveModeProvider>
-              <NavigationLock />
               <AppRoutes />
             </ArchiveModeProvider>
           </BrowserRouter>

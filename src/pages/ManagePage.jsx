@@ -1,15 +1,32 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllWorkspaceKeys, getWorkspaceNameFromKey, loadWorkspace, saveWorkspace, deleteWorkspace, clearMasterKey } from '../utils/storage';
+import { useWorkspace } from '../context/WorkspaceContext';
+import {
+  getAllWorkspaceKeys,
+  getWorkspaceNameFromKey,
+  loadWorkspace,
+  saveWorkspace,
+  deleteWorkspace,
+  clearMasterKey,
+  isAutoAssignedHiddenRemoteWorkspaceKey,
+} from '../utils/storage';
 
 export function ManagePage() {
   const navigate = useNavigate();
+  const { load } = useWorkspace();
   const [workspaces, setWorkspaces] = useState([]);
   const [editingKey, setEditingKey] = useState(null);
   const [editName, setEditName] = useState('');
 
+  const goToMainHome = () => {
+    load('home');
+    navigate('/');
+  };
+
   useEffect(() => {
-    const keys = getAllWorkspaceKeys().filter((k) => k !== 'workspace_home');
+    const keys = getAllWorkspaceKeys().filter(
+      (k) => k !== 'workspace_home' && !isAutoAssignedHiddenRemoteWorkspaceKey(k),
+    );
     const t = window.setTimeout(() => setWorkspaces(keys), 0);
     return () => window.clearTimeout(t);
   }, []);
@@ -38,7 +55,7 @@ export function ManagePage() {
 
   const handleResetMasterKey = () => {
     clearMasterKey();
-    navigate('/');
+    goToMainHome();
   };
 
   return (
@@ -47,7 +64,7 @@ export function ManagePage() {
         <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">Workspaces</h2>
         <button
           type="button"
-          onClick={() => navigate('/')}
+          onClick={goToMainHome}
           className="text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
         >
           ← Back

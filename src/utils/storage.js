@@ -55,6 +55,23 @@ export function isLegacyHiddenWorkspaceKey(storageKey) {
   );
 }
 
+/**
+ * Sync binds hidden remote workspaces to workspace_<slug>_<12 hex from row id> (see syncEngine
+ * fullSync + assignStorageKeyForRemoteWorkspace). Those are not user-created /manage entries
+ * and duplicate the slug-only key for the same name.
+ */
+export function isAutoAssignedHiddenRemoteWorkspaceKey(key) {
+  if (
+    typeof key !== 'string' ||
+    !key.startsWith(WORKSPACE_PREFIX) ||
+    key === 'workspace_home'
+  ) {
+    return false;
+  }
+  const rest = key.slice(WORKSPACE_PREFIX.length);
+  return /_([0-9a-f]{12})$/i.test(rest);
+}
+
 export function loadAppState() {
   try {
     const raw = localStorage.getItem(APP_STATE_KEY);

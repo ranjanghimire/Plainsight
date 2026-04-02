@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Reduce horizontal overscroll / edge navigation where supported (e.g. Chrome). */
+html {
+  overscroll-behavior-x: none;
+}
+
 @layer utilities {
   @keyframes plainsight-restore-out {
     to {
@@ -28,6 +33,7 @@ body {
   @apply bg-stone-50 text-stone-800 antialiased dark:bg-stone-900 dark:text-stone-200;
   margin: 0;
   min-height: 100vh;
+  overscroll-behavior-x: none;
 }
 
 #root {
