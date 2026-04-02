@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
-import { useItemContextMenu } from '../hooks/useItemContextMenu';
+import {
+  useItemContextMenu,
+  CONTEXT_MENU_TRIGGER_CLASS,
+} from '../hooks/useItemContextMenu';
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -100,7 +103,7 @@ export function CategoryChips({
                 { kind: 'category', name: cat },
                 () => onCategoryChange(cat),
               )}
-              className={`px-2.5 py-1 rounded-md text-sm touch-manipulation ${chipBase(categoryFilter === cat)}`}
+              className={`px-2.5 py-1 rounded-md text-sm ${CONTEXT_MENU_TRIGGER_CLASS} ${chipBase(categoryFilter === cat)}`}
             >
               {cat}
             </button>

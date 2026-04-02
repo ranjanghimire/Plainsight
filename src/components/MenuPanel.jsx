@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useSyncUpgrade } from '../context/SyncUpgradeContext';
-import { useItemContextMenu } from '../hooks/useItemContextMenu';
+import {
+  useItemContextMenu,
+  CONTEXT_MENU_TRIGGER_CLASS,
+} from '../hooks/useItemContextMenu';
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -325,7 +328,8 @@ export function MenuPanel({ open, onClose }) {
                       () => handlePickWorkspace(entry),
                     )}
                     className={`
-                      w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors touch-manipulation
+                      w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors
+                      ${CONTEXT_MENU_TRIGGER_CLASS}
                       ${
                         active
                           ? 'bg-neutral-100 text-neutral-900 border-l-2 border-neutral-400 dark:bg-neutral-800 dark:text-neutral-100'

@@ -3,6 +3,19 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 const LONG_PRESS_MS = 450;
 const MOVE_THRESHOLD_PX = 12;
 
+/** Merge into trigger `className` — reduces iOS/Android text selection & system callout on long-press. */
+export const CONTEXT_MENU_TRIGGER_CLASS =
+  'select-none [-webkit-touch-callout:none] touch-manipulation';
+
+function clearNativeTextSelection() {
+  if (typeof window === 'undefined' || !window.getSelection) return;
+  try {
+    window.getSelection().removeAllRanges();
+  } catch {
+    /* ignore */
+  }
+}
+
 function clampMenuPosition(clientX, clientY) {
   const menuW = 170;
   const menuH = 96;
@@ -59,9 +72,11 @@ export function useItemContextMenu() {
 
   const openMenu = useCallback((target, clientX, clientY) => {
     clearLongPressTimer();
+    clearNativeTextSelection();
     const { x, y } = clampMenuPosition(clientX, clientY);
     setEntered(false);
     setMenu({ open: true, x, y, target });
+    window.requestAnimationFrame(() => clearNativeTextSelection());
   }, [clearLongPressTimer]);
 
   useEffect(() => {
@@ -136,8 +151,8 @@ export function useItemContextMenu() {
         onPointerUp: endLongPressArm,
         onPointerCancel: endLongPressArm,
         onContextMenu: (e) => {
-          if (!allowsContextMenu()) return;
           e.preventDefault();
+          if (!allowsContextMenu()) return;
           openMenu(target, e.clientX, e.clientY);
         },
         onClick: (e) => {
