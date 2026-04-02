@@ -68,6 +68,7 @@ export function useItemContextMenu() {
   }, []);
 
   const closeMenu = useCallback(() => {
+    suppressNextClickRef.current = false;
     setEntered(false);
     setMenu((m) => ({ ...m, open: false, target: null }));
     clearLongPressTimer();
