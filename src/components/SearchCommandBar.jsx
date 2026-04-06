@@ -51,7 +51,7 @@ function useKeyboardOverlapBottom() {
   return gapPx;
 }
 
-export function SearchCommandBar({ value, onChange, onCreateNote }) {
+export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = false }) {
   const navigate = useNavigate();
   const { switchWorkspace, currentWorkspace } = useWorkspace();
   const textareaRef = useRef(null);
@@ -97,10 +97,12 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
   const handleChange = useCallback(
     (e) => {
       let v = e.target.value;
-      v = v.replace(/^\.\.\s+/, '..').replace(/^\.\s+/, '.');
+      if (!searchOnly) {
+        v = v.replace(/^\.\.\s+/, '..').replace(/^\.\s+/, '.');
+      }
       onChange?.(v);
     },
-    [onChange],
+    [onChange, searchOnly],
   );
 
   const applyCommand = useCallback(() => {
@@ -149,6 +151,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
   }, [value, navigate, onChange, switchWorkspace, currentWorkspace]);
 
   const submitEntry = useCallback(() => {
+    if (searchOnly) return;
     const trimmed = value.trim();
     if (!trimmed) return;
     const isSingleLine = !/\r?\n/.test(trimmed);
@@ -158,16 +161,17 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
     }
     onCreateNote?.(trimmed);
     onChange?.('');
-  }, [value, applyCommand, onCreateNote, onChange]);
+  }, [searchOnly, value, applyCommand, onCreateNote, onChange]);
 
   const handleKeyDown = useCallback(
     (e) => {
+      if (searchOnly) return;
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         submitEntry();
       }
     },
-    [submitEntry],
+    [searchOnly, submitEntry],
   );
 
   const handleFloatingPointerDown = useCallback((e) => {
@@ -176,7 +180,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
     }
   }, []);
 
-  const canSubmit = Boolean(value.trim());
+  const canSubmit = !searchOnly && Boolean(value.trim());
 
   const floatingBottomStyle = {
     bottom: `calc(${keyboardOverlapBottom + 16}px + env(safe-area-inset-bottom, 0px))`,
@@ -184,7 +188,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
   };
 
   const floatingButton =
-    inputFocused && typeof document !== 'undefined'
+    !searchOnly && inputFocused && typeof document !== 'undefined'
       ? createPortal(
           <button
             type="button"
@@ -208,24 +212,26 @@ export function SearchCommandBar({ value, onChange, onCreateNote }) {
         <textarea
           ref={textareaRef}
           rows={1}
-          className="flex-1 min-h-[2.75rem] max-h-40 px-4 py-2.5 text-base rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500"
-          placeholder="Type here.."
+          className={`flex-1 min-h-[2.75rem] max-h-40 px-4 py-2.5 text-base rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500 ${searchOnly ? 'mr-2' : ''}`}
+          placeholder={searchOnly ? 'Search archive..' : 'Type here..'}
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onFocus={handleTextareaFocus}
           onBlur={handleTextareaBlur}
-          aria-label="New note"
+          aria-label={searchOnly ? 'Search archive' : 'New note'}
         />
-        <button
-          type="button"
-          onClick={submitEntry}
-          disabled={!canSubmit}
-          className="shrink-0 mr-2 p-2 rounded-lg text-stone-600 bg-stone-100 hover:bg-stone-200 disabled:opacity-40 disabled:pointer-events-none dark:text-stone-200 dark:bg-stone-700 dark:hover:bg-stone-600"
-          aria-label="Add note"
-        >
-          <SendNoteIcon />
-        </button>
+        {!searchOnly && (
+          <button
+            type="button"
+            onClick={submitEntry}
+            disabled={!canSubmit}
+            className="shrink-0 mr-2 p-2 rounded-lg text-stone-600 bg-stone-100 hover:bg-stone-200 disabled:opacity-40 disabled:pointer-events-none dark:text-stone-200 dark:bg-stone-700 dark:hover:bg-stone-600"
+            aria-label="Add note"
+          >
+            <SendNoteIcon />
+          </button>
+        )}
       </div>
     </>
   );

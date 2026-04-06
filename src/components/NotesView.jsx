@@ -294,6 +294,7 @@ export function NotesView() {
         value={inputValue}
         onChange={setInputValue}
         onCreateNote={handleCreateNote}
+        searchOnly={archiveMode}
       />
 
       <CategoryChips
