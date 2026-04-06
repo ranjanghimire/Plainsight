@@ -3,10 +3,15 @@
  * - syncEntitled: RevenueCat `sync` (setSyncEntitlementActive).
  * - supabaseSessionExists: local app session (src/auth/localSession.ts).
  * - syncRemoteActive: Phase 3C enables remote sync; until then app stays local-only.
- * - getCanUseSupabase: all three true — drives sync engine, hydration, fetches.
+ * - getCanUseSupabase: entitled + remote on + real OTP session (not local dev placeholders).
+ *   Dev userId/token are not rows in public.users — pushing would violate workspaces_owner_id_fkey.
  */
 
-import { getSession as getLocalSession } from '../auth/localSession';
+import {
+  getSession as getLocalSession,
+  LOCAL_DEV_SESSION_TOKEN,
+  LOCAL_DEV_USER_ID,
+} from '../auth/localSession';
 
 const ENTITLEMENT_KEY = 'sync';
 const REMOTE_SYNC_STORAGE_KEY = 'plainsight_sync_remote_active';
@@ -24,11 +29,35 @@ let syncEntitledFlag = false;
 let syncRemoteActiveFlag = readPersistedSyncRemoteActive();
 const listeners = new Set<() => void>();
 
+/** True when credentials can reference rows in public.users (OTP session, not Phase 1 dev defaults). */
+function sessionAllowsCloudData(): boolean {
+  const { userId, sessionToken } = getLocalSession();
+  if (!userId || !sessionToken) return false;
+  if (userId === LOCAL_DEV_USER_ID || sessionToken === LOCAL_DEV_SESSION_TOKEN) return false;
+  return true;
+}
+
+/** Turn off persisted remote sync if the current session cannot use Postgres user FKs. */
+function clampRemoteSyncToSession(): void {
+  if (!syncRemoteActiveFlag) return;
+  if (sessionAllowsCloudData()) return;
+  syncRemoteActiveFlag = false;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function notify(): void {
+  clampRemoteSyncToSession();
   listeners.forEach((l) => l());
 }
 
 if (typeof window !== 'undefined') {
+  clampRemoteSyncToSession();
   window.addEventListener('plainsight:local-session', () => notify());
 }
 
@@ -46,7 +75,7 @@ export function getSyncRemoteActive(): boolean {
 }
 
 export function getCanUseSupabase(): boolean {
-  return syncEntitledFlag && !!getLocalSession().userId && syncRemoteActiveFlag;
+  return syncEntitledFlag && syncRemoteActiveFlag && sessionAllowsCloudData();
 }
 
 /** @internal RevenueCat (SyncEntitlementContext). */

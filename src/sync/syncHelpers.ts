@@ -1,7 +1,6 @@
 import { fullSync } from './syncEngine';
 import { getCanUseSupabase } from './syncEnabled';
 import { notifyHydrationComplete } from './hydrationBridge';
-import { getSession as getLocalSession } from '../auth/localSession';
 
 /**
  * Quiet, non-blocking sync queue.
@@ -14,10 +13,10 @@ let timer: number | null = null;
 
 async function canSync(): Promise<boolean> {
   try {
+    if (!getCanUseSupabase()) return false;
     const url = (import.meta as any).env?.VITE_SUPABASE_URL;
     const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
-    if (!url || !key) return false;
-    return !!getLocalSession().userId;
+    return !!(url && key);
   } catch {
     return false;
   }
