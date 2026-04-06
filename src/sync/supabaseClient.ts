@@ -10,27 +10,40 @@ import type {
 import { getCanUseSupabase, subscribeSyncGating } from './syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
 
-/**
- * Create a Supabase client that ALWAYS includes the current session token
- * in the x-plainsight-session header.
- *
- * This is the ONLY reliable way to ensure RLS works for all PostgREST calls.
- */
-function getSupabase(): SupabaseClient {
-  const token = getLocalSession().sessionToken;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 
-  return createClient(
-    import.meta.env.VITE_SUPABASE_URL!,
-    import.meta.env.VITE_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: token
-          ? { 'x-plainsight-session': token }
-          : {},
-      },
-    }
-  );
+let cachedClient: SupabaseClient | null = null;
+let cachedToken: string | null = null;
+
+function createSupabaseWithToken(token: string | null): SupabaseClient {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: token ? { 'x-plainsight-session': token } : {},
+    },
+  });
 }
+
+/**
+ * Always returns a Supabase client whose headers reflect
+ * the current local session token.
+ */
+export function getSupabase(): SupabaseClient {
+  const token = getLocalSession().sessionToken ?? null;
+
+  if (!cachedClient || token !== cachedToken) {
+    cachedToken = token;
+    cachedClient = createSupabaseWithToken(token);
+  }
+
+  return cachedClient;
+}
+
+/**
+ * Legacy export for existing imports: `import { supabase } from './supabaseClient'`
+ * This will always resolve to the current client.
+ */
+export const supabase: SupabaseClient = getSupabase();
 
 function err(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -56,14 +69,14 @@ subscribeSyncGating(() => {
 });
 
 /* -------------------------------------------------------------
-   FETCH FUNCTIONS — all now use getSupabase() so headers are correct
+   FETCH FUNCTIONS — all use getSupabase() so headers are correct
 -------------------------------------------------------------- */
 
 export async function fetchAllWorkspaces(): Promise<{ data: Workspace[]; error?: SyncError }> {
   if (!getCanUseSupabase()) return { data: [] };
   try {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    const client = getSupabase();
+    const { data, error } = await client
       .from('workspaces')
       .select('*')
       .order('created_at', { ascending: true });
@@ -78,8 +91,8 @@ export async function fetchAllWorkspaces(): Promise<{ data: Workspace[]; error?:
 export async function fetchCategories(workspaceId: string): Promise<{ data: Category[]; error?: SyncError }> {
   if (!getCanUseSupabase()) return { data: [] };
   try {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    const client = getSupabase();
+    const { data, error } = await client
       .from('categories')
       .select('*')
       .eq('workspace_id', workspaceId)
@@ -95,8 +108,8 @@ export async function fetchCategories(workspaceId: string): Promise<{ data: Cate
 export async function fetchNotes(workspaceId: string): Promise<{ data: Note[]; error?: SyncError }> {
   if (!getCanUseSupabase()) return { data: [] };
   try {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    const client = getSupabase();
+    const { data, error } = await client
       .from('notes')
       .select('*')
       .eq('workspace_id', workspaceId)
@@ -112,8 +125,8 @@ export async function fetchNotes(workspaceId: string): Promise<{ data: Note[]; e
 export async function fetchArchivedNotes(workspaceId: string): Promise<{ data: ArchivedNote[]; error?: SyncError }> {
   if (!getCanUseSupabase()) return { data: [] };
   try {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    const client = getSupabase();
+    const { data, error } = await client
       .from('archived_notes')
       .select('*')
       .eq('workspace_id', workspaceId)
@@ -129,8 +142,8 @@ export async function fetchArchivedNotes(workspaceId: string): Promise<{ data: A
 export async function fetchWorkspacePins(): Promise<{ data: WorkspacePin[]; error?: SyncError }> {
   if (!getCanUseSupabase()) return { data: [] };
   try {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    const client = getSupabase();
+    const { data, error } = await client
       .from('workspace_pins')
       .select('*')
       .order('position', { ascending: true });
