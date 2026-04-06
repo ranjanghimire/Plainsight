@@ -23,9 +23,15 @@ import {
   removeWorkspaceIdMapping,
   setWorkspaceIdMapping,
 } from '../utils/storage';
-import { queueFullSync } from '../sync/syncHelpers';
-import { syncEnabled } from '../sync/syncEnabled';
-import { deleteWorkspaceRemote } from '../sync/syncEngine';
+import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
+import { getCanUseSupabase, subscribeSyncGating } from '../sync/syncEnabled';
+import {
+  deleteWorkspaceRemote,
+  subscribeToNotes,
+  subscribeToCategories,
+  subscribeToWorkspaces,
+  subscribeToWorkspacePins,
+} from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { supabase } from '../sync/supabaseClient';
 import {
@@ -39,7 +45,7 @@ import {
 import { archivedRowIdForText } from '../sync/workspaceStorageBridge';
 
 async function ensureWorkspaceRow({ storageKey, name, kind }) {
-  if (!syncEnabled) return;
+  if (!getCanUseSupabase()) return;
   const now = new Date().toISOString();
   const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
 
@@ -112,9 +118,17 @@ export function WorkspaceProvider({ children }) {
     () => initialWorkspaceState.currentWorkspace,
   );
   const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
-  /** When sync is off, true immediately. When sync is on, false until fullSync notifies. */
-  const [hydrationComplete, setHydrationComplete] = useState(() => !syncEnabled);
+  /** Local / entitled-only: true. When canUseSupabase, false until fullSync notifies. */
+  const [canUseSupabase, setCanUseSupabase] = useState(() => getCanUseSupabase());
+  const [hydrationComplete, setHydrationComplete] = useState(() => !getCanUseSupabase());
+  const [hydrationSyncToast, setHydrationSyncToast] = useState(false);
+  const hydrationRetryTimerRef = useRef(null);
   const workspaceKey = activeStorageKey;
+
+  useEffect(
+    () => subscribeSyncGating(() => setCanUseSupabase(getCanUseSupabase())),
+    [],
+  );
 
   const bumpWorkspaceSwitch = useCallback(() => {
     setWorkspaceSwitchGeneration((g) => g + 1);
@@ -180,16 +194,104 @@ export function WorkspaceProvider({ children }) {
   }, [data, activeStorageKey, save]);
 
   useEffect(() => {
-    if (!syncEnabled) return undefined;
-    return subscribeHydrationComplete(() => {
+    if (!canUseSupabase) {
+      if (hydrationRetryTimerRef.current != null) {
+        window.clearTimeout(hydrationRetryTimerRef.current);
+        hydrationRetryTimerRef.current = null;
+      }
       queueMicrotask(() => {
         setHydrationComplete(true);
+        setHydrationSyncToast(false);
+      });
+      return undefined;
+    }
+    queueMicrotask(() => setHydrationComplete(false));
+    const unsub = subscribeHydrationComplete((payload) => {
+      queueMicrotask(() => {
+        setHydrationComplete(true);
+        if (payload.ok) {
+          setHydrationSyncToast(false);
+          return;
+        }
+        if (!getCanUseSupabase()) return;
+        setHydrationSyncToast(true);
+        if (hydrationRetryTimerRef.current != null) {
+          window.clearTimeout(hydrationRetryTimerRef.current);
+        }
+        hydrationRetryTimerRef.current = window.setTimeout(() => {
+          hydrationRetryTimerRef.current = null;
+          if (getCanUseSupabase()) void runInitialHydration();
+        }, 4000);
       });
     });
-  }, []);
+    void runInitialHydration();
+    return () => {
+      unsub();
+      if (hydrationRetryTimerRef.current != null) {
+        window.clearTimeout(hydrationRetryTimerRef.current);
+        hydrationRetryTimerRef.current = null;
+      }
+    };
+  }, [canUseSupabase]);
 
   useEffect(() => {
-    if (!syncEnabled) return;
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+
+    let debounceTimer = null;
+    const scheduleFullSync = () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void queueFullSync();
+      }, 900);
+    };
+
+    const unsubs = [];
+    let cancelled = false;
+    const addUnsub = (fn) => {
+      if (cancelled) {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      } else {
+        unsubs.push(fn);
+      }
+    };
+
+    addUnsub(subscribeToWorkspaces(() => scheduleFullSync()));
+    addUnsub(subscribeToWorkspacePins(() => scheduleFullSync()));
+
+    (async () => {
+      try {
+        const workspaces = await getLocalWorkspaces();
+        if (cancelled) return;
+        for (const w of workspaces) {
+          if (!w?.id) continue;
+          addUnsub(subscribeToNotes(w.id, () => scheduleFullSync()));
+          addUnsub(subscribeToCategories(w.id, () => scheduleFullSync()));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      unsubs.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      });
+    };
+  }, [canUseSupabase, hydrationComplete]);
+
+  useEffect(() => {
+    if (!canUseSupabase) return;
     const key = activeStorageKey;
     const isHome = key === 'workspace_home';
     const visibleEntry = visibleWorkspaces.find((e) => e.key === key);
@@ -200,10 +302,10 @@ export function WorkspaceProvider({ children }) {
         : getWorkspaceNameFromKey(key);
     const kind = visibleEntry ? 'visible' : isHome ? 'visible' : 'hidden';
     void ensureWorkspaceRow({ storageKey: key, name, kind });
-  }, [activeStorageKey, visibleWorkspaces]);
+  }, [canUseSupabase, activeStorageKey, visibleWorkspaces]);
 
   useEffect(() => {
-    if (!syncEnabled) return undefined;
+    if (!canUseSupabase) return undefined;
     const onSync = () => {
       const app = loadAppState();
       setVisibleWorkspaces(app.visibleWorkspaces);
@@ -211,7 +313,7 @@ export function WorkspaceProvider({ children }) {
     };
     window.addEventListener('plainsight:full-sync', onSync);
     return () => window.removeEventListener('plainsight:full-sync', onSync);
-  }, [activeStorageKey]);
+  }, [canUseSupabase, activeStorageKey]);
 
   const applyNavigateByWorkspaceName = useCallback(
     (name) => {
@@ -656,6 +758,15 @@ export function WorkspaceProvider({ children }) {
   return (
     <WorkspaceContext.Provider value={value}>
       {children}
+      {hydrationSyncToast ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-[120] max-w-[min(90vw,22rem)] -translate-x-1/2 rounded-lg bg-stone-900/90 px-4 py-2 text-center text-sm text-stone-100 shadow-lg dark:bg-stone-100/95 dark:text-stone-900"
+          role="status"
+          aria-live="polite"
+        >
+          Could not sync. Retrying soon.
+        </div>
+      ) : null}
     </WorkspaceContext.Provider>
   );
 }

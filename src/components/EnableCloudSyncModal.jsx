@@ -1,12 +1,6 @@
 import { useEffect } from 'react';
 
-export function EnableSyncModal({
-  open,
-  onClose,
-  onUnlockSync,
-  unlockDisabled = false,
-  unlocking = false,
-}) {
+export function EnableCloudSyncModal({ open, onClose, onEnable }) {
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -17,11 +11,6 @@ export function EnableSyncModal({
   }, [open, onClose]);
 
   if (!open) return null;
-
-  const handleUnlock = async () => {
-    if (unlockDisabled || unlocking) return;
-    await onUnlockSync();
-  };
 
   return (
     <div
@@ -37,37 +26,35 @@ export function EnableSyncModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="enable-sync-title"
+        aria-labelledby="enable-cloud-sync-title"
         className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
         onClick={(ev) => ev.stopPropagation()}
       >
         <h2
-          id="enable-sync-title"
+          id="enable-cloud-sync-title"
           className="text-lg font-medium text-stone-900 dark:text-stone-100"
         >
-          Enable Sync
+          Enable Cloud Sync
         </h2>
-        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-stone-600 dark:text-stone-300">
-          <li>Sync across devices</li>
-          <li>Backup your notes</li>
-          <li>Real-time updates</li>
-        </ul>
+        <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">
+          Upload your notes and keep them synced across devices.
+        </p>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse sm:justify-end">
           <button
             type="button"
-            onClick={handleUnlock}
-            disabled={unlockDisabled || unlocking}
-            className="px-3 py-2 text-sm font-medium rounded-lg bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50 disabled:pointer-events-none dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
+            onClick={() => {
+              onEnable();
+            }}
+            className="px-3 py-2 text-sm font-medium rounded-lg bg-stone-800 text-white hover:bg-stone-900 dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
           >
-            {unlocking ? 'Processing…' : 'Unlock Sync'}
+            Enable Sync
           </button>
           <button
             type="button"
             onClick={onClose}
-            disabled={unlocking}
-            className="px-3 py-2 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
+            className="px-3 py-2 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
           >
-            Cancel
+            Not now
           </button>
         </div>
       </div>

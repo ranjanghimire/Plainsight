@@ -2,11 +2,11 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useDrawerGestures } from './hooks/useDrawerGestures';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
-import { SyncUpgradeProvider } from './context/SyncUpgradeContext';
+import { SyncEntitlementProvider } from './context/SyncEntitlementContext';
+import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
 import { MenuPanel, MenuButton } from './components/MenuPanel';
-import { runInitialHydration } from './sync/syncHelpers';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
@@ -117,11 +117,6 @@ function AppRoutes() {
     onClose: closeDrawer,
   });
 
-  // When sync is enabled, runs initial fullSync (hydration). When disabled, no-op.
-  useEffect(() => {
-    void runInitialHydration();
-  }, []);
-
   return (
     <>
       <BackNavigationLock drawerOpen={settingsOpen} closeDrawer={closeDrawer} />
@@ -218,15 +213,17 @@ function BackNavigationLock({ drawerOpen, closeDrawer }) {
 export default function App() {
   return (
     <ThemeProvider>
-      <WorkspaceProvider>
-        <SyncUpgradeProvider>
-          <BrowserRouter>
-            <ArchiveModeProvider>
-              <AppRoutes />
-            </ArchiveModeProvider>
-          </BrowserRouter>
-        </SyncUpgradeProvider>
-      </WorkspaceProvider>
+      <SyncEntitlementProvider>
+        <AuthProvider>
+          <WorkspaceProvider>
+            <BrowserRouter>
+              <ArchiveModeProvider>
+                <AppRoutes />
+              </ArchiveModeProvider>
+            </BrowserRouter>
+          </WorkspaceProvider>
+        </AuthProvider>
+      </SyncEntitlementProvider>
     </ThemeProvider>
   );
 }

@@ -7,7 +7,7 @@ import type {
   Workspace,
   WorkspacePin,
 } from './types';
-import { syncEnabled } from './syncEnabled';
+import { getCanUseSupabase, subscribeSyncGating } from './syncEnabled';
 
 /**
  * Configure via Vite env:
@@ -23,13 +23,13 @@ export const supabase: SupabaseClient = createClient(
   supabaseAnonKey || '',
 );
 
-
-// TEMPORARY — for debugging only
-// @ts-ignore
-if (syncEnabled) window.supabase = supabase;
-
+let authListenersStarted = false;
 let authUserId: string | null = null;
-if (syncEnabled) {
+
+function ensureSupabaseAuthListeners() {
+  if (authListenersStarted || !getCanUseSupabase()) return;
+  authListenersStarted = true;
+
   supabase.auth.getSession().then(({ data }) => {
     authUserId = data.session?.user?.id ?? null;
   });
@@ -38,6 +38,18 @@ if (syncEnabled) {
     authUserId = session?.user?.id ?? null;
   });
 }
+
+function syncDebugGlobals() {
+  if (!getCanUseSupabase()) return;
+  // @ts-ignore TEMPORARY — for debugging only
+  window.supabase = supabase;
+}
+
+subscribeSyncGating(() => {
+  if (!getCanUseSupabase()) return;
+  ensureSupabaseAuthListeners();
+  syncDebugGlobals();
+});
 
 export function getAuthedUserId(): string | null {
   return authUserId;
@@ -48,7 +60,7 @@ function err(message: string, details?: unknown): SyncError {
 }
 
 export async function fetchAllWorkspaces(): Promise<{ data: Workspace[]; error?: SyncError }> {
-  if (!syncEnabled) return { data: [] };
+  if (!getCanUseSupabase()) return { data: [] };
   try {
     const { data, error } = await supabase
       .from('workspaces')
@@ -62,7 +74,7 @@ export async function fetchAllWorkspaces(): Promise<{ data: Workspace[]; error?:
 }
 
 export async function fetchCategories(workspaceId: string): Promise<{ data: Category[]; error?: SyncError }> {
-  if (!syncEnabled) return { data: [] };
+  if (!getCanUseSupabase()) return { data: [] };
   try {
     const { data, error } = await supabase
       .from('categories')
@@ -77,7 +89,7 @@ export async function fetchCategories(workspaceId: string): Promise<{ data: Cate
 }
 
 export async function fetchNotes(workspaceId: string): Promise<{ data: Note[]; error?: SyncError }> {
-  if (!syncEnabled) return { data: [] };
+  if (!getCanUseSupabase()) return { data: [] };
   try {
     const { data, error } = await supabase
       .from('notes')
@@ -92,7 +104,7 @@ export async function fetchNotes(workspaceId: string): Promise<{ data: Note[]; e
 }
 
 export async function fetchArchivedNotes(workspaceId: string): Promise<{ data: ArchivedNote[]; error?: SyncError }> {
-  if (!syncEnabled) return { data: [] };
+  if (!getCanUseSupabase()) return { data: [] };
   try {
     const { data, error } = await supabase
       .from('archived_notes')
@@ -107,7 +119,7 @@ export async function fetchArchivedNotes(workspaceId: string): Promise<{ data: A
 }
 
 export async function fetchWorkspacePins(): Promise<{ data: WorkspacePin[]; error?: SyncError }> {
-  if (!syncEnabled) return { data: [] };
+  if (!getCanUseSupabase()) return { data: [] };
   try {
     const { data, error } = await supabase
       .from('workspace_pins')
@@ -119,4 +131,3 @@ export async function fetchWorkspacePins(): Promise<{ data: WorkspacePin[]; erro
     return { data: [], error: err('Failed to fetch workspace pins', e) };
   }
 }
-

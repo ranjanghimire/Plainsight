@@ -53,14 +53,14 @@ import {
   saveAppState,
 } from '../utils/storage';
 import { notifyHydrationComplete } from './hydrationBridge';
-import { syncEnabled } from './syncEnabled';
+import { getCanUseSupabase } from './syncEnabled';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
 }
 
 async function getOwnerId(): Promise<string | null> {
-  if (!syncEnabled) return null;
+  if (!getCanUseSupabase()) return null;
   try {
     const {
       data: { user },
@@ -106,7 +106,7 @@ export async function pullWorkspacePins(): Promise<{ data: WorkspacePin[]; error
 // -----------------------------
 
 export async function pushWorkspaces(localWorkspaces: Workspace[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const ownerId = await getOwnerId();
     if (!ownerId) return { ok: true };
@@ -125,7 +125,7 @@ export async function pushWorkspaces(localWorkspaces: Workspace[]): Promise<{ ok
 export async function deleteWorkspaceRemote(
   workspaceId: string,
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const ownerId = await getOwnerId();
     if (!ownerId) return { ok: true };
@@ -141,7 +141,7 @@ export async function deleteWorkspaceRemote(
 }
 
 export async function pushCategories(localCategories: Category[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const { error } = await supabase
       .from('categories')
@@ -171,7 +171,7 @@ function sanitizeNotesForPush(rows: Note[]): Note[] {
 }
 
 export async function pushNotes(localNotes: Note[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const notesToPush = sanitizeNotesForPush(localNotes);
     const res = await supabase.from('notes').upsert(notesToPush, { onConflict: 'id' }).select('*');
@@ -184,7 +184,7 @@ export async function pushNotes(localNotes: Note[]): Promise<{ ok: true } | { ok
 }
 
 export async function pushArchivedNotes(localArchived: ArchivedNote[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const { error } = await supabase
       .from('archived_notes')
@@ -200,7 +200,7 @@ export async function pushArchivedDeletes(
   workspaceId: string,
   archivedIds: string[],
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const ids = (archivedIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true };
@@ -217,7 +217,7 @@ export async function pushNoteDeletes(
   workspaceId: string,
   noteIds: string[],
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     const ids = (noteIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true };
@@ -231,7 +231,7 @@ export async function pushNoteDeletes(
 }
 
 export async function pushWorkspacePins(localPins: WorkspacePin[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) return { ok: true };
+  if (!getCanUseSupabase()) return { ok: true };
   try {
     // PK is (user_id, workspace_id) so use that as conflict target
     const { error } = await supabase
@@ -256,7 +256,7 @@ function toEvent(e: string): 'INSERT' | 'UPDATE' | 'DELETE' {
 }
 
 export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) {
-  if (!syncEnabled) return () => {};
+  if (!getCanUseSupabase()) return () => {};
   const channel = supabase
     .channel(`notes:${workspaceId}`)
     .on(
@@ -270,7 +270,7 @@ export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) 
 }
 
 export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Category>) {
-  if (!syncEnabled) return () => {};
+  if (!getCanUseSupabase()) return () => {};
   const channel = supabase
     .channel(`categories:${workspaceId}`)
     .on(
@@ -283,7 +283,7 @@ export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Ca
 }
 
 export function subscribeToWorkspaces(cb: ChangeCallback<Workspace>) {
-  if (!syncEnabled) return () => {};
+  if (!getCanUseSupabase()) return () => {};
   const channel = supabase
     .channel('workspaces')
     .on(
@@ -296,7 +296,7 @@ export function subscribeToWorkspaces(cb: ChangeCallback<Workspace>) {
 }
 
 export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
-  if (!syncEnabled) return () => {};
+  if (!getCanUseSupabase()) return () => {};
   const channel = supabase
     .channel('workspace_pins')
     .on(
@@ -315,7 +315,7 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
 export async function fullSync(
   workspaceIds?: string[],
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!syncEnabled) {
+  if (!getCanUseSupabase()) {
     return { ok: true };
   }
 

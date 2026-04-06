@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { useSyncUpgrade } from '../context/SyncUpgradeContext';
+import { useSyncEntitlement } from '../context/SyncEntitlementContext';
+import { useAuth } from '../context/AuthContext';
+import {
+  getSyncEntitled,
+  getSupabaseSessionExists,
+  getSyncRemoteActive,
+  subscribeSyncGating,
+} from '../sync/syncEnabled';
 import {
   useItemContextMenu,
   CONTEXT_MENU_TRIGGER_CLASS,
@@ -88,16 +95,24 @@ export function MenuPanel({ open, onClose }) {
     renameVisibleWorkspace,
     deleteVisibleWorkspace,
   } = useWorkspace();
-  const {
-    syncStatus,
-    syncEmail,
-    beginUpgradeFlow,
-    beginChangeEmailFromPending,
-    beginChangeEmailFromVerified,
-  } = useSyncUpgrade();
+  const { beginUpgradeFlow } = useSyncEntitlement();
+  const openEnableSyncModal = beginUpgradeFlow;
+  const { openSignInSyncModal, openEnableCloudSyncModal, signOut, authEmail } = useAuth();
+  const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
+  const [supabaseSessionExists, setSupabaseSessionExists] = useState(() =>
+    getSupabaseSessionExists(),
+  );
+  const [syncRemoteActive, setSyncRemoteActive] = useState(() => getSyncRemoteActive());
 
-  const changeEmailLinkClass =
-    'text-left text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-300 hover:underline';
+  useEffect(
+    () =>
+      subscribeSyncGating(() => {
+        setSyncEntitled(getSyncEntitled());
+        setSupabaseSessionExists(getSupabaseSessionExists());
+        setSyncRemoteActive(getSyncRemoteActive());
+      }),
+    [],
+  );
 
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -219,63 +234,52 @@ export function MenuPanel({ open, onClose }) {
           </div>
 
           <div className="border-b border-stone-100 dark:border-stone-700 py-3 px-1 space-y-2">
-            {syncStatus === 'anonymous' ? (
-              <>
-                {/* Future: replace beginUpgradeFlow with a payment step before email verification. */}
-                <button
-                  type="button"
-                  onClick={beginUpgradeFlow}
-                  className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Upgrade to sync
-                </button>
-              </>
-            ) : null}
-            {syncStatus === 'pending' ? (
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: '#FFB74D' }}
-                  />
-                  <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
-                    Sync pending — check your email
-                  </p>
-                </div>
-                <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
-                  Check your inbox to continue.
-                </p>
-                {syncEmail ? (
-                  <p className="text-xs text-stone-600 dark:text-stone-300 truncate" title={syncEmail}>
-                    {syncEmail}
-                  </p>
-                ) : null}
-                <button type="button" onClick={beginChangeEmailFromPending} className={changeEmailLinkClass}>
-                  Change email
-                </button>
-              </div>
-            ) : null}
-            {syncStatus === 'verified' ? (
+            {!syncEntitled ? (
+              <button
+                type="button"
+                onClick={openEnableSyncModal}
+                className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Enable Sync
+              </button>
+            ) : !supabaseSessionExists ? (
+              <button
+                type="button"
+                onClick={openSignInSyncModal}
+                className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Sign in to enable sync
+              </button>
+            ) : !syncRemoteActive ? (
+              <button
+                type="button"
+                onClick={openEnableCloudSyncModal}
+                className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Enable cloud sync
+              </button>
+            ) : (
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span
                     className="inline-block h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: '#4CAF50' }}
+                    aria-hidden
                   />
                   <p className="text-sm font-medium text-stone-800 dark:text-stone-200">
-                    Sync enabled
+                    Cloud sync on
                   </p>
                 </div>
-                {syncEmail ? (
-                  <p className="text-xs text-stone-600 dark:text-stone-300 truncate" title={syncEmail}>
-                    {syncEmail}
+                {authEmail ? (
+                  <p
+                    className="text-xs text-stone-500 dark:text-stone-400 pl-1"
+                    style={{ opacity: 0.6 }}
+                  >
+                    Signed in as {authEmail}
                   </p>
                 ) : null}
-                <button type="button" onClick={beginChangeEmailFromVerified} className={changeEmailLinkClass}>
-                  Change email
-                </button>
               </div>
-            ) : null}
+            )}
           </div>
 
           <div className="mt-5">
@@ -389,6 +393,21 @@ export function MenuPanel({ open, onClose }) {
               </button>
             )}
           </div>
+
+          {supabaseSessionExists ? (
+            <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
+              <button
+                type="button"
+                onClick={() => {
+                  void signOut();
+                  onClose();
+                }}
+                className="w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : null}
         </div>
       </aside>
 
