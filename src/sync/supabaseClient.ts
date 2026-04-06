@@ -24,10 +24,6 @@ function createSupabaseWithToken(token: string | null): SupabaseClient {
   });
 }
 
-/**
- * Always returns a Supabase client whose headers reflect
- * the current local session token.
- */
 export function getSupabase(): SupabaseClient {
   const token = getLocalSession().sessionToken ?? null;
 
@@ -39,12 +35,6 @@ export function getSupabase(): SupabaseClient {
   return cachedClient;
 }
 
-/**
- * Legacy export for existing imports: `import { supabase } from './supabaseClient'`
- * This will always resolve to the current client.
- */
-export const supabase: SupabaseClient = getSupabase();
-
 function err(message: string, details?: unknown): SyncError {
   return { message, details };
 }
@@ -53,10 +43,6 @@ export function getAuthedUserId(): string | null {
   return getLocalSession().userId;
 }
 
-/**
- * Debug helper — exposes the live Supabase client on window.supabase
- * when sync is enabled.
- */
 function syncDebugGlobals() {
   if (!getCanUseSupabase()) return;
   // @ts-ignore
@@ -69,10 +55,10 @@ subscribeSyncGating(() => {
 });
 
 /* -------------------------------------------------------------
-   FETCH FUNCTIONS — all use getSupabase() so headers are correct
+   FETCH FUNCTIONS — all use getSupabase()
 -------------------------------------------------------------- */
 
-export async function fetchAllWorkspaces(): Promise<{ data: Workspace[]; error?: SyncError }> {
+export async function fetchAllWorkspaces() {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
@@ -82,13 +68,13 @@ export async function fetchAllWorkspaces(): Promise<{ data: Workspace[]; error?:
       .order('created_at', { ascending: true });
 
     if (error) return { data: [], error: err(error.message, error) };
-    return { data: (data || []) as Workspace[] };
+    return { data: data || [] };
   } catch (e) {
     return { data: [], error: err('Failed to fetch workspaces', e) };
   }
 }
 
-export async function fetchCategories(workspaceId: string): Promise<{ data: Category[]; error?: SyncError }> {
+export async function fetchCategories(workspaceId: string) {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
@@ -99,13 +85,13 @@ export async function fetchCategories(workspaceId: string): Promise<{ data: Cate
       .order('created_at', { ascending: true });
 
     if (error) return { data: [], error: err(error.message, error) };
-    return { data: (data || []) as Category[] };
+    return { data: data || [] };
   } catch (e) {
     return { data: [], error: err('Failed to fetch categories', e) };
   }
 }
 
-export async function fetchNotes(workspaceId: string): Promise<{ data: Note[]; error?: SyncError }> {
+export async function fetchNotes(workspaceId: string) {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
@@ -116,13 +102,13 @@ export async function fetchNotes(workspaceId: string): Promise<{ data: Note[]; e
       .order('updated_at', { ascending: false });
 
     if (error) return { data: [], error: err(error.message, error) };
-    return { data: (data || []) as Note[] };
+    return { data: data || [] };
   } catch (e) {
     return { data: [], error: err('Failed to fetch notes', e) };
   }
 }
 
-export async function fetchArchivedNotes(workspaceId: string): Promise<{ data: ArchivedNote[]; error?: SyncError }> {
+export async function fetchArchivedNotes(workspaceId: string) {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
@@ -133,13 +119,13 @@ export async function fetchArchivedNotes(workspaceId: string): Promise<{ data: A
       .order('last_deleted_at', { ascending: false });
 
     if (error) return { data: [], error: err(error.message, error) };
-    return { data: (data || []) as ArchivedNote[] };
+    return { data: data || [] };
   } catch (e) {
     return { data: [], error: err('Failed to fetch archived notes', e) };
   }
 }
 
-export async function fetchWorkspacePins(): Promise<{ data: WorkspacePin[]; error?: SyncError }> {
+export async function fetchWorkspacePins() {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
@@ -149,8 +135,10 @@ export async function fetchWorkspacePins(): Promise<{ data: WorkspacePin[]; erro
       .order('position', { ascending: true });
 
     if (error) return { data: [], error: err(error.message, error) };
-    return { data: (data || []) as WorkspacePin[] };
+    return { data: data || [] };
   } catch (e) {
     return { data: [], error: err('Failed to fetch workspace pins', e) };
   }
 }
+
+export const supabase = getSupabase();
