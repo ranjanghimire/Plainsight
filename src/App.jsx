@@ -10,7 +10,6 @@ import { MenuPanel, MenuButton } from './components/MenuPanel';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
-import { AuthCallback } from './pages/AuthCallbackPage';
 
 function RedirectWorkspaceOnLoad() {
   const navigate = useNavigate();
@@ -126,7 +125,6 @@ function AppRoutes() {
       <MenuPanel open={settingsOpen} onClose={closeDrawer} />
       <WorkspaceContentShell>
         <Routes>
-          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/" element={<HomePage />} />
           <Route path="/w/:workspace" element={<WorkspacePage />} />
           <Route path="/ws/:workspace" element={<WorkspacePage />} />

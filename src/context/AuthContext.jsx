@@ -3,7 +3,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from 'react';
 import { supabase } from '../sync/supabaseClient';
@@ -18,7 +17,6 @@ import {
 import { SignInSyncModal } from '../components/SignInSyncModal';
 import { EnableCloudSyncModal } from '../components/EnableCloudSyncModal';
 
-const TOAST_MS = 3200;
 const CLOUD_SYNC_AUTO_PROMPT_KEY = 'plainsight_cloud_sync_auto_prompted';
 
 const AuthContext = createContext(null);
@@ -31,9 +29,7 @@ export function AuthProvider({ children }) {
   const [syncEntitled, setSyncEntitledUi] = useState(() => getSyncEntitled());
   const [signInSyncOpen, setSignInSyncOpen] = useState(false);
   const [enableCloudSyncOpen, setEnableCloudSyncOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState(null);
   const [authEmail, setAuthEmail] = useState(null);
-  const toastTimerRef = useRef(null);
 
   useEffect(
     () =>
@@ -135,22 +131,6 @@ export function AuthProvider({ children }) {
     closeEnableCloudSyncModal();
   }, [closeSignInSyncModal, closeEnableCloudSyncModal]);
 
-  const showSendCodeError = useCallback(() => {
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    setToastMessage('Could not send email. Try again.');
-    toastTimerRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-      toastTimerRef.current = null;
-    }, TOAST_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    },
-    [],
-  );
-
   const value = {
     supabaseSessionExists,
     syncRemoteActive,
@@ -164,11 +144,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      <SignInSyncModal
-        open={signInSyncOpen}
-        onClose={closeSignInSyncModal}
-        onSendError={showSendCodeError}
-      />
+      <SignInSyncModal open={signInSyncOpen} onClose={closeSignInSyncModal} />
       <EnableCloudSyncModal
         open={enableCloudSyncOpen}
         onClose={dismissCloudSyncWithoutEnabling}
@@ -182,15 +158,6 @@ export function AuthProvider({ children }) {
           setEnableCloudSyncOpen(false);
         }}
       />
-      {toastMessage ? (
-        <div
-          className="fixed bottom-6 left-1/2 z-[120] max-w-[min(90vw,20rem)] -translate-x-1/2 rounded-lg bg-stone-900/90 px-4 py-2 text-center text-sm text-stone-100 shadow-lg dark:bg-stone-100/95 dark:text-stone-900"
-          role="status"
-          aria-live="polite"
-        >
-          {toastMessage}
-        </div>
-      ) : null}
     </AuthContext.Provider>
   );
 }
