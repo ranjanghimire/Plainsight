@@ -13,15 +13,19 @@ let exchangePromise = null;
 function getExchangePromise() {
   if (!exchangePromise) {
     exchangePromise = (async () => {
-      const search = new URLSearchParams(window.location.search);
-      const hash = window.location.hash.startsWith('#')
-        ? new URLSearchParams(window.location.hash.slice(1))
-        : new URLSearchParams();
+      // Magic links use ?code=… on the full URL; avoid relying on any host rewrite
+      // that drops the query string. Hash fallback is for atypical OAuth flows.
+      const params = new URLSearchParams(window.location.search);
+      const hash =
+        window.location.hash.startsWith('#')
+          ? new URLSearchParams(window.location.hash.slice(1))
+          : new URLSearchParams();
 
-      const oauthError = search.get('error') || hash.get('error');
+      const oauthError = params.get('error') || hash.get('error');
       const oauthDesc =
-        search.get('error_description') || hash.get('error_description');
-      const code = search.get('code') || hash.get('code');
+        params.get('error_description') || hash.get('error_description');
+      let code = params.get('code');
+      if (!code) code = hash.get('code');
 
       if (oauthError) {
         const detail = oauthDesc
