@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../sync/supabaseClient';
+import { supabaseAuthMinimal } from '../sync/supabaseAuthMinimal';
 
 /**
  * Magic-link / OAuth redirect target.
@@ -34,7 +34,7 @@ function getExchangePromise() {
         throw new Error('Missing authorization code.');
       }
 
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      const { error } = await supabaseAuthMinimal.auth.exchangeCodeForSession(code);
       if (error) {
         throw new Error(error.message || 'Could not complete sign-in.');
       }
