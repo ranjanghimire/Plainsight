@@ -71,6 +71,27 @@ function ensureWorkspaceOwnerId(workspaces: Workspace[], ownerId: string): Works
   );
 }
 
+/**
+ * PostgREST upsert uses onConflict=id. A separate UNIQUE(owner_id, name) (or similar) still
+ * rejects a second INSERT with the same name → 409. Remote+local merges can produce two UUIDs
+ * with the same label; suffix duplicates so every row is unique for that constraint.
+ */
+function disambiguateWorkspaceNamesForPush(rows: Workspace[]): Workspace[] {
+  const seenCount = new Map<string, number>();
+  return rows.map((w) => {
+    const rawName = (w.name || '').trim() || 'Workspace';
+    const key = `${w.owner_id}:${w.kind}:${rawName.toLowerCase()}`;
+    const n = (seenCount.get(key) || 0) + 1;
+    seenCount.set(key, n);
+    if (n === 1) return w;
+    return { ...w, name: `${rawName} (${n})` };
+  });
+}
+
+function prepareWorkspacesForRemote(rows: Workspace[], ownerId: string): Workspace[] {
+  return disambiguateWorkspaceNamesForPush(ensureWorkspaceOwnerId(rows, ownerId));
+}
+
 // -----------------------------
 // Pull (raw fetch; no merging)
 // -----------------------------
@@ -104,7 +125,7 @@ export async function pushWorkspaces(localWorkspaces: Workspace[]): Promise<{ ok
   try {
     const ownerId = await getOwnerId();
     if (!ownerId) return { ok: true };
-    const rows = ensureWorkspaceOwnerId(localWorkspaces, ownerId);
+    const rows = prepareWorkspacesForRemote(localWorkspaces, ownerId);
     const { error } = await getSupabase()
       .from('workspaces')
       .upsert(rows, { onConflict: 'id' });
@@ -368,9 +389,9 @@ export async function fullSync(
       if (!remoteIds.has(id)) mergedWorkspaces.push(lw);
     }
 
-    // Ensure merged workspaces have owner_id before saving locally (never let missing owner_id win)
+    // owner_id + unique (owner, name)–safe labels before local save and push
     const mergedWorkspacesWithOwner =
-      ownerId ? ensureWorkspaceOwnerId(mergedWorkspaces, ownerId) : mergedWorkspaces;
+      ownerId ? prepareWorkspacesForRemote(mergedWorkspaces, ownerId) : mergedWorkspaces;
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
     await saveLocalWorkspaces(mergedWorkspacesWithOwner);
