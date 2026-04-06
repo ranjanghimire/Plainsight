@@ -1,5 +1,6 @@
 import { fullSync } from './syncEngine';
 import { supabase } from './supabaseClient';
+import { syncEnabled } from './syncEnabled';
 import { notifyHydrationComplete } from './hydrationBridge';
 
 /**
@@ -49,6 +50,7 @@ async function run() {
 }
 
 export function queueFullSync() {
+  if (!syncEnabled) return;
   pending = true;
   if (timer) window.clearTimeout(timer);
   timer = window.setTimeout(() => {
@@ -62,6 +64,10 @@ export function queueFullSync() {
  * If sync cannot run (no env / no session), still unblocks the UI.
  */
 export async function runInitialHydration(): Promise<void> {
+  if (!syncEnabled) {
+    notifyHydrationComplete({ ok: false });
+    return;
+  }
   if (!(await canSync())) {
     notifyHydrationComplete({ ok: false });
     return;

@@ -18,6 +18,7 @@ import {
   setWorkspaceIdMapping,
 } from '../utils/storage';
 import { queueFullSync } from '../sync/syncHelpers';
+import { syncEnabled } from '../sync/syncEnabled';
 import { deleteWorkspaceRemote } from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { supabase } from '../sync/supabaseClient';
@@ -32,6 +33,7 @@ import {
 import { archivedRowIdForText } from '../sync/workspaceStorageBridge';
 
 async function ensureWorkspaceRow({ storageKey, name, kind }) {
+  if (!syncEnabled) return;
   const now = new Date().toISOString();
   const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
 

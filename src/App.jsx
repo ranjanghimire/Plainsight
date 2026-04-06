@@ -7,7 +7,6 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
 import { MenuPanel, MenuButton } from './components/MenuPanel';
 import { runInitialHydration } from './sync/syncHelpers';
-import { supabase } from './sync/supabaseClient';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
@@ -114,23 +113,9 @@ function AppRoutes() {
     onClose: closeDrawer,
   });
 
-  // Auth first, then hydrate (workspaceIdMap + app state) before WorkspaceContext restores last workspace.
+  // When sync is enabled, hydration runs full sync after auth; when disabled, unblocks UI local-only.
   useEffect(() => {
-    let cancelled = false;
-    async function boot() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        await supabase.auth.signInAnonymously();
-      }
-      if (cancelled) return;
-      await runInitialHydration();
-    }
-    void boot();
-    return () => {
-      cancelled = true;
-    };
+    void runInitialHydration();
   }, []);
 
   return (

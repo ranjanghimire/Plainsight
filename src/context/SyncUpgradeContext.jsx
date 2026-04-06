@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '../sync/supabaseClient';
+import { syncEnabled } from '../sync/syncEnabled';
 import { EnableSyncModal } from '../components/EnableSyncModal';
 
 const STORAGE_KEY = 'plainsight_sync_upgrade';
@@ -63,6 +64,8 @@ export function SyncUpgradeProvider({ children }) {
   }, [syncStatus, syncEmail]);
 
   useEffect(() => {
+    if (!syncEnabled) return undefined;
+
     supabase.auth.getSession().then(({ data }) => {
       reconcileVerifiedFromSession(data.session, setSyncStatus, setSyncEmail);
     });
@@ -103,6 +106,9 @@ export function SyncUpgradeProvider({ children }) {
   }, []);
 
   const submitUpgradeEmail = useCallback(async (email) => {
+    if (!syncEnabled) {
+      return { error: 'Sync is not available.' };
+    }
     const trimmed = (email || '').trim();
     if (!trimmed) {
       return { error: 'Please enter your email.' };
