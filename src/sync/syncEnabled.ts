@@ -1,10 +1,12 @@
 /**
- * Gating (Phases 3A–3C):
+ * Gating (Phases 3A–3C + local session):
  * - syncEntitled: RevenueCat `sync` (setSyncEntitlementActive).
- * - supabaseSessionExists: valid Supabase session (Phase 3B AuthContext).
+ * - supabaseSessionExists: local app session (src/auth/localSession.ts).
  * - syncRemoteActive: Phase 3C enables remote sync; until then app stays local-only.
  * - getCanUseSupabase: all three true — drives sync engine, hydration, fetches.
  */
+
+import { getSession as getLocalSession } from '../auth/localSession';
 
 const ENTITLEMENT_KEY = 'sync';
 const REMOTE_SYNC_STORAGE_KEY = 'plainsight_sync_remote_active';
@@ -18,7 +20,6 @@ function readPersistedSyncRemoteActive(): boolean {
 }
 
 let syncEntitledFlag = false;
-let supabaseSessionExistsFlag = false;
 /** Phase 3C: allow fullSync and realtime when true (persisted while user keeps cloud on). */
 let syncRemoteActiveFlag = readPersistedSyncRemoteActive();
 const listeners = new Set<() => void>();
@@ -27,12 +28,16 @@ function notify(): void {
   listeners.forEach((l) => l());
 }
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('plainsight:local-session', () => notify());
+}
+
 export function getSyncEntitled(): boolean {
   return syncEntitledFlag;
 }
 
 export function getSupabaseSessionExists(): boolean {
-  return supabaseSessionExistsFlag;
+  return !!getLocalSession().userId;
 }
 
 /** @internal Phase 3C only — until called with true, sync stays dormant. */
@@ -41,20 +46,13 @@ export function getSyncRemoteActive(): boolean {
 }
 
 export function getCanUseSupabase(): boolean {
-  return syncEntitledFlag && supabaseSessionExistsFlag && syncRemoteActiveFlag;
+  return syncEntitledFlag && !!getLocalSession().userId && syncRemoteActiveFlag;
 }
 
 /** @internal RevenueCat (SyncEntitlementContext). */
 export function setSyncEntitlementActive(active: boolean): void {
   if (syncEntitledFlag === active) return;
   syncEntitledFlag = active;
-  notify();
-}
-
-/** Phase 3B: AuthContext — session presence only; does not turn on sync. */
-export function setSupabaseSessionExists(exists: boolean): void {
-  if (supabaseSessionExistsFlag === exists) return;
-  supabaseSessionExistsFlag = exists;
   notify();
 }
 

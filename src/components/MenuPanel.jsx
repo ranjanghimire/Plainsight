@@ -97,7 +97,7 @@ export function MenuPanel({ open, onClose }) {
   } = useWorkspace();
   const { beginUpgradeFlow } = useSyncEntitlement();
   const openEnableSyncModal = beginUpgradeFlow;
-  const { openSignInSyncModal, openEnableCloudSyncModal, signOut, authEmail } = useAuth();
+  const { openSendCodeModal, openEnableCloudSyncModal, signOut, authEmail } = useAuth();
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
   const [supabaseSessionExists, setSupabaseSessionExists] = useState(() =>
     getSupabaseSessionExists(),
@@ -245,7 +245,7 @@ export function MenuPanel({ open, onClose }) {
             ) : !supabaseSessionExists ? (
               <button
                 type="button"
-                onClick={openSignInSyncModal}
+                onClick={openSendCodeModal}
                 className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
               >
                 Sign in to enable sync

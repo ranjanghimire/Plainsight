@@ -33,7 +33,7 @@ import {
   subscribeToWorkspacePins,
 } from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
-import { supabase } from '../sync/supabaseClient';
+import { getSession as getLocalSession } from '../auth/localSession';
 import {
   getLocalArchivedNoteTombstones,
   getLocalNoteTombstones,
@@ -49,14 +49,12 @@ async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const now = new Date().toISOString();
   const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const userId = getLocalSession().userId;
+  if (!userId) return;
 
   const row = {
     id,
-    owner_id: user.id,
+    owner_id: userId,
     name,
     kind,
     created_at: now,
@@ -67,7 +65,7 @@ async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const idx = existing.findIndex((w) => w.id === id);
   const next = [...existing];
   if (idx >= 0) {
-    next[idx] = { ...next[idx], ...row, owner_id: user.id };
+    next[idx] = { ...next[idx], ...row, owner_id: userId };
   } else {
     next.push(row);
   }

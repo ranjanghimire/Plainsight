@@ -1,7 +1,7 @@
 import { fullSync } from './syncEngine';
-import { supabase } from './supabaseClient';
 import { getCanUseSupabase } from './syncEnabled';
 import { notifyHydrationComplete } from './hydrationBridge';
+import { getSession as getLocalSession } from '../auth/localSession';
 
 /**
  * Quiet, non-blocking sync queue.
@@ -13,15 +13,11 @@ let inFlight: Promise<unknown> | null = null;
 let timer: number | null = null;
 
 async function canSync(): Promise<boolean> {
-  // Avoid throwing if env isn't configured.
   try {
-    // If URL/key missing, supabase client exists but calls will fail noisily.
     const url = (import.meta as any).env?.VITE_SUPABASE_URL;
     const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
     if (!url || !key) return false;
-
-    const { data } = await supabase.auth.getSession();
-    return !!data.session?.user;
+    return !!getLocalSession().userId;
   } catch {
     return false;
   }

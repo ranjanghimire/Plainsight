@@ -54,6 +54,7 @@ import {
 } from '../utils/storage';
 import { notifyHydrationComplete } from './hydrationBridge';
 import { getCanUseSupabase } from './syncEnabled';
+import { getSession as getLocalSession } from '../auth/localSession';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -61,14 +62,7 @@ function mkError(message: string, details?: unknown): SyncError {
 
 async function getOwnerId(): Promise<string | null> {
   if (!getCanUseSupabase()) return null;
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user?.id ?? null;
-  } catch {
-    return null;
-  }
+  return getLocalSession().userId;
 }
 
 function ensureWorkspaceOwnerId(workspaces: Workspace[], ownerId: string): Workspace[] {

@@ -5,19 +5,61 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { supabase } from '../sync/supabaseClient';
 import {
-  setSupabaseSessionExists,
   getSupabaseSessionExists,
   subscribeSyncGating,
   setSyncRemoteActive,
   getSyncRemoteActive,
   getSyncEntitled,
 } from '../sync/syncEnabled';
-import { SignInSyncModal } from '../components/SignInSyncModal';
+import {
+  clearSession,
+  ensureLocalSession,
+  getSession as getLocalSession,
+  LOCAL_DEV_SESSION_TOKEN,
+  LOCAL_DEV_USER_ID,
+} from '../auth/localSession';
+import { fetchSessionUser } from '../auth/fetchSessionUser';
+import { verifyCode } from '../auth/verifyCode';
 import { EnableCloudSyncModal } from '../components/EnableCloudSyncModal';
+import { SendCodeModal } from '../components/SendCodeModal';
 
 const CLOUD_SYNC_AUTO_PROMPT_KEY = 'plainsight_cloud_sync_auto_prompted';
+const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
+
+function readStoredAuthEmail() {
+  try {
+    return sessionStorage.getItem(AUTH_DISPLAY_EMAIL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function isLocalDevSession() {
+  const { sessionToken, userId } = getLocalSession();
+  return (
+    sessionToken === LOCAL_DEV_SESSION_TOKEN &&
+    userId === LOCAL_DEV_USER_ID
+  );
+}
+
+function readInitialAuthEmail() {
+  if (isLocalDevSession()) return 'local@plainsight.dev';
+  const stored = readStoredAuthEmail();
+  if (stored) return stored;
+  const uid = getLocalSession().userId;
+  if (!uid) return null;
+  return null;
+}
+
+function resolveAuthEmailForSession() {
+  if (isLocalDevSession()) return 'local@plainsight.dev';
+  const stored = readStoredAuthEmail();
+  if (stored) return stored;
+  const uid = getLocalSession().userId;
+  if (!uid) return null;
+  return null;
+}
 
 const AuthContext = createContext(null);
 
@@ -27,9 +69,9 @@ export function AuthProvider({ children }) {
   );
   const [syncRemoteActive, setSyncRemoteActiveUi] = useState(() => getSyncRemoteActive());
   const [syncEntitled, setSyncEntitledUi] = useState(() => getSyncEntitled());
-  const [signInSyncOpen, setSignInSyncOpen] = useState(false);
   const [enableCloudSyncOpen, setEnableCloudSyncOpen] = useState(false);
-  const [authEmail, setAuthEmail] = useState(null);
+  const [sendCodeOpen, setSendCodeOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState(() => readInitialAuthEmail());
 
   useEffect(
     () =>
@@ -37,6 +79,7 @@ export function AuthProvider({ children }) {
         setSessionExistsUi(getSupabaseSessionExists());
         setSyncRemoteActiveUi(getSyncRemoteActive());
         setSyncEntitledUi(getSyncEntitled());
+        setAuthEmail(resolveAuthEmailForSession());
       }),
     [],
   );
@@ -54,53 +97,75 @@ export function AuthProvider({ children }) {
   }, [supabaseSessionExists, syncEntitled, syncRemoteActive]);
 
   useEffect(() => {
+    if (!supabaseSessionExists) setSyncRemoteActive(false);
+  }, [supabaseSessionExists]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { sessionToken, userId } = getLocalSession();
+      if (!sessionToken || !userId) return;
+      if (isLocalDevSession()) {
+        setAuthEmail('local@plainsight.dev');
+        return;
+      }
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!baseUrl || !anonKey) return;
+
+      const result = await fetchSessionUser(sessionToken);
       if (cancelled) return;
-      const exists = !!session?.user;
-      setSupabaseSessionExists(exists);
-      setAuthEmail(session?.user?.email ?? null);
-      if (!exists) setSyncRemoteActive(false);
+
+      if (!result.loggedIn) {
+        clearSession();
+        setSyncRemoteActive(false);
+        try {
+          sessionStorage.removeItem(CLOUD_SYNC_AUTO_PROMPT_KEY);
+          sessionStorage.removeItem(AUTH_DISPLAY_EMAIL_KEY);
+        } catch {
+          /* ignore */
+        }
+        setAuthEmail(null);
+        ensureLocalSession();
+        return;
+      }
+
+      setAuthEmail(result.email);
+      try {
+        sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, result.email);
+      } catch {
+        /* ignore */
+      }
     })();
     return () => {
       cancelled = true;
     };
+    // One-time startup validation of persisted OTP session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
 
-  useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setSupabaseSessionExists(false);
-        setSyncRemoteActive(false);
-        setAuthEmail(null);
-        try {
-          sessionStorage.removeItem(CLOUD_SYNC_AUTO_PROMPT_KEY);
-        } catch {
-          /* ignore */
-        }
-        setSignInSyncOpen(false);
-        setEnableCloudSyncOpen(false);
-        return;
-      }
-      const exists = !!session?.user;
-      setSupabaseSessionExists(exists);
-      setAuthEmail(session?.user?.email ?? null);
-      if (!exists) {
-        setSyncRemoteActive(false);
-        setSignInSyncOpen(false);
-        setEnableCloudSyncOpen(false);
-      }
-    });
-    return () => subscription.unsubscribe();
+  const restoreLocalSession = useCallback(() => {
+    ensureLocalSession();
   }, []);
 
-  const openSignInSyncModal = useCallback(() => setSignInSyncOpen(true), []);
-  const closeSignInSyncModal = useCallback(() => setSignInSyncOpen(false), []);
+  const openSendCodeModal = useCallback(() => setSendCodeOpen(true), []);
+  const closeSendCodeModal = useCallback(() => setSendCodeOpen(false), []);
+
+  const loginWithCode = useCallback(async (email, code) => {
+    const result = await verifyCode(email, code);
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+    setSyncRemoteActive(false);
+    try {
+      sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, result.email);
+    } catch {
+      /* ignore */
+    }
+    setAuthEmail(result.email);
+    closeSendCodeModal();
+    return { ok: true };
+  }, [closeSendCodeModal]);
 
   const openEnableCloudSyncModal = useCallback(() => setEnableCloudSyncOpen(true), []);
   const closeEnableCloudSyncModal = useCallback(() => setEnableCloudSyncOpen(false), []);
@@ -113,30 +178,26 @@ export function AuthProvider({ children }) {
     setEnableCloudSyncOpen(false);
   }, []);
 
-  const signOut = useCallback(async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      /* still clear local gating so the app can recover */
-    }
-    setSupabaseSessionExists(false);
+  const signOut = useCallback(() => {
+    clearSession();
     setSyncRemoteActive(false);
-    setAuthEmail(null);
     try {
       sessionStorage.removeItem(CLOUD_SYNC_AUTO_PROMPT_KEY);
+      sessionStorage.removeItem(AUTH_DISPLAY_EMAIL_KEY);
     } catch {
       /* ignore */
     }
-    closeSignInSyncModal();
-    closeEnableCloudSyncModal();
-  }, [closeSignInSyncModal, closeEnableCloudSyncModal]);
+    setEnableCloudSyncOpen(false);
+    setAuthEmail(null);
+  }, []);
 
   const value = {
     supabaseSessionExists,
     syncRemoteActive,
     authEmail,
-    openSignInSyncModal,
-    closeSignInSyncModal,
+    restoreLocalSession,
+    openSendCodeModal,
+    verifyCodeLogin: loginWithCode,
     openEnableCloudSyncModal,
     signOut,
   };
@@ -144,7 +205,11 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      <SignInSyncModal open={signInSyncOpen} onClose={closeSignInSyncModal} />
+      <SendCodeModal
+        open={sendCodeOpen}
+        onClose={closeSendCodeModal}
+        loginWithCode={loginWithCode}
+      />
       <EnableCloudSyncModal
         open={enableCloudSyncOpen}
         onClose={dismissCloudSyncWithoutEnabling}

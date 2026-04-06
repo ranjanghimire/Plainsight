@@ -8,36 +8,64 @@ import type {
   WorkspacePin,
 } from './types';
 import { getCanUseSupabase, subscribeSyncGating } from './syncEnabled';
+import { getSession as getLocalSession } from '../auth/localSession';
+
+function resolveRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/**
+ * Attach x-plainsight-session for PostgREST / Realtime requests to this project.
+ */
+function plainsightSupabaseFetch(supabaseOrigin: string, baseFetch: typeof fetch): typeof fetch {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const target = resolveRequestUrl(input);
+    if (!supabaseOrigin || !target.startsWith(supabaseOrigin)) {
+      return baseFetch(input, init);
+    }
+    const token = getLocalSession().sessionToken;
+    if (!token) {
+      return baseFetch(input, init);
+    }
+    const merged = new Headers();
+    if (input instanceof Request) {
+      input.headers.forEach((v, k) => merged.set(k, v));
+    }
+    if (init?.headers) {
+      new Headers(init.headers).forEach((v, k) => merged.set(k, v));
+    }
+    merged.set('x-plainsight-session', token);
+    return baseFetch(input, { ...init, headers: merged });
+  };
+}
 
 /**
  * Configure via Vite env:
  * - VITE_SUPABASE_URL
  * - VITE_SUPABASE_ANON_KEY
+ *
+ * Database client only — no Supabase Auth (Phase 1 uses localSession).
  */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl || '',
-  supabaseAnonKey || '',
-);
+const supabaseOrigin = (() => {
+  if (!supabaseUrl) return '';
+  try {
+    return new URL(supabaseUrl).origin;
+  } catch {
+    return '';
+  }
+})();
 
-let authListenersStarted = false;
-let authUserId: string | null = null;
-
-function ensureSupabaseAuthListeners() {
-  if (authListenersStarted || !getCanUseSupabase()) return;
-  authListenersStarted = true;
-
-  supabase.auth.getSession().then(({ data }) => {
-    authUserId = data.session?.user?.id ?? null;
-  });
-
-  supabase.auth.onAuthStateChange((_event, session) => {
-    authUserId = session?.user?.id ?? null;
-  });
-}
+export const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '', {
+  global: {
+    fetch: plainsightSupabaseFetch(supabaseOrigin, fetch),
+  },
+});
 
 function syncDebugGlobals() {
   if (!getCanUseSupabase()) return;
@@ -47,12 +75,11 @@ function syncDebugGlobals() {
 
 subscribeSyncGating(() => {
   if (!getCanUseSupabase()) return;
-  ensureSupabaseAuthListeners();
   syncDebugGlobals();
 });
 
 export function getAuthedUserId(): string | null {
-  return authUserId;
+  return getLocalSession().userId;
 }
 
 function err(message: string, details?: unknown): SyncError {
