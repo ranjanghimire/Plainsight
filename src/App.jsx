@@ -10,7 +10,7 @@ import { MenuPanel, MenuButton } from './components/MenuPanel';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
-import { AuthCallbackPage as AuthCallback } from './pages/AuthCallbackPage';
+import { AuthCallback } from './pages/AuthCallbackPage';
 
 function RedirectWorkspaceOnLoad() {
   const navigate = useNavigate();

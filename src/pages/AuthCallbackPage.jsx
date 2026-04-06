@@ -13,18 +13,17 @@ let exchangePromise = null;
 function getExchangePromise() {
   if (!exchangePromise) {
     exchangePromise = (async () => {
-      // Magic links use ?code=… on the full URL; avoid relying on any host rewrite
-      // that drops the query string. Hash fallback is for atypical OAuth flows.
       const params = new URLSearchParams(window.location.search);
+      let code = params.get('code');
+
       const hash =
         window.location.hash.startsWith('#')
           ? new URLSearchParams(window.location.hash.slice(1))
           : new URLSearchParams();
-
       const oauthError = params.get('error') || hash.get('error');
       const oauthDesc =
         params.get('error_description') || hash.get('error_description');
-      let code = params.get('code');
+
       if (!code) code = hash.get('code');
 
       if (oauthError) {
@@ -79,3 +78,5 @@ export function AuthCallbackPage() {
     </div>
   );
 }
+
+export const AuthCallback = AuthCallbackPage;
