@@ -28,9 +28,11 @@ export function getSession(): LocalSession {
     if (typeof localStorage === 'undefined') {
       return { sessionToken: null, userId: null };
     }
+    const token = localStorage.getItem(STORAGE_TOKEN);
+    const user = localStorage.getItem(STORAGE_USER);
     return {
-      sessionToken: localStorage.getItem(STORAGE_TOKEN),
-      userId: localStorage.getItem(STORAGE_USER),
+      sessionToken: token?.trim() || null,
+      userId: user?.trim() || null,
     };
   } catch {
     return { sessionToken: null, userId: null };
