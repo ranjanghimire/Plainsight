@@ -6,8 +6,8 @@ import type {
   Workspace,
   WorkspacePin,
 } from './types';
-import { supabase } from './supabaseClient';
 import {
+  getSupabase,
   fetchAllWorkspaces,
   fetchArchivedNotes,
   fetchCategories,
@@ -105,7 +105,7 @@ export async function pushWorkspaces(localWorkspaces: Workspace[]): Promise<{ ok
     const ownerId = await getOwnerId();
     if (!ownerId) return { ok: true };
     const rows = ensureWorkspaceOwnerId(localWorkspaces, ownerId);
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('workspaces')
       .upsert(rows, { onConflict: 'id' });
     if (error) return { ok: false, error: mkError(error.message, error) };
@@ -126,7 +126,7 @@ export async function deleteWorkspaceRemote(
     if (!workspaceId || typeof workspaceId !== 'string') {
       return { ok: false, error: mkError('Missing workspace id', new Error()) };
     }
-    const { error } = await supabase.from('workspaces').delete().eq('id', workspaceId);
+    const { error } = await getSupabase().from('workspaces').delete().eq('id', workspaceId);
     if (error) return { ok: false, error: mkError(error.message, error) };
     return { ok: true };
   } catch (e) {
@@ -137,7 +137,7 @@ export async function deleteWorkspaceRemote(
 export async function pushCategories(localCategories: Category[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('categories')
       .upsert(localCategories, { onConflict: 'id' });
     if (error) return { ok: false, error: mkError(error.message, error) };
@@ -168,7 +168,7 @@ export async function pushNotes(localNotes: Note[]): Promise<{ ok: true } | { ok
   if (!getCanUseSupabase()) return { ok: true };
   try {
     const notesToPush = sanitizeNotesForPush(localNotes);
-    const res = await supabase.from('notes').upsert(notesToPush, { onConflict: 'id' }).select('*');
+    const res = await getSupabase().from('notes').upsert(notesToPush, { onConflict: 'id' }).select('*');
     console.log('pushNotes result:', res);
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     return { ok: true };
@@ -180,7 +180,7 @@ export async function pushNotes(localNotes: Note[]): Promise<{ ok: true } | { ok
 export async function pushArchivedNotes(localArchived: ArchivedNote[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('archived_notes')
       .upsert(localArchived, { onConflict: 'id' });
     if (error) return { ok: false, error: mkError(error.message, error) };
@@ -198,7 +198,7 @@ export async function pushArchivedDeletes(
   try {
     const ids = (archivedIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true };
-    const res = await supabase.from('archived_notes').delete().in('id', ids).select('*');
+    const res = await getSupabase().from('archived_notes').delete().in('id', ids).select('*');
     console.log('pushArchivedDeletes result:', { workspaceId, ...res });
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     return { ok: true };
@@ -215,7 +215,7 @@ export async function pushNoteDeletes(
   try {
     const ids = (noteIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true };
-    const res = await supabase.from('notes').delete().in('id', ids).select('*');
+    const res = await getSupabase().from('notes').delete().in('id', ids).select('*');
     console.log('pushNoteDeletes result:', { workspaceId, ...res });
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     return { ok: true };
@@ -228,7 +228,7 @@ export async function pushWorkspacePins(localPins: WorkspacePin[]): Promise<{ ok
   if (!getCanUseSupabase()) return { ok: true };
   try {
     // PK is (user_id, workspace_id) so use that as conflict target
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('workspace_pins')
       .upsert(localPins, { onConflict: 'user_id,workspace_id' });
     if (error) return { ok: false, error: mkError(error.message, error) };
@@ -251,7 +251,8 @@ function toEvent(e: string): 'INSERT' | 'UPDATE' | 'DELETE' {
 
 export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) {
   if (!getCanUseSupabase()) return () => {};
-  const channel = supabase
+  const sb = getSupabase();
+  const channel = sb
     .channel(`notes:${workspaceId}`)
     .on(
       'postgres_changes',
@@ -260,12 +261,13 @@ export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) 
     )
     .subscribe();
 
-  return () => supabase.removeChannel(channel);
+  return () => sb.removeChannel(channel);
 }
 
 export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Category>) {
   if (!getCanUseSupabase()) return () => {};
-  const channel = supabase
+  const sb = getSupabase();
+  const channel = sb
     .channel(`categories:${workspaceId}`)
     .on(
       'postgres_changes',
@@ -273,12 +275,13 @@ export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Ca
       (p) => cb({ event: toEvent(p.eventType), newRow: (p.new as Category) ?? null, oldRow: (p.old as Category) ?? null }),
     )
     .subscribe();
-  return () => supabase.removeChannel(channel);
+  return () => sb.removeChannel(channel);
 }
 
 export function subscribeToWorkspaces(cb: ChangeCallback<Workspace>) {
   if (!getCanUseSupabase()) return () => {};
-  const channel = supabase
+  const sb = getSupabase();
+  const channel = sb
     .channel('workspaces')
     .on(
       'postgres_changes',
@@ -286,12 +289,13 @@ export function subscribeToWorkspaces(cb: ChangeCallback<Workspace>) {
       (p) => cb({ event: toEvent(p.eventType), newRow: (p.new as Workspace) ?? null, oldRow: (p.old as Workspace) ?? null }),
     )
     .subscribe();
-  return () => supabase.removeChannel(channel);
+  return () => sb.removeChannel(channel);
 }
 
 export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
   if (!getCanUseSupabase()) return () => {};
-  const channel = supabase
+  const sb = getSupabase();
+  const channel = sb
     .channel('workspace_pins')
     .on(
       'postgres_changes',
@@ -299,7 +303,7 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
       (p) => cb({ event: toEvent(p.eventType), newRow: (p.new as WorkspacePin) ?? null, oldRow: (p.old as WorkspacePin) ?? null }),
     )
     .subscribe();
-  return () => supabase.removeChannel(channel);
+  return () => sb.removeChannel(channel);
 }
 
 // -----------------------------
@@ -319,7 +323,7 @@ export async function fullSync(
     const ownerId = await getOwnerId();
 
     // 1) Pull remote workspaces (required behavior: direct select)
-    const remoteWorkspacesRes = await supabase.from('workspaces').select('*');
+    const remoteWorkspacesRes = await getSupabase().from('workspaces').select('*');
     if (remoteWorkspacesRes.error) {
       return {
         ok: false,

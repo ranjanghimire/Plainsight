@@ -10,14 +10,20 @@ import type {
 import { getCanUseSupabase, subscribeSyncGating } from './syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? '';
 
 let cachedClient: SupabaseClient | null = null;
 let cachedToken: string | null = null;
 
 function createSupabaseWithToken(token: string | null): SupabaseClient {
   return createClient(supabaseUrl, supabaseAnonKey, {
+    // Custom session only — do not run GoTrue refresh/user calls (stale sb-* keys → 401 on /auth/v1).
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
     global: {
       headers: token ? { 'x-plainsight-session': token } : {},
     },
@@ -140,5 +146,3 @@ export async function fetchWorkspacePins() {
     return { data: [], error: err('Failed to fetch workspace pins', e) };
   }
 }
-
-export const supabase = getSupabase();

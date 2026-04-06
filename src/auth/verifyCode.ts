@@ -6,8 +6,8 @@ import { setSession } from './localSession';
 
 const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 export type VerifyCodeResult =
   | { ok: true; email: string }
