@@ -35,7 +35,7 @@ export function SignInSyncModal({ open, onClose, onSendError }) {
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     setSending(false);
