@@ -18,8 +18,6 @@ import {
   loadAppState,
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
-  isKeyInVisibleWorkspacesList,
-  isLegacyHiddenWorkspaceKey,
   getOrCreateWorkspaceIdForStorageKey,
   getWorkspaceIdForStorageKey,
   removeWorkspaceIdMapping,
@@ -80,70 +78,10 @@ function isWorkspaceDataEmpty(d) {
   );
 }
 
-/** Restore snapshot from local app state + workspace storage (same rules as post-sync restore). */
-function readWorkspaceRestoreSnapshot() {
-  const app = loadAppState();
-  const visibleWorkspaces = app.visibleWorkspaces;
-  const last = app.lastActiveStorageKey || 'workspace_home';
-  const inVisibleMenu = isKeyInVisibleWorkspacesList(last, app.visibleWorkspaces);
-  const legacyHidden = isLegacyHiddenWorkspaceKey(last);
-
-  if (!inVisibleMenu && !legacyHidden) {
-    saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
-    let d = loadWorkspace('workspace_home');
-    if (isWorkspaceDataEmpty(d)) {
-      d = getDefaultWorkspaceData();
-      saveWorkspace('workspace_home', d);
-    }
-    return {
-      visibleWorkspaces,
-      activeStorageKey: 'workspace_home',
-      data: d,
-      currentWorkspace: 'home',
-    };
-  }
-
-  const mappedId = getWorkspaceIdForStorageKey(last);
-  if (last !== 'workspace_home' && !legacyHidden && !mappedId) {
-    saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
-    let d = loadWorkspace('workspace_home');
-    if (isWorkspaceDataEmpty(d)) {
-      d = getDefaultWorkspaceData();
-      saveWorkspace('workspace_home', d);
-    }
-    return {
-      visibleWorkspaces,
-      activeStorageKey: 'workspace_home',
-      data: d,
-      currentWorkspace: 'home',
-    };
-  }
-
-  let nextData = loadWorkspace(last);
-  if (isWorkspaceDataEmpty(nextData)) {
-    nextData = getDefaultWorkspaceData();
-    saveWorkspace(last, nextData);
-  }
-  let currentWorkspace;
-  if (last === 'workspace_home') {
-    currentWorkspace = 'home';
-  } else {
-    const entry = (app.visibleWorkspaces || []).find((e) => e.key === last);
-    if (entry) {
-      currentWorkspace = entry.id === 'home' ? 'home' : `visible:${entry.id}`;
-    } else {
-      currentWorkspace = getWorkspaceNameFromKey(last);
-    }
-  }
-  return {
-    visibleWorkspaces,
-    activeStorageKey: last,
-    data: nextData,
-    currentWorkspace,
-  };
-}
-
-/** First paint when sync is on: Home until hydration restores last workspace from merged id map. */
+/**
+ * Cold start always uses Home (workspace_home), never lastActiveStorageKey.
+ * Avoids reopening on a hidden workspace; users still reach other workspaces via navigation in-session.
+ */
 function computeSyncPlaceholderState() {
   const app = loadAppState();
   const initialKey = 'workspace_home';
@@ -161,11 +99,7 @@ function computeSyncPlaceholderState() {
 }
 
 export function WorkspaceProvider({ children }) {
-  const initialWorkspaceState = useMemo(
-    () =>
-      syncEnabled ? computeSyncPlaceholderState() : readWorkspaceRestoreSnapshot(),
-    [],
-  );
+  const initialWorkspaceState = useMemo(() => computeSyncPlaceholderState(), []);
 
   const [activeStorageKey, setActiveStorageKey] = useState(
     () => initialWorkspaceState.activeStorageKey,
@@ -180,9 +114,6 @@ export function WorkspaceProvider({ children }) {
   const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
   /** When sync is off, true immediately. When sync is on, false until fullSync notifies. */
   const [hydrationComplete, setHydrationComplete] = useState(() => !syncEnabled);
-  const restoreRef = useRef(() => {});
-  const didInitialRestoreRef = useRef(false);
-
   const workspaceKey = activeStorageKey;
 
   const bumpWorkspaceSwitch = useCallback(() => {
@@ -248,27 +179,10 @@ export function WorkspaceProvider({ children }) {
     save();
   }, [data, activeStorageKey, save]);
 
-  const restoreWorkspaceAfterHydration = useCallback(() => {
-    const s = readWorkspaceRestoreSnapshot();
-    setVisibleWorkspaces(s.visibleWorkspaces);
-    setActiveStorageKey(s.activeStorageKey);
-    setData(s.data);
-    setCurrentWorkspace(s.currentWorkspace);
-    bumpWorkspaceSwitch();
-  }, [bumpWorkspaceSwitch]);
-
-  useEffect(() => {
-    restoreRef.current = restoreWorkspaceAfterHydration;
-  }, [restoreWorkspaceAfterHydration]);
-
   useEffect(() => {
     if (!syncEnabled) return undefined;
     return subscribeHydrationComplete(() => {
       queueMicrotask(() => {
-        if (!didInitialRestoreRef.current) {
-          didInitialRestoreRef.current = true;
-          restoreRef.current();
-        }
         setHydrationComplete(true);
       });
     });

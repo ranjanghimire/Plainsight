@@ -14,12 +14,16 @@ import { ManagePage } from './pages/ManagePage';
 function RedirectWorkspaceOnLoad() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isFirstNavigationEffect = useRef(true);
 
   useEffect(() => {
-    if (location.pathname.startsWith('/w/')) {
+    if (!isFirstNavigationEffect.current) return;
+    isFirstNavigationEffect.current = false;
+    const path = location.pathname;
+    if (path.startsWith('/w/') || path.startsWith('/ws/')) {
       navigate('/', { replace: true });
     }
-  }, []);
+  }, [location.pathname, navigate]);
 
   return null;
 }
