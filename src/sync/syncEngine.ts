@@ -65,10 +65,13 @@ async function getOwnerId(): Promise<string | null> {
   return getLocalSession().userId;
 }
 
+/** Always use the signed-in user: local dev placeholder owner_id is not a row in public.users. */
 function ensureWorkspaceOwnerId(workspaces: Workspace[], ownerId: string): Workspace[] {
-  return workspaces.map((w) =>
-    w.owner_id ? w : { ...w, owner_id: ownerId },
-  );
+  return workspaces.map((w) => ({ ...w, owner_id: ownerId }));
+}
+
+function ensureWorkspacePinUserId(pins: WorkspacePin[], userId: string): WorkspacePin[] {
+  return pins.map((p) => ({ ...p, user_id: userId }));
 }
 
 /**
@@ -248,10 +251,13 @@ export async function pushNoteDeletes(
 export async function pushWorkspacePins(localPins: WorkspacePin[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
+    const ownerId = await getOwnerId();
+    if (!ownerId) return { ok: true };
+    const rows = ensureWorkspacePinUserId(localPins, ownerId);
     // PK is (user_id, workspace_id) so use that as conflict target
     const { error } = await getSupabase()
       .from('workspace_pins')
-      .upsert(localPins, { onConflict: 'user_id,workspace_id' });
+      .upsert(rows, { onConflict: 'user_id,workspace_id' });
     if (error) return { ok: false, error: mkError(error.message, error) };
     return { ok: true };
   } catch (e) {
@@ -449,8 +455,10 @@ export async function fullSync(
       await flushWorkspaceUiIntoLocalDb(wid);
     }
 
-    // Load local
-    const localPins = await getLocalWorkspacePins();
+    // Load local (normalize user_id before merge so dev-session pins dedupe with remote)
+    const localPinsRaw = await getLocalWorkspacePins();
+    const localPins =
+      ownerId != null ? ensureWorkspacePinUserId(localPinsRaw, ownerId) : localPinsRaw;
     const localCategories: Record<string, Category[]> = {};
     const localNotes: Record<string, Note[]> = {};
     const localArchived: Record<string, ArchivedNote[]> = {};
@@ -473,7 +481,10 @@ export async function fullSync(
     }
 
     // Merge
-    const mergedPins = mergeWorkspacePins(localPins, remotePins.data);
+    const remotePinsList = remotePins.data || [];
+    const remotePinsForMerge =
+      ownerId != null ? ensureWorkspacePinUserId(remotePinsList, ownerId) : remotePinsList;
+    const mergedPins = mergeWorkspacePins(localPins, remotePinsForMerge);
 
     const mergedCategories: Record<string, ReturnType<typeof mergeCategories>> = {};
     const mergedNotes: Record<string, ReturnType<typeof mergeNotes>> = {};
