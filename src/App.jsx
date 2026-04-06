@@ -113,7 +113,7 @@ function AppRoutes() {
     onClose: closeDrawer,
   });
 
-  // When sync is enabled, hydration runs full sync after auth; when disabled, unblocks UI local-only.
+  // When sync is enabled, runs initial fullSync (hydration). When disabled, no-op.
   useEffect(() => {
     void runInitialHydration();
   }, []);

@@ -60,12 +60,12 @@ export function queueFullSync() {
 }
 
 /**
- * First-load hydration: run after auth so workspaceIdMap / app state exist before UI restores last workspace.
- * If sync cannot run (no env / no session), still unblocks the UI.
+ * First-load hydration: when sync is enabled, runs fullSync so workspaceIdMap exists before UI restore.
+ * When sync is disabled, returns without notifying listeners (local state is already bootstrapped).
+ * If sync cannot run (no env / no session), notifies so the UI can restore from local storage.
  */
 export async function runInitialHydration(): Promise<void> {
   if (!syncEnabled) {
-    notifyHydrationComplete({ ok: false });
     return;
   }
   if (!(await canSync())) {

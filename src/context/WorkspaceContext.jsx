@@ -1,4 +1,12 @@
-import { createContext, useContext, useCallback, useState, useEffect, useRef } from 'react';
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
   getWorkspaceKey,
@@ -72,25 +80,106 @@ function isWorkspaceDataEmpty(d) {
   );
 }
 
-export function WorkspaceProvider({ children }) {
-  const appInitial = loadAppState();
-  // Stay on Home until sync hydrates workspaceIdMap; then restore last visible workspace.
+/** Restore snapshot from local app state + workspace storage (same rules as post-sync restore). */
+function readWorkspaceRestoreSnapshot() {
+  const app = loadAppState();
+  const visibleWorkspaces = app.visibleWorkspaces;
+  const last = app.lastActiveStorageKey || 'workspace_home';
+  const inVisibleMenu = isKeyInVisibleWorkspacesList(last, app.visibleWorkspaces);
+  const legacyHidden = isLegacyHiddenWorkspaceKey(last);
+
+  if (!inVisibleMenu && !legacyHidden) {
+    saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
+    let d = loadWorkspace('workspace_home');
+    if (isWorkspaceDataEmpty(d)) {
+      d = getDefaultWorkspaceData();
+      saveWorkspace('workspace_home', d);
+    }
+    return {
+      visibleWorkspaces,
+      activeStorageKey: 'workspace_home',
+      data: d,
+      currentWorkspace: 'home',
+    };
+  }
+
+  const mappedId = getWorkspaceIdForStorageKey(last);
+  if (last !== 'workspace_home' && !legacyHidden && !mappedId) {
+    saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
+    let d = loadWorkspace('workspace_home');
+    if (isWorkspaceDataEmpty(d)) {
+      d = getDefaultWorkspaceData();
+      saveWorkspace('workspace_home', d);
+    }
+    return {
+      visibleWorkspaces,
+      activeStorageKey: 'workspace_home',
+      data: d,
+      currentWorkspace: 'home',
+    };
+  }
+
+  let nextData = loadWorkspace(last);
+  if (isWorkspaceDataEmpty(nextData)) {
+    nextData = getDefaultWorkspaceData();
+    saveWorkspace(last, nextData);
+  }
+  let currentWorkspace;
+  if (last === 'workspace_home') {
+    currentWorkspace = 'home';
+  } else {
+    const entry = (app.visibleWorkspaces || []).find((e) => e.key === last);
+    if (entry) {
+      currentWorkspace = entry.id === 'home' ? 'home' : `visible:${entry.id}`;
+    } else {
+      currentWorkspace = getWorkspaceNameFromKey(last);
+    }
+  }
+  return {
+    visibleWorkspaces,
+    activeStorageKey: last,
+    data: nextData,
+    currentWorkspace,
+  };
+}
+
+/** First paint when sync is on: Home until hydration restores last workspace from merged id map. */
+function computeSyncPlaceholderState() {
+  const app = loadAppState();
   const initialKey = 'workspace_home';
   let initialData = loadWorkspace(initialKey);
   if (isWorkspaceDataEmpty(initialData)) {
     initialData = getDefaultWorkspaceData();
     saveWorkspace(initialKey, initialData);
   }
+  return {
+    visibleWorkspaces: app.visibleWorkspaces,
+    activeStorageKey: initialKey,
+    data: initialData,
+    currentWorkspace: 'home',
+  };
+}
 
-  const [activeStorageKey, setActiveStorageKey] = useState(initialKey);
-  const [visibleWorkspaces, setVisibleWorkspaces] = useState(
-    appInitial.visibleWorkspaces,
+export function WorkspaceProvider({ children }) {
+  const initialWorkspaceState = useMemo(
+    () =>
+      syncEnabled ? computeSyncPlaceholderState() : readWorkspaceRestoreSnapshot(),
+    [],
   );
-  const [data, setData] = useState(initialData);
-  const [currentWorkspace, setCurrentWorkspace] = useState('home');
+
+  const [activeStorageKey, setActiveStorageKey] = useState(
+    () => initialWorkspaceState.activeStorageKey,
+  );
+  const [visibleWorkspaces, setVisibleWorkspaces] = useState(
+    () => initialWorkspaceState.visibleWorkspaces,
+  );
+  const [data, setData] = useState(() => initialWorkspaceState.data);
+  const [currentWorkspace, setCurrentWorkspace] = useState(
+    () => initialWorkspaceState.currentWorkspace,
+  );
   const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
-  /** False until fullSync finishes (success or failure) so we never restore lastActive against a stale map. */
-  const [hydrationComplete, setHydrationComplete] = useState(false);
+  /** When sync is off, true immediately. When sync is on, false until fullSync notifies. */
+  const [hydrationComplete, setHydrationComplete] = useState(() => !syncEnabled);
   const restoreRef = useRef(() => {});
   const didInitialRestoreRef = useRef(false);
 
@@ -160,59 +249,11 @@ export function WorkspaceProvider({ children }) {
   }, [data, activeStorageKey, save]);
 
   const restoreWorkspaceAfterHydration = useCallback(() => {
-    const app = loadAppState();
-    setVisibleWorkspaces(app.visibleWorkspaces);
-
-    const last = app.lastActiveStorageKey || 'workspace_home';
-    const inVisibleMenu = isKeyInVisibleWorkspacesList(last, app.visibleWorkspaces);
-    const legacyHidden = isLegacyHiddenWorkspaceKey(last);
-
-    if (!inVisibleMenu && !legacyHidden) {
-      saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
-      let d = loadWorkspace('workspace_home');
-      if (isWorkspaceDataEmpty(d)) {
-        d = getDefaultWorkspaceData();
-        saveWorkspace('workspace_home', d);
-      }
-      setActiveStorageKey('workspace_home');
-      setData(d);
-      setCurrentWorkspace('home');
-      bumpWorkspaceSwitch();
-      return;
-    }
-
-    const mappedId = getWorkspaceIdForStorageKey(last);
-    if (last !== 'workspace_home' && !legacyHidden && !mappedId) {
-      saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
-      let d = loadWorkspace('workspace_home');
-      if (isWorkspaceDataEmpty(d)) {
-        d = getDefaultWorkspaceData();
-        saveWorkspace('workspace_home', d);
-      }
-      setActiveStorageKey('workspace_home');
-      setData(d);
-      setCurrentWorkspace('home');
-      bumpWorkspaceSwitch();
-      return;
-    }
-
-    let nextData = loadWorkspace(last);
-    if (isWorkspaceDataEmpty(nextData)) {
-      nextData = getDefaultWorkspaceData();
-      saveWorkspace(last, nextData);
-    }
-    setActiveStorageKey(last);
-    setData(nextData);
-    if (last === 'workspace_home') {
-      setCurrentWorkspace('home');
-    } else {
-      const entry = (app.visibleWorkspaces || []).find((e) => e.key === last);
-      if (entry) {
-        setCurrentWorkspace(entry.id === 'home' ? 'home' : `visible:${entry.id}`);
-      } else {
-        setCurrentWorkspace(getWorkspaceNameFromKey(last));
-      }
-    }
+    const s = readWorkspaceRestoreSnapshot();
+    setVisibleWorkspaces(s.visibleWorkspaces);
+    setActiveStorageKey(s.activeStorageKey);
+    setData(s.data);
+    setCurrentWorkspace(s.currentWorkspace);
     bumpWorkspaceSwitch();
   }, [bumpWorkspaceSwitch]);
 
@@ -221,6 +262,7 @@ export function WorkspaceProvider({ children }) {
   }, [restoreWorkspaceAfterHydration]);
 
   useEffect(() => {
+    if (!syncEnabled) return undefined;
     return subscribeHydrationComplete(() => {
       queueMicrotask(() => {
         if (!didInitialRestoreRef.current) {
@@ -233,6 +275,7 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!syncEnabled) return;
     const key = activeStorageKey;
     const isHome = key === 'workspace_home';
     const visibleEntry = visibleWorkspaces.find((e) => e.key === key);
@@ -246,6 +289,7 @@ export function WorkspaceProvider({ children }) {
   }, [activeStorageKey, visibleWorkspaces]);
 
   useEffect(() => {
+    if (!syncEnabled) return undefined;
     const onSync = () => {
       const app = loadAppState();
       setVisibleWorkspaces(app.visibleWorkspaces);
