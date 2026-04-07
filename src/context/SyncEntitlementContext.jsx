@@ -10,9 +10,11 @@ import { Purchases, ErrorCode, PackageType } from '@revenuecat/purchases-js';
 import {
   setSyncEntitlementActive,
   getSyncEntitled,
+  hasCustomAuthSession,
   subscribeSyncGating,
   SYNC_ENTITLEMENT_ID,
 } from '../sync/syncEnabled';
+import { getSession as getLocalSession } from '../auth/localSession';
 import { EnableSyncModal } from '../components/EnableSyncModal';
 
 const REVENUECAT_PUBLIC_API_KEY = 'test_smZiwCGJjgwRtkaZwQOrEZhEPfj';
@@ -35,10 +37,19 @@ function customerInfoHasSync(info) {
   return Boolean(info?.entitlements?.active?.[SYNC_ENTITLEMENT_ID]);
 }
 
+/** purchases-js may return CustomerInfo or { customerInfo }. */
+function unwrapCustomerInfo(result) {
+  if (result && typeof result === 'object' && 'entitlements' in result) return result;
+  if (result?.customerInfo) return result.customerInfo;
+  return result;
+}
+
 const SyncEntitlementContext = createContext(null);
 
 export function SyncEntitlementProvider({ children }) {
   const purchasesRef = useRef(null);
+  /** Last Supabase user id passed to RevenueCat identifyUser; null when using anonymous RC user. */
+  const rcLinkedSupabaseUserIdRef = useRef(null);
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
   const [defaultOffering, setDefaultOffering] = useState(null);
   const [lifetimePackage, setLifetimePackage] = useState(null);
@@ -74,6 +85,46 @@ export function SyncEntitlementProvider({ children }) {
     setSyncEntitlementActive(active);
     return active;
   }, []);
+
+  /**
+   * Tie RevenueCat to the same id as public.users so sync entitlement survives across browsers
+   * when the user signs in with the same email (anonymous RC id is per-browser otherwise).
+   */
+  const syncRevenueCatToPlainSightSession = useCallback(async () => {
+    const purchases = purchasesRef.current;
+    if (!purchases) return;
+    try {
+      if (hasCustomAuthSession()) {
+        const uid = getLocalSession().userId?.trim();
+        if (!uid) return;
+        if (rcLinkedSupabaseUserIdRef.current === uid) return;
+        const out = await purchases.identifyUser(uid);
+        rcLinkedSupabaseUserIdRef.current = uid;
+        applyCustomerInfo(unwrapCustomerInfo(out));
+        return;
+      }
+
+      let anonymous = false;
+      try {
+        anonymous = purchases.isAnonymous();
+      } catch {
+        anonymous = true;
+      }
+      if (rcLinkedSupabaseUserIdRef.current === null && anonymous) return;
+
+      const nextAnon = Purchases.generateRevenueCatAnonymousAppUserId();
+      try {
+        localStorage.setItem(RC_ANON_USER_STORAGE_KEY, nextAnon);
+      } catch {
+        /* ignore */
+      }
+      const out = await purchases.changeUser(nextAnon);
+      rcLinkedSupabaseUserIdRef.current = null;
+      applyCustomerInfo(unwrapCustomerInfo(out));
+    } catch (e) {
+      console.error('[RevenueCat] sync identity to PlainSight session', e);
+    }
+  }, [applyCustomerInfo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +165,14 @@ export function SyncEntitlementProvider({ children }) {
     };
   }, [applyCustomerInfo]);
 
+  useEffect(() => {
+    if (!revenueCatReady) return undefined;
+    void syncRevenueCatToPlainSightSession();
+    return subscribeSyncGating(() => {
+      void syncRevenueCatToPlainSightSession();
+    });
+  }, [revenueCatReady, syncRevenueCatToPlainSightSession]);
+
   const beginUpgradeFlow = useCallback(() => setEnableSyncOpen(true), []);
   const closeEnableSync = useCallback(() => setEnableSyncOpen(false), []);
 
@@ -127,8 +186,22 @@ export function SyncEntitlementProvider({ children }) {
     setUnlocking(true);
     try {
       const result = await purchases.purchasePackage(pkg);
-      const active = customerInfoHasSync(result.customerInfo);
-      setSyncEntitlementActive(active);
+      let ci = unwrapCustomerInfo(result);
+      let active = customerInfoHasSync(ci);
+      if (active && hasCustomAuthSession()) {
+        const uid = getLocalSession().userId?.trim();
+        if (uid) {
+          try {
+            const linked = await purchases.identifyUser(uid);
+            rcLinkedSupabaseUserIdRef.current = uid;
+            ci = unwrapCustomerInfo(linked);
+            active = customerInfoHasSync(ci);
+          } catch (e) {
+            console.error('[RevenueCat] identify after purchase', e);
+          }
+        }
+      }
+      applyCustomerInfo(ci);
       if (active) {
         setEnableSyncOpen(false);
       } else {
@@ -140,7 +213,7 @@ export function SyncEntitlementProvider({ children }) {
     } finally {
       setUnlocking(false);
     }
-  }, [lifetimePackage, showToast]);
+  }, [applyCustomerInfo, lifetimePackage, showToast]);
 
   const value = {
     syncEntitled,
