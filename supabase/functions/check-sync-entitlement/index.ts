@@ -16,6 +16,20 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function isSyncEntitlementRowActive(row: unknown): boolean {
+  if (!row || typeof row !== 'object') return false;
+  const exp = (row as { expires_date?: string | null }).expires_date;
+  if (exp == null || exp === '') return true;
+  const t = Date.parse(String(exp));
+  if (Number.isNaN(t)) return true;
+  return t > Date.now();
+}
+
+/**
+ * REST GET /v1/subscribers/{id} returns entitlements as a flat map:
+ * `subscriber.entitlements.{entitlement_id}: { expires_date, ... }`.
+ * Some payloads use a nested `entitlements.active` object (SDK-shaped); support both.
+ */
 function parseRcEntitled(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false;
   const sub = (data as { subscriber?: Record<string, unknown> }).subscriber;
@@ -26,15 +40,11 @@ function parseRcEntitled(data: unknown): boolean {
 
   const active = entitlements.active as Record<string, unknown> | undefined;
   if (active && typeof active === 'object' && SYNC_ENTITLEMENT_ID in active) {
-    const row = active[SYNC_ENTITLEMENT_ID] as { expires_date?: string | null } | undefined;
-    if (row && typeof row === 'object') {
-      const exp = row.expires_date;
-      if (exp == null || exp === '') return true;
-      const t = Date.parse(String(exp));
-      if (Number.isNaN(t)) return true;
-      return t > Date.now();
-    }
-    return true;
+    return isSyncEntitlementRowActive(active[SYNC_ENTITLEMENT_ID]);
+  }
+
+  if (SYNC_ENTITLEMENT_ID in entitlements) {
+    return isSyncEntitlementRowActive(entitlements[SYNC_ENTITLEMENT_ID]);
   }
 
   return false;

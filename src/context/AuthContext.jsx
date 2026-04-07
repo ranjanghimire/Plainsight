@@ -23,17 +23,12 @@ import {
 import { fetchSessionUser } from '../auth/fetchSessionUser';
 import { verifyCode } from '../auth/verifyCode';
 import { enqueueOtpSessionProcessing } from '../auth/otpSessionQueue';
+import {
+  clearAuthDisplayEmailStorage,
+  persistAuthDisplayEmail,
+  readAuthDisplayEmail,
+} from '../auth/authDisplayEmail';
 import { SendCodeModal } from '../components/SendCodeModal';
-
-const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
-
-function readStoredAuthEmail() {
-  try {
-    return sessionStorage.getItem(AUTH_DISPLAY_EMAIL_KEY);
-  } catch {
-    return null;
-  }
-}
 
 function isLocalDevSession() {
   const { sessionToken, userId } = getLocalSession();
@@ -45,7 +40,7 @@ function isLocalDevSession() {
 
 function readInitialAuthEmail() {
   if (isLocalDevSession()) return 'local@plainsight.dev';
-  const stored = readStoredAuthEmail();
+  const stored = readAuthDisplayEmail();
   if (stored) return stored;
   const uid = getLocalSession().userId;
   if (!uid) return null;
@@ -54,7 +49,7 @@ function readInitialAuthEmail() {
 
 function resolveAuthEmailForSession() {
   if (isLocalDevSession()) return 'local@plainsight.dev';
-  const stored = readStoredAuthEmail();
+  const stored = readAuthDisplayEmail();
   if (stored) return stored;
   const uid = getLocalSession().userId;
   if (!uid) return null;
@@ -71,6 +66,13 @@ export function AuthProvider({ children }) {
   const [syncEntitled, setSyncEntitledUi] = useState(() => getSyncEntitled());
   const [sendCodeOpen, setSendCodeOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState(() => readInitialAuthEmail());
+  /** False until custom-session validation finishes (avoids “Unlock” + “Sign out” before we know the account). */
+  const [authReady, setAuthReady] = useState(() => {
+    const { sessionToken, userId } = getLocalSession();
+    if (!sessionToken || !userId) return true;
+    if (isLocalDevSession()) return true;
+    return false;
+  });
 
   useEffect(
     () =>
@@ -86,49 +88,47 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
-      const { sessionToken, userId } = getLocalSession();
-      if (!sessionToken || !userId) return;
-      if (isLocalDevSession()) {
-        setAuthEmail('local@plainsight.dev');
-        return;
-      }
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      if (!baseUrl || !anonKey) return;
-
-      const result = await fetchSessionUser(sessionToken);
-      if (cancelled) return;
-
-      if (!result.loggedIn) {
-        clearSession();
-        setSyncRemoteActive(false);
-        try {
-          sessionStorage.removeItem(AUTH_DISPLAY_EMAIL_KEY);
-        } catch {
-          /* ignore */
-        }
-        setAuthEmail(null);
-        ensureLocalSession();
-        return;
-      }
-
-      setAuthEmail(result.email);
       try {
-        sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, result.email);
-      } catch {
-        /* ignore */
-      }
+        const { sessionToken, userId } = getLocalSession();
+        if (!sessionToken || !userId) return;
+        if (isLocalDevSession()) {
+          setAuthEmail('local@plainsight.dev');
+          return;
+        }
+        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (!baseUrl || !anonKey) return;
 
-      await new Promise((resolve) => {
-        enqueueOtpSessionProcessing({
-          userId: result.userId,
-          email: result.email,
-          source: 'restore',
-          done: resolve,
+        const result = await fetchSessionUser(sessionToken);
+        if (cancelled) return;
+
+        if (!result.loggedIn) {
+          clearSession();
+          setSyncRemoteActive(false);
+          clearAuthDisplayEmailStorage();
+          setAuthEmail(null);
+          ensureLocalSession();
+          return;
+        }
+
+        setAuthEmail(result.email);
+        persistAuthDisplayEmail(result.email);
+
+        await new Promise((resolve) => {
+          enqueueOtpSessionProcessing({
+            userId: result.userId,
+            email: result.email,
+            source: 'restore',
+            done: resolve,
+          });
         });
-      });
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -147,11 +147,7 @@ export function AuthProvider({ children }) {
     if (!result.ok) {
       return { ok: false, error: result.error };
     }
-    try {
-      sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, result.email);
-    } catch {
-      /* ignore */
-    }
+    persistAuthDisplayEmail(result.email);
     setAuthEmail(result.email);
 
     await new Promise((resolve) => {
@@ -170,11 +166,7 @@ export function AuthProvider({ children }) {
   const signOut = useCallback(() => {
     clearSession();
     setSyncRemoteActive(false);
-    try {
-      sessionStorage.removeItem(AUTH_DISPLAY_EMAIL_KEY);
-    } catch {
-      /* ignore */
-    }
+    clearAuthDisplayEmailStorage();
     setAuthEmail(null);
   }, []);
 
@@ -182,6 +174,7 @@ export function AuthProvider({ children }) {
     supabaseSessionExists,
     syncRemoteActive,
     authEmail,
+    authReady,
     restoreLocalSession,
     openSendCodeModal,
     verifyCodeLogin: loginWithCode,

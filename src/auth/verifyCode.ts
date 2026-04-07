@@ -2,10 +2,9 @@
  * Phase 3: verify OTP via Edge Function and persist session in localStorage.
  */
 
+import { persistAuthDisplayEmail } from './authDisplayEmail';
 import { setSession } from './localSession';
 import { invokeEdgeFunction } from './functionsInvoke';
-
-const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
 
 export type VerifyCodeResult =
   | { ok: true; email: string; userId: string }
@@ -53,11 +52,7 @@ export async function verifyCode(email: string, code: string): Promise<VerifyCod
   const displayEmail =
     typeof data.email === 'string' && data.email ? data.email : normalizedEmail;
 
-  try {
-    sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, displayEmail);
-  } catch {
-    /* ignore */
-  }
+  persistAuthDisplayEmail(displayEmail);
 
   setSession(token, userId);
 

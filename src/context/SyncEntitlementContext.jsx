@@ -8,14 +8,15 @@ import {
 } from 'react';
 import { Purchases, ErrorCode, PackageType } from '@revenuecat/purchases-js';
 import {
-  setSyncEntitlementActive,
   getSyncEntitled,
+  setSyncEntitlementActive,
   hasCustomAuthSession,
   setSyncRemoteActive,
   subscribeSyncGating,
   SYNC_ENTITLEMENT_ID,
 } from '../sync/syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
+import { readAuthDisplayEmail } from '../auth/authDisplayEmail';
 import { checkSyncEntitlementRemote } from '../auth/checkSyncEntitlementRemote';
 import { drainOtpSessionQueue, OTP_SESSION_QUEUE_CHANGED } from '../auth/otpSessionQueue';
 import { EnableSyncModal } from '../components/EnableSyncModal';
@@ -190,16 +191,25 @@ export function SyncEntitlementProvider({ children }) {
     setPaywallSubtitle(null);
   }, []);
 
-  const purchaseUnlockSync = useCallback(async () => {
+  const purchaseUnlockSync = useCallback(async (billingMountEl) => {
     const purchases = purchasesRef.current;
     const pkg = lifetimePackage;
     if (!purchases || !pkg) {
       showToast('Sync package is not available yet.');
       return;
     }
+    if (!(billingMountEl instanceof HTMLElement)) {
+      showToast('Unable to start checkout.');
+      return;
+    }
     setUnlocking(true);
     try {
-      const result = await purchases.purchasePackage(pkg);
+      const result = await purchases.purchase({
+        rcPackage: pkg,
+        htmlTarget: billingMountEl,
+        customerEmail: readAuthDisplayEmail() ?? undefined,
+        skipSuccessPage: true,
+      });
       let ci = unwrapCustomerInfo(result);
       let active = customerInfoHasSync(ci);
       if (active && hasCustomAuthSession()) {
@@ -266,15 +276,40 @@ export function SyncEntitlementProvider({ children }) {
               '[RevenueCat] check-sync-entitlement unavailable; treating user as not subscribed',
             );
           }
-          setSyncEntitlementActive(false);
-          setSyncRemoteActive(false);
-          if (source === 'verify') {
-            setPaywallSubtitle(
-              'Subscribe once to sync notes across devices and keep a cloud backup.',
-            );
-            setEnableSyncOpen(true);
+          if (source === 'restore') {
+            /**
+             * App reopen: REST response may have been misparsed, or purchase was on this browser’s
+             * anonymous RC profile. identifyUser merges into the Supabase user; then trust server or
+             * client. (OTP verify stays strict — no identify unless server said entitled above.)
+             */
+            try {
+              const out = await purchases.identifyUser(uid);
+              rcLinkedSupabaseUserIdRef.current = uid;
+              applyCustomerInfo(unwrapCustomerInfo(out));
+              const remoteAfter = await checkSyncEntitlementRemote(uid);
+              const entitled = remoteAfter === true || getSyncEntitled();
+              if (entitled) {
+                setSyncEntitlementActive(true);
+                setSyncRemoteActive(true);
+              } else {
+                setSyncEntitlementActive(false);
+                setSyncRemoteActive(false);
+              }
+            } catch (e) {
+              console.error('[RevenueCat] restore session RevenueCat link', e);
+              setSyncEntitlementActive(false);
+              setSyncRemoteActive(false);
+            }
+          } else {
+            setSyncEntitlementActive(false);
+            setSyncRemoteActive(false);
+            if (source === 'verify') {
+              setPaywallSubtitle(
+                'Subscribe once to sync notes across devices and keep a cloud backup.',
+              );
+              setEnableSyncOpen(true);
+            }
           }
-          // Do not call identifyUser — would merge anonymous RC entitlements into this user.
         }
       } catch (e) {
         console.error('[RevenueCat] post sign-in identify', e);

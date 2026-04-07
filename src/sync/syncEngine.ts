@@ -46,11 +46,13 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import {
   bindMergedWorkspacesToStorageKeys,
+  getStorageKeyForWorkspaceId,
   isUuid,
   loadAppState,
-  setWorkspaceIdMapping,
   rebuildVisibleWorkspacesFromRemote,
+  removeWorkspaceIdMapping,
   saveAppState,
+  setWorkspaceIdMapping,
 } from '../utils/storage';
 import { notifyHydrationComplete } from './hydrationBridge';
 import { getCanUseSupabase } from './syncEnabled';
@@ -95,6 +97,88 @@ function prepareWorkspacesForRemote(rows: Workspace[], ownerId: string): Workspa
   return disambiguateWorkspaceNamesForPush(ensureWorkspaceOwnerId(rows, ownerId));
 }
 
+function isPostgresPkConflict(error: { code?: string; message?: string }): boolean {
+  const msg = typeof error.message === 'string' ? error.message : '';
+  return (
+    error.code === '23505' ||
+    msg.includes('duplicate key') ||
+    msg.includes('workspaces_pkey')
+  );
+}
+
+/**
+ * Another account already owns this workspace primary key remotely. Assign a fresh id locally and
+ * move all per-workspace data + storage-key bindings (new tab / sign-out leaves stale UUIDs).
+ */
+async function remapLocalWorkspaceUuidAfterPkCollision(
+  oldId: string,
+  newId: string,
+  ownerId: string,
+  workspaceRow: Workspace,
+): Promise<void> {
+  const cats = await getLocalCategories(oldId);
+  const notes = await getLocalNotes(oldId);
+  const arch = await getLocalArchivedNotes(oldId);
+  const nt = await getLocalNoteTombstones(oldId);
+  const at = await getLocalArchivedNoteTombstones(oldId);
+
+  const rewriteWs = <T extends { workspace_id: string }>(rows: T[]): T[] =>
+    rows.map((r) => ({ ...r, workspace_id: newId }));
+
+  await saveLocalCategories(newId, rewriteWs(cats));
+  await saveLocalNotes(newId, rewriteWs(notes));
+  await saveLocalArchivedNotes(newId, rewriteWs(arch));
+  await saveLocalNoteTombstones(newId, rewriteWs(nt));
+  await saveLocalArchivedNoteTombstones(newId, rewriteWs(at));
+
+  try {
+    localStorage.removeItem(`plainsight_local_categories_${oldId}`);
+    localStorage.removeItem(`plainsight_local_notes_${oldId}`);
+    localStorage.removeItem(`plainsight_local_archived_${oldId}`);
+    localStorage.removeItem(`plainsight_local_note_tombstones_${oldId}`);
+    localStorage.removeItem(`plainsight_local_archived_tombstones_${oldId}`);
+  } catch {
+    /* ignore */
+  }
+
+  const wsList = await getLocalWorkspaces();
+  await saveLocalWorkspaces(
+    wsList.map((w) => (w.id === oldId ? { ...w, id: newId, owner_id: ownerId } : w)),
+  );
+
+  const pins = await getLocalWorkspacePins();
+  await saveLocalWorkspacePins(
+    pins.map((p) => (p.workspace_id === oldId ? { ...p, workspace_id: newId } : p)),
+  );
+
+  const storageKey = getStorageKeyForWorkspaceId(oldId);
+  if (storageKey) {
+    removeWorkspaceIdMapping(storageKey, oldId);
+    setWorkspaceIdMapping(storageKey, newId);
+  }
+
+  const isNonHomeVisible =
+    workspaceRow.kind === 'visible' &&
+    (workspaceRow.name || '').trim().toLowerCase() !== 'home';
+  if (isNonHomeVisible) {
+    const ok = `ws_visible_${oldId}`;
+    const nk = `ws_visible_${newId}`;
+    try {
+      const raw = localStorage.getItem(ok);
+      if (raw) {
+        localStorage.setItem(nk, raw);
+        localStorage.removeItem(ok);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export type PushWorkspacesResult =
+  | { ok: true; workspaceIdReplacements?: Record<string, string> }
+  | { ok: false; error: SyncError };
+
 // -----------------------------
 // Pull (raw fetch; no merging)
 // -----------------------------
@@ -134,7 +218,7 @@ export async function pullWorkspacePins(): Promise<{ data: WorkspacePin[]; error
 export async function pushWorkspaces(
   localWorkspaces: Workspace[],
   workspaceIdsSeenOnRemote: Set<string>,
-): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+): Promise<PushWorkspacesResult> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
     const ownerId = await getOwnerId();
@@ -149,11 +233,40 @@ export async function pushWorkspaces(
       const { error } = await sb.from('workspaces').upsert(toUpsert, { onConflict: 'id' });
       if (error) return { ok: false, error: mkError(error.message, error) };
     }
+
+    const workspaceIdReplacements: Record<string, string> = {};
     if (toInsert.length > 0) {
-      const { error } = await sb.from('workspaces').insert(toInsert);
-      if (error) return { ok: false, error: mkError(error.message, error) };
+      for (const prep of toInsert) {
+        let row = { ...prep };
+        let inserted = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { error } = await sb.from('workspaces').insert([row]);
+          if (!error) {
+            inserted = true;
+            break;
+          }
+          if (isPostgresPkConflict(error) && attempt < 2) {
+            const oldPk = row.id;
+            const newId = uuidv4();
+            await remapLocalWorkspaceUuidAfterPkCollision(oldPk, newId, ownerId, row);
+            const list = await getLocalWorkspaces();
+            bindMergedWorkspacesToStorageKeys(list);
+            const nextVisible = rebuildVisibleWorkspacesFromRemote(list);
+            const appPrev = loadAppState();
+            saveAppState(nextVisible, appPrev.lastActiveStorageKey);
+            workspaceIdReplacements[oldPk] = newId;
+            row = { ...row, id: newId, owner_id: ownerId };
+            continue;
+          }
+          return { ok: false, error: mkError(error.message, error) };
+        }
+        if (!inserted) return { ok: false, error: mkError('Workspace insert failed', new Error()) };
+      }
     }
-    return { ok: true };
+
+    return Object.keys(workspaceIdReplacements).length > 0
+      ? { ok: true, workspaceIdReplacements }
+      : { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to push workspaces', e) };
   }
@@ -357,11 +470,21 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
 // Full Sync Orchestrator
 // -----------------------------
 
+const FULL_SYNC_MAX_PK_RETRIES = 2;
+
 export async function fullSync(
   workspaceIds?: string[],
+  pkRetryDepth = 0,
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) {
     return { ok: true };
+  }
+
+  if (pkRetryDepth > FULL_SYNC_MAX_PK_RETRIES) {
+    return {
+      ok: false,
+      error: mkError('Could not publish workspaces after re-assigning ids. Try again.', new Error()),
+    };
   }
 
   let syncSucceeded = false;
@@ -551,12 +674,20 @@ export async function fullSync(
     }
 
     // Push merged (ensure category FK order: categories before notes)
-    const basePush = await Promise.all([
-      pushWorkspaces(mergedWorkspacesWithOwner, remoteIds),
-      pushWorkspacePins(mergedPins.merged),
-    ]);
-    const baseFailed = basePush.find((r) => (r as any).ok === false) as { ok: false; error: SyncError } | undefined;
-    if (baseFailed) return { ok: false, error: baseFailed.error };
+    const wsPush = await pushWorkspaces(mergedWorkspacesWithOwner, remoteIds);
+    if (!wsPush.ok) return { ok: false, error: wsPush.error };
+    if (
+      wsPush.ok &&
+      wsPush.workspaceIdReplacements &&
+      Object.keys(wsPush.workspaceIdReplacements).length > 0
+    ) {
+      const again = await fullSync(workspaceIds, pkRetryDepth + 1);
+      syncSucceeded = again.ok;
+      return again;
+    }
+
+    const pinsPush = await pushWorkspacePins(mergedPins.merged);
+    if (!pinsPush.ok) return { ok: false, error: pinsPush.error };
 
     for (const wid of ids) {
       const cats = mergedCategories[wid].merged;
