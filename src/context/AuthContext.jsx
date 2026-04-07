@@ -11,6 +11,7 @@ import {
   setSyncRemoteActive,
   getSyncRemoteActive,
   getSyncEntitled,
+  hasCustomAuthSession,
 } from '../sync/syncEnabled';
 import {
   clearSession,
@@ -21,10 +22,8 @@ import {
 } from '../auth/localSession';
 import { fetchSessionUser } from '../auth/fetchSessionUser';
 import { verifyCode } from '../auth/verifyCode';
-import { EnableCloudSyncModal } from '../components/EnableCloudSyncModal';
 import { SendCodeModal } from '../components/SendCodeModal';
 
-const CLOUD_SYNC_AUTO_PROMPT_KEY = 'plainsight_cloud_sync_auto_prompted';
 const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
 
 function readStoredAuthEmail() {
@@ -69,13 +68,13 @@ export function AuthProvider({ children }) {
   );
   const [syncRemoteActive, setSyncRemoteActiveUi] = useState(() => getSyncRemoteActive());
   const [syncEntitled, setSyncEntitledUi] = useState(() => getSyncEntitled());
-  const [enableCloudSyncOpen, setEnableCloudSyncOpen] = useState(false);
   const [sendCodeOpen, setSendCodeOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState(() => readInitialAuthEmail());
 
   useEffect(
     () =>
       subscribeSyncGating(() => {
+        if (!hasCustomAuthSession()) setSyncRemoteActive(false);
         setSessionExistsUi(getSupabaseSessionExists());
         setSyncRemoteActiveUi(getSyncRemoteActive());
         setSyncEntitledUi(getSyncEntitled());
@@ -83,22 +82,6 @@ export function AuthProvider({ children }) {
       }),
     [],
   );
-
-  useEffect(() => {
-    if (!supabaseSessionExists || !syncEntitled || syncRemoteActive) {
-      return;
-    }
-    try {
-      if (sessionStorage.getItem(CLOUD_SYNC_AUTO_PROMPT_KEY) === '1') return;
-    } catch {
-      /* ignore */
-    }
-    setEnableCloudSyncOpen(true);
-  }, [supabaseSessionExists, syncEntitled, syncRemoteActive]);
-
-  useEffect(() => {
-    if (!supabaseSessionExists) setSyncRemoteActive(false);
-  }, [supabaseSessionExists]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +103,6 @@ export function AuthProvider({ children }) {
         clearSession();
         setSyncRemoteActive(false);
         try {
-          sessionStorage.removeItem(CLOUD_SYNC_AUTO_PROMPT_KEY);
           sessionStorage.removeItem(AUTH_DISPLAY_EMAIL_KEY);
         } catch {
           /* ignore */
@@ -136,6 +118,7 @@ export function AuthProvider({ children }) {
       } catch {
         /* ignore */
       }
+      setSyncRemoteActive(true);
     })();
     return () => {
       cancelled = true;
@@ -156,7 +139,7 @@ export function AuthProvider({ children }) {
     if (!result.ok) {
       return { ok: false, error: result.error };
     }
-    setSyncRemoteActive(false);
+    setSyncRemoteActive(true);
     try {
       sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, result.email);
     } catch {
@@ -167,27 +150,14 @@ export function AuthProvider({ children }) {
     return { ok: true };
   }, [closeSendCodeModal]);
 
-  const openEnableCloudSyncModal = useCallback(() => setEnableCloudSyncOpen(true), []);
-  const closeEnableCloudSyncModal = useCallback(() => setEnableCloudSyncOpen(false), []);
-  const dismissCloudSyncWithoutEnabling = useCallback(() => {
-    try {
-      sessionStorage.setItem(CLOUD_SYNC_AUTO_PROMPT_KEY, '1');
-    } catch {
-      /* ignore */
-    }
-    setEnableCloudSyncOpen(false);
-  }, []);
-
   const signOut = useCallback(() => {
     clearSession();
     setSyncRemoteActive(false);
     try {
-      sessionStorage.removeItem(CLOUD_SYNC_AUTO_PROMPT_KEY);
       sessionStorage.removeItem(AUTH_DISPLAY_EMAIL_KEY);
     } catch {
       /* ignore */
     }
-    setEnableCloudSyncOpen(false);
     setAuthEmail(null);
   }, []);
 
@@ -198,7 +168,6 @@ export function AuthProvider({ children }) {
     restoreLocalSession,
     openSendCodeModal,
     verifyCodeLogin: loginWithCode,
-    openEnableCloudSyncModal,
     signOut,
   };
 
@@ -209,19 +178,6 @@ export function AuthProvider({ children }) {
         open={sendCodeOpen}
         onClose={closeSendCodeModal}
         loginWithCode={loginWithCode}
-      />
-      <EnableCloudSyncModal
-        open={enableCloudSyncOpen}
-        onClose={dismissCloudSyncWithoutEnabling}
-        onEnable={() => {
-          try {
-            sessionStorage.removeItem(CLOUD_SYNC_AUTO_PROMPT_KEY);
-          } catch {
-            /* ignore */
-          }
-          setSyncRemoteActive(true);
-          setEnableCloudSyncOpen(false);
-        }}
       />
     </AuthContext.Provider>
   );

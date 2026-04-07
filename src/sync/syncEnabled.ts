@@ -78,6 +78,11 @@ export function getCanUseSupabase(): boolean {
   return syncEntitledFlag && syncRemoteActiveFlag && sessionAllowsCloudData();
 }
 
+/** OTP / custom-auth session — not the Phase 1 local dev placeholder (menu, sign out). */
+export function hasCustomAuthSession(): boolean {
+  return sessionAllowsCloudData();
+}
+
 /** @internal RevenueCat (SyncEntitlementContext). */
 export function setSyncEntitlementActive(active: boolean): void {
   if (syncEntitledFlag === active) return;

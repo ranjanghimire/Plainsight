@@ -6,8 +6,9 @@ import { useSyncEntitlement } from '../context/SyncEntitlementContext';
 import { useAuth } from '../context/AuthContext';
 import {
   getSyncEntitled,
-  getSupabaseSessionExists,
   getSyncRemoteActive,
+  hasCustomAuthSession,
+  setSyncRemoteActive as persistSyncRemoteActive,
   subscribeSyncGating,
 } from '../sync/syncEnabled';
 import {
@@ -97,19 +98,17 @@ export function MenuPanel({ open, onClose }) {
   } = useWorkspace();
   const { beginUpgradeFlow } = useSyncEntitlement();
   const openEnableSyncModal = beginUpgradeFlow;
-  const { openSendCodeModal, openEnableCloudSyncModal, signOut, authEmail } = useAuth();
+  const { openSendCodeModal, signOut, authEmail } = useAuth();
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
-  const [supabaseSessionExists, setSupabaseSessionExists] = useState(() =>
-    getSupabaseSessionExists(),
-  );
   const [syncRemoteActive, setSyncRemoteActive] = useState(() => getSyncRemoteActive());
+  const [customAuthSession, setCustomAuthSession] = useState(() => hasCustomAuthSession());
 
   useEffect(
     () =>
       subscribeSyncGating(() => {
         setSyncEntitled(getSyncEntitled());
-        setSupabaseSessionExists(getSupabaseSessionExists());
         setSyncRemoteActive(getSyncRemoteActive());
+        setCustomAuthSession(hasCustomAuthSession());
       }),
     [],
   );
@@ -242,7 +241,7 @@ export function MenuPanel({ open, onClose }) {
               >
                 Enable Sync
               </button>
-            ) : !supabaseSessionExists ? (
+            ) : !customAuthSession ? (
               <button
                 type="button"
                 onClick={openSendCodeModal}
@@ -253,10 +252,10 @@ export function MenuPanel({ open, onClose }) {
             ) : !syncRemoteActive ? (
               <button
                 type="button"
-                onClick={openEnableCloudSyncModal}
+                onClick={() => persistSyncRemoteActive(true)}
                 className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
               >
-                Enable cloud sync
+                Turn on cloud sync
               </button>
             ) : (
               <div className="space-y-1">
@@ -394,7 +393,7 @@ export function MenuPanel({ open, onClose }) {
             )}
           </div>
 
-          {supabaseSessionExists ? (
+          {customAuthSession ? (
             <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
               <button
                 type="button"
