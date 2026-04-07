@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { sendCode } from '../auth/sendCode';
+import { checkSyncEntitlementRemote } from '../auth/checkSyncEntitlementRemote';
 import { EnterCodePlaceholder } from './EnterCodePlaceholder';
 
 export function SendCodeModal({ open, onClose, loginWithCode }) {
@@ -7,6 +8,7 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
   const [step, setStep] = useState('email');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [paidHint, setPaidHint] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -15,6 +17,7 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
       setStep('email');
       setSending(false);
       setError(null);
+      setPaidHint(null);
     }, 0);
     return () => window.clearTimeout(t);
   }, [open]);
@@ -36,6 +39,7 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
     if (!trimmed || sending) return;
     setSending(true);
     setError(null);
+    setPaidHint(null);
     const result = await sendCode(trimmed);
     setSending(false);
     if (!result.ok) {
@@ -43,6 +47,12 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
       return;
     }
     setStep('code');
+    void (async () => {
+      const entitled = await checkSyncEntitlementRemote(result.userId);
+      if (entitled === true) {
+        setPaidHint('This account already includes cloud sync. Enter your code to continue.');
+      }
+    })();
   };
 
   return (
@@ -69,7 +79,7 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
               id="send-code-title"
               className="text-lg font-medium text-stone-900 dark:text-stone-100"
             >
-              Sign in to enable sync
+              Sign in to sync
             </h2>
             <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
               Enter your email. We&apos;ll send a 6-digit code.
@@ -121,6 +131,9 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
             >
               Enter the code
             </h2>
+            {paidHint ? (
+              <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-400">{paidHint}</p>
+            ) : null}
             <div className="mt-4">
               <EnterCodePlaceholder
                 email={email.trim().toLowerCase()}

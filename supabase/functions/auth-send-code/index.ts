@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
       console.log(`auth-send-code: OTP for ${email} (no Resend): ${code}`);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, userId }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

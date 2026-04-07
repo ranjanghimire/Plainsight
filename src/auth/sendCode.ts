@@ -2,11 +2,10 @@
  * Phase 2: invoke Edge Function to generate + email OTP (no verification yet).
  */
 
-const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+import { invokeEdgeFunction } from './functionsInvoke';
 
 export type SendCodeResult =
-  | { ok: true }
+  | { ok: true; userId: string }
   | { ok: false; error: string };
 
 export async function sendCode(email: string): Promise<SendCodeResult> {
@@ -14,45 +13,27 @@ export async function sendCode(email: string): Promise<SendCodeResult> {
   if (!trimmed) {
     return { ok: false, error: 'Enter an email address.' };
   }
+
+  const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
   if (!url || !anonKey) {
     return { ok: false, error: 'Sync is not configured (missing Supabase URL or key).' };
   }
 
-  const endpoint = `${url.replace(/\/+$/, '')}/functions/v1/auth-send-code`;
+  const { data, error } = await invokeEdgeFunction<{
+    success?: boolean;
+    userId?: string;
+  }>('auth-send-code', {
+    body: { email: trimmed },
+  });
 
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${anonKey}`,
-        apikey: anonKey,
-      },
-      body: JSON.stringify({ email: trimmed }),
-    });
-
-    let payload: { error?: string; success?: boolean } = {};
-    try {
-      payload = await res.json();
-    } catch {
-      /* ignore */
-    }
-
-    if (!res.ok) {
-      const msg =
-        typeof payload.error === 'string' && payload.error
-          ? payload.error
-          : `Request failed (${res.status})`;
-      return { ok: false, error: msg };
-    }
-
-    if (payload.success !== true) {
-      return { ok: false, error: 'Unexpected response from server.' };
-    }
-
-    return { ok: true };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Network error';
-    return { ok: false, error: message };
+  if (error) {
+    return { ok: false, error };
   }
+
+  if (!data || data.success !== true || typeof data.userId !== 'string') {
+    return { ok: false, error: 'Unexpected response from server.' };
+  }
+
+  return { ok: true, userId: data.userId };
 }

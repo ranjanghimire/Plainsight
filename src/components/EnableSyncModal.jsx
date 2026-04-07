@@ -6,6 +6,7 @@ export function EnableSyncModal({
   onUnlockSync,
   unlockDisabled = false,
   unlocking = false,
+  subtitle,
 }) {
   useEffect(() => {
     if (!open) return undefined;
@@ -45,8 +46,11 @@ export function EnableSyncModal({
           id="enable-sync-title"
           className="text-lg font-medium text-stone-900 dark:text-stone-100"
         >
-          Enable Sync
+          Cloud sync subscription
         </h2>
+        {subtitle ? (
+          <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">{subtitle}</p>
+        ) : null}
         <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-stone-600 dark:text-stone-300">
           <li>Sync across devices</li>
           <li>Backup your notes</li>
@@ -59,7 +63,7 @@ export function EnableSyncModal({
             disabled={unlockDisabled || unlocking}
             className="px-3 py-2 text-sm font-medium rounded-lg bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50 disabled:pointer-events-none dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
           >
-            {unlocking ? 'Processing…' : 'Unlock Sync'}
+            {unlocking ? 'Processing…' : 'Subscribe'}
           </button>
           <button
             type="button"

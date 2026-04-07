@@ -3,14 +3,12 @@
  */
 
 import { setSession } from './localSession';
+import { invokeEdgeFunction } from './functionsInvoke';
 
 const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
 
-const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
-
 export type VerifyCodeResult =
-  | { ok: true; email: string }
+  | { ok: true; email: string; userId: string }
   | { ok: false; error: string };
 
 export async function verifyCode(email: string, code: string): Promise<VerifyCodeResult> {
@@ -22,65 +20,46 @@ export async function verifyCode(email: string, code: string): Promise<VerifyCod
   if (digits.length !== 6) {
     return { ok: false, error: 'Enter the 6-digit code.' };
   }
+
+  const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
   if (!url || !anonKey) {
     return { ok: false, error: 'Sync is not configured (missing Supabase URL or key).' };
   }
 
-  const endpoint = `${url.replace(/\/+$/, '')}/functions/v1/auth-verify-code`;
+  const { data, error } = await invokeEdgeFunction<{
+    error?: string;
+    sessionToken?: string;
+    userId?: string;
+    email?: string;
+  }>('auth-verify-code', {
+    body: { email: normalizedEmail, code: digits },
+  });
+
+  if (error) {
+    return { ok: false, error };
+  }
+
+  if (!data) {
+    return { ok: false, error: 'Unexpected response from server.' };
+  }
+
+  const token = data.sessionToken;
+  const userId = data.userId;
+  if (typeof token !== 'string' || typeof userId !== 'string') {
+    return { ok: false, error: 'Unexpected response from server.' };
+  }
+
+  const displayEmail =
+    typeof data.email === 'string' && data.email ? data.email : normalizedEmail;
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${anonKey}`,
-        apikey: anonKey,
-      },
-      body: JSON.stringify({ email: normalizedEmail, code: digits }),
-    });
-
-    let payload: {
-      error?: string;
-      sessionToken?: string;
-      userId?: string;
-      email?: string;
-    } = {};
-    try {
-      payload = await res.json();
-    } catch {
-      /* ignore */
-    }
-
-    if (!res.ok) {
-      const msg =
-        typeof payload.error === 'string' && payload.error
-          ? payload.error
-          : `Request failed (${res.status})`;
-      return { ok: false, error: msg };
-    }
-
-    const token = payload.sessionToken;
-    const userId = payload.userId;
-    if (typeof token !== 'string' || typeof userId !== 'string') {
-      return { ok: false, error: 'Unexpected response from server.' };
-    }
-
-    const displayEmail =
-      typeof payload.email === 'string' && payload.email
-        ? payload.email
-        : normalizedEmail;
-
-    try {
-      sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, displayEmail);
-    } catch {
-      /* ignore */
-    }
-
-    setSession(token, userId);
-
-    return { ok: true, email: displayEmail };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Network error';
-    return { ok: false, error: message };
+    sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, displayEmail);
+  } catch {
+    /* ignore */
   }
+
+  setSession(token, userId);
+
+  return { ok: true, email: displayEmail, userId };
 }

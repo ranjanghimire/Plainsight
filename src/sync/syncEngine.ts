@@ -123,16 +123,36 @@ export async function pullWorkspacePins(): Promise<{ data: WorkspacePin[]; error
 // Push (upsert; last-write-wins)
 // -----------------------------
 
-export async function pushWorkspaces(localWorkspaces: Workspace[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+/**
+ * Push workspaces after a pull pass.
+ *
+ * `workspaceIdsSeenOnRemote` must be the ids returned from the user's RLS-scoped SELECT on
+ * `workspaces`. Rows that were never visible on that pull must use plain INSERT: batch upsert
+ * hits ON CONFLICT DO UPDATE, and Postgres evaluates USING on the *existing* row; if that row
+ * belongs to another account (same UUID pk from a prior browser profile), RLS fails with 42501.
+ */
+export async function pushWorkspaces(
+  localWorkspaces: Workspace[],
+  workspaceIdsSeenOnRemote: Set<string>,
+): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
     const ownerId = await getOwnerId();
     if (!ownerId) return { ok: true };
     const rows = prepareWorkspacesForRemote(localWorkspaces, ownerId);
-    const { error } = await getSupabase()
-      .from('workspaces')
-      .upsert(rows, { onConflict: 'id' });
-    if (error) return { ok: false, error: mkError(error.message, error) };
+    const seen = workspaceIdsSeenOnRemote;
+    const toUpsert = rows.filter((w) => w.id && seen.has(w.id));
+    const toInsert = rows.filter((w) => w.id && !seen.has(w.id));
+
+    const sb = getSupabase();
+    if (toUpsert.length > 0) {
+      const { error } = await sb.from('workspaces').upsert(toUpsert, { onConflict: 'id' });
+      if (error) return { ok: false, error: mkError(error.message, error) };
+    }
+    if (toInsert.length > 0) {
+      const { error } = await sb.from('workspaces').insert(toInsert);
+      if (error) return { ok: false, error: mkError(error.message, error) };
+    }
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to push workspaces', e) };
@@ -532,7 +552,7 @@ export async function fullSync(
 
     // Push merged (ensure category FK order: categories before notes)
     const basePush = await Promise.all([
-      pushWorkspaces(mergedWorkspacesWithOwner),
+      pushWorkspaces(mergedWorkspacesWithOwner, remoteIds),
       pushWorkspacePins(mergedPins.merged),
     ]);
     const baseFailed = basePush.find((r) => (r as any).ok === false) as { ok: false; error: SyncError } | undefined;

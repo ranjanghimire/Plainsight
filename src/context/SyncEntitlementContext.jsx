@@ -11,10 +11,13 @@ import {
   setSyncEntitlementActive,
   getSyncEntitled,
   hasCustomAuthSession,
+  setSyncRemoteActive,
   subscribeSyncGating,
   SYNC_ENTITLEMENT_ID,
 } from '../sync/syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
+import { checkSyncEntitlementRemote } from '../auth/checkSyncEntitlementRemote';
+import { drainOtpSessionQueue, OTP_SESSION_QUEUE_CHANGED } from '../auth/otpSessionQueue';
 import { EnableSyncModal } from '../components/EnableSyncModal';
 
 const REVENUECAT_PUBLIC_API_KEY = 'test_smZiwCGJjgwRtkaZwQOrEZhEPfj';
@@ -55,6 +58,7 @@ export function SyncEntitlementProvider({ children }) {
   const [lifetimePackage, setLifetimePackage] = useState(null);
   const [revenueCatReady, setRevenueCatReady] = useState(false);
   const [enableSyncOpen, setEnableSyncOpen] = useState(false);
+  const [paywallSubtitle, setPaywallSubtitle] = useState(null);
   const [unlocking, setUnlocking] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const toastTimerRef = useRef(null);
@@ -97,10 +101,14 @@ export function SyncEntitlementProvider({ children }) {
       if (hasCustomAuthSession()) {
         const uid = getLocalSession().userId?.trim();
         if (!uid) return;
-        if (rcLinkedSupabaseUserIdRef.current === uid) return;
-        const out = await purchases.identifyUser(uid);
-        rcLinkedSupabaseUserIdRef.current = uid;
-        applyCustomerInfo(unwrapCustomerInfo(out));
+        if (rcLinkedSupabaseUserIdRef.current === uid) {
+          try {
+            const info = await purchases.getCustomerInfo();
+            applyCustomerInfo(info);
+          } catch (e) {
+            console.error('[RevenueCat] refresh customer info', e);
+          }
+        }
         return;
       }
 
@@ -173,8 +181,14 @@ export function SyncEntitlementProvider({ children }) {
     });
   }, [revenueCatReady, syncRevenueCatToPlainSightSession]);
 
-  const beginUpgradeFlow = useCallback(() => setEnableSyncOpen(true), []);
-  const closeEnableSync = useCallback(() => setEnableSyncOpen(false), []);
+  const beginUpgradeFlow = useCallback(() => {
+    setPaywallSubtitle(null);
+    setEnableSyncOpen(true);
+  }, []);
+  const closeEnableSync = useCallback(() => {
+    setEnableSyncOpen(false);
+    setPaywallSubtitle(null);
+  }, []);
 
   const purchaseUnlockSync = useCallback(async () => {
     const purchases = purchasesRef.current;
@@ -203,7 +217,9 @@ export function SyncEntitlementProvider({ children }) {
       }
       applyCustomerInfo(ci);
       if (active) {
+        setSyncRemoteActive(true);
         setEnableSyncOpen(false);
+        showToast('Cloud sync is on');
       } else {
         showToast('Could not verify sync unlock.');
       }
@@ -215,6 +231,70 @@ export function SyncEntitlementProvider({ children }) {
     }
   }, [applyCustomerInfo, lifetimePackage, showToast]);
 
+  const processOtpSessionQueue = useCallback(async () => {
+    const purchases = purchasesRef.current;
+    if (!purchases) return;
+    const batch = drainOtpSessionQueue();
+    for (const item of batch) {
+      const finish = item.done;
+      try {
+        const { userId, source } = item;
+        if (!userId?.trim()) continue;
+        const uid = userId.trim();
+
+        /**
+         * Server check by Supabase user id must decide sync — `identifyUser` merges this browser's
+         * anonymous RevenueCat profile into the account, which incorrectly "gifts" sync to every
+         * new email on a device that ever had anonymous/test entitlements.
+         */
+        const remoteEntitled = await checkSyncEntitlementRemote(uid);
+
+        if (remoteEntitled === true) {
+          setSyncEntitlementActive(true);
+          try {
+            const out = await purchases.identifyUser(uid);
+            rcLinkedSupabaseUserIdRef.current = uid;
+            applyCustomerInfo(unwrapCustomerInfo(out));
+          } catch (e) {
+            console.error('[RevenueCat] post sign-in identify', e);
+          }
+          setSyncRemoteActive(true);
+          if (source === 'verify') showToast('Cloud sync is on');
+        } else {
+          if (remoteEntitled === null) {
+            console.warn(
+              '[RevenueCat] check-sync-entitlement unavailable; treating user as not subscribed',
+            );
+          }
+          setSyncEntitlementActive(false);
+          setSyncRemoteActive(false);
+          if (source === 'verify') {
+            setPaywallSubtitle(
+              'Subscribe once to sync notes across devices and keep a cloud backup.',
+            );
+            setEnableSyncOpen(true);
+          }
+          // Do not call identifyUser — would merge anonymous RC entitlements into this user.
+        }
+      } catch (e) {
+        console.error('[RevenueCat] post sign-in identify', e);
+        setSyncRemoteActive(false);
+      } finally {
+        finish?.();
+      }
+    }
+  }, [applyCustomerInfo, showToast]);
+
+  useEffect(() => {
+    if (!revenueCatReady) return undefined;
+    const run = () => {
+      void processOtpSessionQueue();
+    };
+    run();
+    window.addEventListener(OTP_SESSION_QUEUE_CHANGED, run);
+    return () => window.removeEventListener(OTP_SESSION_QUEUE_CHANGED, run);
+  }, [revenueCatReady, processOtpSessionQueue]);
+
   const value = {
     syncEntitled,
     revenueCatReady,
@@ -223,6 +303,7 @@ export function SyncEntitlementProvider({ children }) {
     beginUpgradeFlow,
     closeEnableSync,
     purchaseUnlockSync,
+    showToast,
   };
 
   return (
@@ -234,6 +315,7 @@ export function SyncEntitlementProvider({ children }) {
         onUnlockSync={purchaseUnlockSync}
         unlockDisabled={!lifetimePackage || !revenueCatReady}
         unlocking={unlocking}
+        subtitle={paywallSubtitle}
       />
       {toastMessage ? (
         <div

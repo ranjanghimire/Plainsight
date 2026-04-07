@@ -96,8 +96,7 @@ export function MenuPanel({ open, onClose }) {
     renameVisibleWorkspace,
     deleteVisibleWorkspace,
   } = useWorkspace();
-  const { beginUpgradeFlow } = useSyncEntitlement();
-  const openEnableSyncModal = beginUpgradeFlow;
+  const { beginUpgradeFlow, showToast } = useSyncEntitlement();
   const { openSendCodeModal, signOut, authEmail } = useAuth();
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
   const [syncRemoteActive, setSyncRemoteActive] = useState(() => getSyncRemoteActive());
@@ -120,6 +119,7 @@ export function MenuPanel({ open, onClose }) {
   const [workspaceRenameTarget, setWorkspaceRenameTarget] = useState(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState('');
   const [pendingDeleteWorkspace, setPendingDeleteWorkspace] = useState(null);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const wsMenu = useItemContextMenu();
 
   useEffect(() => {
@@ -233,21 +233,21 @@ export function MenuPanel({ open, onClose }) {
           </div>
 
           <div className="border-b border-stone-100 dark:border-stone-700 py-3 px-1 space-y-2">
-            {!syncEntitled ? (
-              <button
-                type="button"
-                onClick={openEnableSyncModal}
-                className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Enable Sync
-              </button>
-            ) : !customAuthSession ? (
+            {!customAuthSession ? (
               <button
                 type="button"
                 onClick={openSendCodeModal}
+                className="w-full px-3 py-2.5 text-sm font-medium text-center rounded-lg bg-stone-800 text-white hover:bg-stone-900 dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
+              >
+                Sign in to sync
+              </button>
+            ) : !syncEntitled ? (
+              <button
+                type="button"
+                onClick={beginUpgradeFlow}
                 className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
               >
-                Sign in to enable sync
+                Unlock cloud sync
               </button>
             ) : !syncRemoteActive ? (
               <button
@@ -397,10 +397,7 @@ export function MenuPanel({ open, onClose }) {
             <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
               <button
                 type="button"
-                onClick={() => {
-                  void signOut();
-                  onClose();
-                }}
+                onClick={() => setSignOutConfirmOpen(true)}
                 className="w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
               >
                 Sign out
@@ -409,6 +406,22 @@ export function MenuPanel({ open, onClose }) {
           ) : null}
         </div>
       </aside>
+
+      <ConfirmDialog
+        open={signOutConfirmOpen}
+        title="Sign out?"
+        description="You will be signed out on this device. Cloud sync will stop until you sign in again and turn sync back on."
+        confirmLabel="Sign out"
+        cancelLabel="Stay signed in"
+        destructive
+        onCancel={() => setSignOutConfirmOpen(false)}
+        onConfirm={() => {
+          setSignOutConfirmOpen(false);
+          signOut();
+          showToast('Signed out');
+          onClose();
+        }}
+      />
 
       <ContextActionPopover
         open={wsMenu.menu.open}

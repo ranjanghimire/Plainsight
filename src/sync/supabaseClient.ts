@@ -17,6 +17,26 @@ let cachedClient: SupabaseClient | null = null;
 let cachedToken: string | null = null;
 
 function createSupabaseWithToken(token: string | null): SupabaseClient {
+  const trimmed = token?.trim() ?? '';
+  const sessionHeaders: Record<string, string> = trimmed
+    ? { 'x-plainsight-session': trimmed }
+    : {};
+
+  /**
+   * Re-inject session on every REST/realtime-bound fetch. RLS depends on
+   * x-plainsight-session; global.headers alone can miss some code paths across supabase-js.
+   */
+  const nativeFetch: typeof fetch =
+    typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function'
+      ? globalThis.fetch.bind(globalThis)
+      : fetch;
+  const fetchWithSession: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    if (trimmed) headers.set('x-plainsight-session', trimmed);
+    else headers.delete('x-plainsight-session');
+    return nativeFetch(input, { ...init, headers });
+  };
+
   return createClient(supabaseUrl, supabaseAnonKey, {
     // Custom session only — do not run GoTrue refresh/user calls (stale sb-* keys → 401 on /auth/v1).
     auth: {
@@ -25,7 +45,8 @@ function createSupabaseWithToken(token: string | null): SupabaseClient {
       detectSessionInUrl: false,
     },
     global: {
-      headers: token ? { 'x-plainsight-session': token } : {},
+      fetch: fetchWithSession,
+      headers: sessionHeaders,
     },
   });
 }

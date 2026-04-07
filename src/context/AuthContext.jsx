@@ -22,6 +22,7 @@ import {
 } from '../auth/localSession';
 import { fetchSessionUser } from '../auth/fetchSessionUser';
 import { verifyCode } from '../auth/verifyCode';
+import { enqueueOtpSessionProcessing } from '../auth/otpSessionQueue';
 import { SendCodeModal } from '../components/SendCodeModal';
 
 const AUTH_DISPLAY_EMAIL_KEY = 'plainsight_auth_display_email';
@@ -118,12 +119,19 @@ export function AuthProvider({ children }) {
       } catch {
         /* ignore */
       }
-      setSyncRemoteActive(true);
+
+      await new Promise((resolve) => {
+        enqueueOtpSessionProcessing({
+          userId: result.userId,
+          email: result.email,
+          source: 'restore',
+          done: resolve,
+        });
+      });
     })();
     return () => {
       cancelled = true;
     };
-    // One-time startup validation of persisted OTP session.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
 
@@ -139,13 +147,22 @@ export function AuthProvider({ children }) {
     if (!result.ok) {
       return { ok: false, error: result.error };
     }
-    setSyncRemoteActive(true);
     try {
       sessionStorage.setItem(AUTH_DISPLAY_EMAIL_KEY, result.email);
     } catch {
       /* ignore */
     }
     setAuthEmail(result.email);
+
+    await new Promise((resolve) => {
+      enqueueOtpSessionProcessing({
+        userId: result.userId,
+        email: result.email,
+        source: 'verify',
+        done: resolve,
+      });
+    });
+
     closeSendCodeModal();
     return { ok: true };
   }, [closeSendCodeModal]);
