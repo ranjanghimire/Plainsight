@@ -273,7 +273,7 @@ export function SyncEntitlementProvider({ children }) {
         } else {
           if (remoteEntitled === null) {
             console.warn(
-              '[RevenueCat] check-sync-entitlement unavailable; treating user as not subscribed',
+              '[RevenueCat] check-sync-entitlement unavailable; leaving entitlement unchanged',
             );
           }
           if (source === 'restore') {
@@ -292,28 +292,34 @@ export function SyncEntitlementProvider({ children }) {
                 setSyncEntitlementActive(true);
                 setSyncRemoteActive(true);
               } else {
-                setSyncEntitlementActive(false);
-                setSyncRemoteActive(false);
+                // Only downgrade if the server definitively says "not entitled".
+                if (remoteAfter === false) {
+                  setSyncEntitlementActive(false);
+                  setSyncRemoteActive(false);
+                }
               }
             } catch (e) {
               console.error('[RevenueCat] restore session RevenueCat link', e);
-              setSyncEntitlementActive(false);
-              setSyncRemoteActive(false);
+              // On transient failures, don't force the user back into a paywall loop.
             }
           } else {
-            setSyncEntitlementActive(false);
-            setSyncRemoteActive(false);
-            if (source === 'verify') {
-              setPaywallSubtitle(
-                'Subscribe once to sync notes across devices and keep a cloud backup.',
-              );
-              setEnableSyncOpen(true);
+            if (remoteEntitled === false) {
+              setSyncEntitlementActive(false);
+              setSyncRemoteActive(false);
+              if (source === 'verify') {
+                setPaywallSubtitle(
+                  'Subscribe once to sync notes across devices and keep a cloud backup.',
+                );
+                setEnableSyncOpen(true);
+              }
+            } else if (remoteEntitled === null && source === 'verify') {
+              showToast('Could not verify sync status right now. Try again in a moment.');
             }
           }
         }
       } catch (e) {
         console.error('[RevenueCat] post sign-in identify', e);
-        setSyncRemoteActive(false);
+        // Don't force-disable on transient failures.
       } finally {
         finish?.();
       }
