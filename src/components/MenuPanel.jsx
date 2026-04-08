@@ -96,7 +96,12 @@ export function MenuPanel({ open, onClose }) {
     renameVisibleWorkspace,
     deleteVisibleWorkspace,
   } = useWorkspace();
-  const { beginUpgradeFlow, showToast } = useSyncEntitlement();
+  const {
+    beginUpgradeFlow,
+    showToast,
+    isLinkingPurchasesToSession,
+    revenueCatReady,
+  } = useSyncEntitlement();
   const { openSendCodeModal, signOut, authEmail, authReady } = useAuth();
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
   const [syncRemoteActive, setSyncRemoteActive] = useState(() => getSyncRemoteActive());
@@ -246,23 +251,29 @@ export function MenuPanel({ open, onClose }) {
                 Sign in to sync
               </button>
             ) : !syncEntitled ? (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={beginUpgradeFlow}
-                  className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Unlock cloud sync
-                </button>
-                {authEmail ? (
-                  <p
-                    className="text-xs text-stone-500 dark:text-stone-400 pl-1"
-                    style={{ opacity: 0.6 }}
+              !revenueCatReady || isLinkingPurchasesToSession ? (
+                <p className="text-sm text-stone-500 dark:text-stone-400 px-1 py-1">
+                  Confirming your subscription…
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={beginUpgradeFlow}
+                    className="w-full text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
                   >
-                    Signed in as {authEmail}
-                  </p>
-                ) : null}
-              </div>
+                    Unlock cloud sync
+                  </button>
+                  {authEmail ? (
+                    <p
+                      className="text-xs text-stone-500 dark:text-stone-400 pl-1"
+                      style={{ opacity: 0.6 }}
+                    >
+                      Signed in as {authEmail}
+                    </p>
+                  ) : null}
+                </div>
+              )
             ) : !syncRemoteActive ? (
               <button
                 type="button"
@@ -407,7 +418,10 @@ export function MenuPanel({ open, onClose }) {
             )}
           </div>
 
-          {authReady && customAuthSession ? (
+          {authReady &&
+          customAuthSession &&
+          revenueCatReady &&
+          !isLinkingPurchasesToSession ? (
             <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
               <button
                 type="button"

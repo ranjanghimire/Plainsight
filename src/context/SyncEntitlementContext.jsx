@@ -63,6 +63,8 @@ export function SyncEntitlementProvider({ children }) {
   const [unlocking, setUnlocking] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const toastTimerRef = useRef(null);
+  /** True while OTP / session-restore queue is linking RevenueCat to the Supabase user (avoid flashing paywall). */
+  const [isLinkingPurchasesToSession, setIsLinkingPurchasesToSession] = useState(false);
 
   useEffect(
     () => subscribeSyncGating(() => setSyncEntitled(getSyncEntitled())),
@@ -245,84 +247,129 @@ export function SyncEntitlementProvider({ children }) {
     const purchases = purchasesRef.current;
     if (!purchases) return;
     const batch = drainOtpSessionQueue();
-    for (const item of batch) {
-      const finish = item.done;
-      try {
-        const { userId, source } = item;
-        if (!userId?.trim()) continue;
-        const uid = userId.trim();
+    if (batch.length) setIsLinkingPurchasesToSession(true);
+    try {
+      for (const item of batch) {
+        const finish = item.done;
+        try {
+          const { userId, source } = item;
+          if (!userId?.trim()) continue;
+          const uid = userId.trim();
 
-        /**
-         * Server check by Supabase user id must decide sync — `identifyUser` merges this browser's
-         * anonymous RevenueCat profile into the account, which incorrectly "gifts" sync to every
-         * new email on a device that ever had anonymous/test entitlements.
-         */
-        const remoteEntitled = await checkSyncEntitlementRemote(uid);
+          /**
+           * Server check by Supabase user id first.
+           * On a *new device*, GET /subscribers/{uid} can lag behind or return 404 until RevenueCat
+           * has been switched to that app user id — so for OTP verify we may still need identifyUser
+           * when the anonymous RC user does **not** already have `sync` (avoids gifting a local
+           * anonymous/test purchase to an arbitrary email).
+           */
+          const remoteEntitled = await checkSyncEntitlementRemote(uid);
 
-        if (remoteEntitled === true) {
-          setSyncEntitlementActive(true);
-          try {
-            const out = await purchases.identifyUser(uid);
-            rcLinkedSupabaseUserIdRef.current = uid;
-            applyCustomerInfo(unwrapCustomerInfo(out));
-          } catch (e) {
-            console.error('[RevenueCat] post sign-in identify', e);
-          }
-          setSyncRemoteActive(true);
-          if (source === 'verify') showToast('Cloud sync is on');
-        } else {
-          if (remoteEntitled === null) {
-            console.warn(
-              '[RevenueCat] check-sync-entitlement unavailable; leaving entitlement unchanged',
-            );
-          }
-          if (source === 'restore') {
-            /**
-             * App reopen: REST response may have been misparsed, or purchase was on this browser’s
-             * anonymous RC profile. identifyUser merges into the Supabase user; then trust server or
-             * client. (OTP verify stays strict — no identify unless server said entitled above.)
-             */
+          if (remoteEntitled === true) {
+            setSyncEntitlementActive(true);
             try {
               const out = await purchases.identifyUser(uid);
               rcLinkedSupabaseUserIdRef.current = uid;
               applyCustomerInfo(unwrapCustomerInfo(out));
-              const remoteAfter = await checkSyncEntitlementRemote(uid);
-              const entitled = remoteAfter === true || getSyncEntitled();
-              if (entitled) {
-                setSyncEntitlementActive(true);
-                setSyncRemoteActive(true);
-              } else {
-                // Only downgrade if the server definitively says "not entitled".
-                if (remoteAfter === false) {
+            } catch (e) {
+              console.error('[RevenueCat] post sign-in identify', e);
+            }
+            setSyncRemoteActive(true);
+            if (source === 'verify') showToast('Cloud sync is on');
+          } else {
+            if (remoteEntitled === null) {
+              console.warn(
+                '[RevenueCat] check-sync-entitlement unavailable; leaving entitlement unchanged',
+              );
+            }
+            if (source === 'restore') {
+              /**
+               * App reopen: identifyUser then trust server or client entitlements.
+               */
+              try {
+                const out = await purchases.identifyUser(uid);
+                rcLinkedSupabaseUserIdRef.current = uid;
+                applyCustomerInfo(unwrapCustomerInfo(out));
+                const remoteAfter = await checkSyncEntitlementRemote(uid);
+                const entitled = remoteAfter === true || getSyncEntitled();
+                if (entitled) {
+                  setSyncEntitlementActive(true);
+                  setSyncRemoteActive(true);
+                } else {
+                  if (remoteAfter === false) {
+                    setSyncEntitlementActive(false);
+                    setSyncRemoteActive(false);
+                  }
+                }
+              } catch (e) {
+                console.error('[RevenueCat] restore session RevenueCat link', e);
+              }
+            } else if (source === 'verify') {
+              let anonHasSync = false;
+              try {
+                const anonInfo = unwrapCustomerInfo(await purchases.getCustomerInfo());
+                anonHasSync = customerInfoHasSync(anonInfo);
+              } catch {
+                anonHasSync = false;
+              }
+
+              if (anonHasSync) {
+                // Anonymous RC user already has sync — do not merge onto this OTP account.
+                setSyncEntitlementActive(false);
+                setSyncRemoteActive(false);
+                if (remoteEntitled === false) {
+                  setPaywallSubtitle(
+                    'Subscribe once to sync notes across devices and keep a cloud backup.',
+                  );
+                  setEnableSyncOpen(true);
+                } else {
+                  showToast('Could not verify sync status right now. Try again in a moment.');
+                }
+                continue;
+              }
+
+              try {
+                const out = await purchases.identifyUser(uid);
+                rcLinkedSupabaseUserIdRef.current = uid;
+                applyCustomerInfo(unwrapCustomerInfo(out));
+                const remoteAfter = await checkSyncEntitlementRemote(uid);
+                let ci;
+                try {
+                  ci = unwrapCustomerInfo(await purchases.getCustomerInfo());
+                } catch {
+                  ci = null;
+                }
+                const sdkActive = customerInfoHasSync(ci);
+                const entitled = remoteAfter === true || sdkActive;
+
+                if (entitled) {
+                  setSyncEntitlementActive(true);
+                  setSyncRemoteActive(true);
+                  showToast('Cloud sync is on');
+                } else if (remoteAfter === false && !sdkActive) {
                   setSyncEntitlementActive(false);
                   setSyncRemoteActive(false);
+                  setPaywallSubtitle(
+                    'Subscribe once to sync notes across devices and keep a cloud backup.',
+                  );
+                  setEnableSyncOpen(true);
+                } else {
+                  showToast('Could not verify sync status right now. Try again in a moment.');
                 }
+              } catch (e) {
+                console.error('[RevenueCat] verify session RevenueCat link', e);
+                showToast('Could not verify sync status right now. Try again in a moment.');
               }
-            } catch (e) {
-              console.error('[RevenueCat] restore session RevenueCat link', e);
-              // On transient failures, don't force the user back into a paywall loop.
-            }
-          } else {
-            if (remoteEntitled === false) {
-              setSyncEntitlementActive(false);
-              setSyncRemoteActive(false);
-              if (source === 'verify') {
-                setPaywallSubtitle(
-                  'Subscribe once to sync notes across devices and keep a cloud backup.',
-                );
-                setEnableSyncOpen(true);
-              }
-            } else if (remoteEntitled === null && source === 'verify') {
-              showToast('Could not verify sync status right now. Try again in a moment.');
             }
           }
+        } catch (e) {
+          console.error('[RevenueCat] post sign-in identify', e);
+        } finally {
+          finish?.();
         }
-      } catch (e) {
-        console.error('[RevenueCat] post sign-in identify', e);
-        // Don't force-disable on transient failures.
-      } finally {
-        finish?.();
       }
+    } finally {
+      if (batch.length) setIsLinkingPurchasesToSession(false);
     }
   }, [applyCustomerInfo, showToast]);
 
@@ -345,6 +392,7 @@ export function SyncEntitlementProvider({ children }) {
     closeEnableSync,
     purchaseUnlockSync,
     showToast,
+    isLinkingPurchasesToSession,
   };
 
   return (
