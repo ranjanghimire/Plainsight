@@ -13,7 +13,7 @@ import {
 
 export function ManagePage() {
   const navigate = useNavigate();
-  const { load } = useWorkspace();
+  const { load, deleteHiddenWorkspace } = useWorkspace();
   const [workspaces, setWorkspaces] = useState([]);
   const [editingKey, setEditingKey] = useState(null);
   const [editName, setEditName] = useState('');
@@ -46,10 +46,15 @@ export function ManagePage() {
     setEditingKey(null);
   };
 
-  const handleDelete = (key) => {
-    if (confirm('Delete this workspace? This cannot be undone.')) {
-      deleteWorkspace(key);
+  const handleDelete = async (key) => {
+    if (!confirm('Delete this workspace? This cannot be undone.')) return;
+    const ok = await deleteHiddenWorkspace(key);
+    if (ok) {
       setWorkspaces((prev) => prev.filter((k) => k !== key));
+    } else {
+      window.alert(
+        'Could not delete this workspace. If you use cloud sync, check your connection and try again. If the problem continues, the database may need related notes removed first.',
+      );
     }
   };
 

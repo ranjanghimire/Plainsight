@@ -2,8 +2,7 @@ import { useCallback, useRef, useLayoutEffect, useState, useEffect } from 'react
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { getWorkspaceKey, getMasterKey, setMasterKey, clearMasterKey } from '../utils/storage';
-import { loadWorkspace, saveWorkspace, getDefaultWorkspaceData } from '../utils/storage';
+import { getMasterKey, setMasterKey, clearMasterKey } from '../utils/storage';
 
 const TEXTAREA_MAX_PX = 160;
 /** Lets the floating send button receive tap before blur hides it */
@@ -53,7 +52,8 @@ function useKeyboardOverlapBottom() {
 
 export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = false }) {
   const navigate = useNavigate();
-  const { switchWorkspace, currentWorkspace } = useWorkspace();
+  const { switchWorkspace, currentWorkspace, canOpenOrCreateHiddenWorkspace } =
+    useWorkspace();
   const textareaRef = useRef(null);
   const blurHideTimeoutRef = useRef(null);
   const [inputFocused, setInputFocused] = useState(false);
@@ -137,18 +137,16 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       const rest = cmd.slice(1).trim();
       if (rest) {
         const name = rest.toLowerCase().replace(/\s+/g, '_');
-        const key = getWorkspaceKey(name);
-        let data = loadWorkspace(key);
-        if (!data.notes?.length && !data.categories?.length) {
-          data = getDefaultWorkspaceData();
-          saveWorkspace(key, data);
+        if (!canOpenOrCreateHiddenWorkspace(name)) {
+          onChange?.('');
+          return;
         }
         switchWorkspace(name);
         navigate(name === 'home' ? '/' : `/w/${name}`);
         onChange?.('');
       }
     }
-  }, [value, navigate, onChange, switchWorkspace, currentWorkspace]);
+  }, [value, navigate, onChange, switchWorkspace, currentWorkspace, canOpenOrCreateHiddenWorkspace]);
 
   const submitEntry = useCallback(() => {
     if (searchOnly) return;

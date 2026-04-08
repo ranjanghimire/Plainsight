@@ -22,9 +22,19 @@ import {
   getWorkspaceIdForStorageKey,
   removeWorkspaceIdMapping,
   setWorkspaceIdMapping,
+  countHiddenWorkspaceKeys,
 } from '../utils/storage';
+import {
+  MAX_FREE_HIDDEN_WORKSPACES,
+  MAX_FREE_VISIBLE_WORKSPACES,
+} from '../constants/workspaceLimits';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
-import { getCanUseSupabase, subscribeSyncGating } from '../sync/syncEnabled';
+import {
+  getCanUseSupabase,
+  getSyncEntitled,
+  subscribeSyncGating,
+} from '../sync/syncEnabled';
+import { useSyncEntitlement } from './SyncEntitlementContext';
 import {
   deleteWorkspaceRemote,
   subscribeToNotes,
@@ -103,7 +113,46 @@ function computeSyncPlaceholderState() {
 }
 
 export function WorkspaceProvider({ children }) {
+  const { showToast } = useSyncEntitlement();
   const initialWorkspaceState = useMemo(() => computeSyncPlaceholderState(), []);
+
+  const peekHiddenWorkspaceCreationAllowed = useCallback((name) => {
+    if (getSyncEntitled()) return true;
+    const slug = (name || '').toLowerCase().trim().replace(/\s+/g, '_');
+    if (!slug || slug === 'home') return true;
+    const key = getWorkspaceKey(name);
+    try {
+      if (localStorage.getItem(key) !== null) return true;
+    } catch {
+      return true;
+    }
+    return countHiddenWorkspaceKeys() < MAX_FREE_HIDDEN_WORKSPACES;
+  }, []);
+
+  const canOpenOrCreateHiddenWorkspace = useCallback(
+    (name) => {
+      if (peekHiddenWorkspaceCreationAllowed(name)) return true;
+      showToast(
+        'Free plan allows one hidden workspace. Upgrade to cloud sync for more.',
+      );
+      return false;
+    },
+    [peekHiddenWorkspaceCreationAllowed, showToast],
+  );
+
+  const canAddVisibleWorkspace = useCallback(
+    (currentVisibleCount) => {
+      if (getSyncEntitled()) return true;
+      if (currentVisibleCount >= MAX_FREE_VISIBLE_WORKSPACES) {
+        showToast(
+          `Free plan allows ${MAX_FREE_VISIBLE_WORKSPACES} visible workspaces (including Home). Upgrade to cloud sync for more.`,
+        );
+        return false;
+      }
+      return true;
+    },
+    [showToast],
+  );
 
   const [activeStorageKey, setActiveStorageKey] = useState(
     () => initialWorkspaceState.activeStorageKey,
@@ -318,6 +367,7 @@ export function WorkspaceProvider({ children }) {
 
   const applyNavigateByWorkspaceName = useCallback(
     (name) => {
+      if (!canOpenOrCreateHiddenWorkspace(name)) return;
       const key = getWorkspaceKey(name);
       let nextData = loadWorkspace(key);
       if (isWorkspaceDataEmpty(nextData)) {
@@ -336,7 +386,7 @@ export function WorkspaceProvider({ children }) {
       bumpWorkspaceSwitch();
       queueFullSync();
     },
-    [bumpWorkspaceSwitch],
+    [bumpWorkspaceSwitch, canOpenOrCreateHiddenWorkspace],
   );
 
   /**
@@ -403,6 +453,7 @@ export function WorkspaceProvider({ children }) {
     (displayName) => {
       const name = displayName.trim();
       if (!name) return null;
+      if (!canAddVisibleWorkspace(visibleWorkspaces.length)) return null;
       queueWorkspaceContentTransition('visible', () => {
         const id = uuidv4();
         const key = `${VISIBLE_WS_PREFIX}${id}`;
@@ -427,7 +478,12 @@ export function WorkspaceProvider({ children }) {
       });
       return null;
     },
-    [bumpWorkspaceSwitch, queueWorkspaceContentTransition],
+    [
+      bumpWorkspaceSwitch,
+      queueWorkspaceContentTransition,
+      visibleWorkspaces.length,
+      canAddVisibleWorkspace,
+    ],
   );
 
   const renameVisibleWorkspace = useCallback((entry, newDisplayName) => {
@@ -482,6 +538,50 @@ export function WorkspaceProvider({ children }) {
       });
       setVisibleWorkspaces(next);
       deleteWorkspace(entry.key);
+      if (wasActive) {
+        let homeData = loadWorkspace('workspace_home');
+        if (isWorkspaceDataEmpty(homeData)) {
+          homeData = getDefaultWorkspaceData();
+          saveWorkspace('workspace_home', homeData);
+        }
+        setActiveStorageKey('workspace_home');
+        setData(homeData);
+        setCurrentWorkspace('home');
+        bumpWorkspaceSwitch();
+      }
+      queueFullSync();
+      return true;
+    },
+    [activeStorageKey, bumpWorkspaceSwitch],
+  );
+
+  /** Legacy hidden workspaces (`workspace_*`): same remote + IndexedDB cleanup as visible deletes. */
+  const deleteHiddenWorkspace = useCallback(
+    async (storageKey) => {
+      if (storageKey === 'workspace_home') return false;
+      const workspaceId = getWorkspaceIdForStorageKey(storageKey);
+
+      if (getCanUseSupabase() && workspaceId) {
+        const remoteDel = await deleteWorkspaceRemote(workspaceId);
+        if (!remoteDel.ok) {
+          console.error('[deleteHiddenWorkspace]', remoteDel.error);
+          return false;
+        }
+      }
+
+      try {
+        if (workspaceId) {
+          const localWs = await getLocalWorkspaces();
+          await saveLocalWorkspaces(localWs.filter((w) => w.id !== workspaceId));
+        }
+      } catch {
+        /* ignore */
+      }
+
+      removeWorkspaceIdMapping(storageKey, workspaceId);
+
+      const wasActive = activeStorageKey === storageKey;
+      deleteWorkspace(storageKey);
       if (wasActive) {
         let homeData = loadWorkspace('workspace_home');
         if (isWorkspaceDataEmpty(homeData)) {
@@ -744,6 +844,7 @@ export function WorkspaceProvider({ children }) {
     createVisibleWorkspace,
     renameVisibleWorkspace,
     deleteVisibleWorkspace,
+    deleteHiddenWorkspace,
     addNote,
     updateNote,
     deleteNote,
@@ -754,6 +855,8 @@ export function WorkspaceProvider({ children }) {
     addCategory,
     deleteCategory,
     renameCategory,
+    canOpenOrCreateHiddenWorkspace,
+    peekHiddenWorkspaceCreationAllowed,
   };
 
   return (

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { NotesView } from '../components/NotesView';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useSyncEntitlement } from '../context/SyncEntitlementContext';
 import {
   getWorkspaceKey,
   loadAppState,
@@ -12,8 +13,10 @@ import {
 export function WorkspacePage() {
   const { workspace } = useParams();
   const navigate = useNavigate();
-  const { load, hydrationComplete } = useWorkspace();
+  const { load, hydrationComplete, peekHiddenWorkspaceCreationAllowed } = useWorkspace();
+  const { showToast } = useSyncEntitlement();
   const routeLoadEpochRef = useRef(0);
+  const hiddenQuotaWarnedForRef = useRef(null);
 
   useEffect(() => {
     if (!workspace) return undefined;
@@ -25,6 +28,17 @@ export function WorkspacePage() {
       if (hydrationComplete) navigate('/', { replace: true });
       return undefined;
     }
+    if (!peekHiddenWorkspaceCreationAllowed(workspace)) {
+      if (hiddenQuotaWarnedForRef.current !== workspace) {
+        hiddenQuotaWarnedForRef.current = workspace;
+        showToast(
+          'Free plan allows one hidden workspace. Upgrade to cloud sync for more.',
+        );
+      }
+      if (hydrationComplete) navigate('/', { replace: true });
+      return undefined;
+    }
+    hiddenQuotaWarnedForRef.current = null;
     // Menu-visible workspaces (e.g. home) wait for hydration so restore does not overwrite.
     // Legacy hidden keys from /manage are not in the menu list; load immediately to avoid stale notes.
     if (!hydrationComplete && !legacyHidden) return undefined;
@@ -35,7 +49,14 @@ export function WorkspacePage() {
     return () => {
       routeLoadEpochRef.current += 1;
     };
-  }, [workspace, load, hydrationComplete, navigate]);
+  }, [
+    workspace,
+    load,
+    hydrationComplete,
+    navigate,
+    peekHiddenWorkspaceCreationAllowed,
+    showToast,
+  ]);
 
   return (
     <div className="space-y-4">

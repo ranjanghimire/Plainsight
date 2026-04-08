@@ -347,6 +347,11 @@ export function getAllWorkspaceKeys() {
   return keys;
 }
 
+/** Dot-command / legacy hidden keys: `workspace_*` except Home. */
+export function countHiddenWorkspaceKeys() {
+  return getAllWorkspaceKeys().filter((k) => k !== 'workspace_home').length;
+}
+
 function normalizeArchivedNotes(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out = {};
