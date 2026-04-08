@@ -22,10 +22,11 @@ import {
   getOrCreateWorkspaceIdForStorageKey,
   getStorageKeyForWorkspaceId,
   getWorkspaceIdForStorageKey,
+  hiddenWorkspaceSlugFromName,
   removeWorkspaceIdMapping,
-  resolveHiddenWorkspaceIdBySlugFromList,
   resolveWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
+  slugFromLegacyHiddenStorageKey,
   countHiddenWorkspaceKeys,
 } from '../utils/storage';
 import {
@@ -579,53 +580,89 @@ export function WorkspaceProvider({ children }) {
         /* ignore */
       }
 
-      const workspaceId =
-        getWorkspaceIdForStorageKey(storageKey) ||
-        resolveWorkspaceIdForStorageKey(storageKey, localWs) ||
-        resolveHiddenWorkspaceIdBySlugFromList(storageKey, localWs);
-
-      const canonicalKey =
-        workspaceId != null ? getStorageKeyForWorkspaceId(workspaceId) : null;
-
-      if (getCanUseSupabase() && workspaceId) {
-        const remoteDel = await deleteWorkspaceRemote(workspaceId);
-        if (!remoteDel.ok) {
-          console.error('[deleteHiddenWorkspace]', remoteDel.error);
-          return false;
+      const slug = slugFromLegacyHiddenStorageKey(storageKey);
+      const uniqueIds = [];
+      const idSet = new Set();
+      if (slug) {
+        for (const w of localWs) {
+          if (
+            w?.id &&
+            w.kind === 'hidden' &&
+            hiddenWorkspaceSlugFromName(w.name) === slug
+          ) {
+            if (!idSet.has(w.id)) {
+              idSet.add(w.id);
+              uniqueIds.push(w.id);
+            }
+          }
+        }
+      }
+      if (uniqueIds.length === 0) {
+        const one =
+          getWorkspaceIdForStorageKey(storageKey) ||
+          resolveWorkspaceIdForStorageKey(storageKey, localWs);
+        if (one) {
+          idSet.add(one);
+          uniqueIds.push(one);
         }
       }
 
-      try {
-        if (workspaceId) {
-          await saveLocalWorkspaces(localWs.filter((w) => w.id !== workspaceId));
-          await clearLocalWorkspaceData(workspaceId);
-          const pins = await getLocalWorkspacePins();
-          await saveLocalWorkspacePins(
-            pins.filter((p) => p.workspace_id !== workspaceId),
-          );
-        }
-      } catch (e) {
-        console.error('[deleteHiddenWorkspace] local cleanup', e);
+      if (uniqueIds.length === 0) {
+        removeWorkspaceIdMapping(storageKey, undefined);
+        deleteWorkspace(storageKey);
+        queueFullSync();
+        return true;
       }
 
-      if (workspaceId) {
-        for (const k of getAllWorkspaceKeys()) {
-          if (k === 'workspace_home') continue;
-          if (getWorkspaceIdForStorageKey(k) === workspaceId) {
-            deleteWorkspace(k);
+      if (getCanUseSupabase()) {
+        for (const wid of uniqueIds) {
+          const remoteDel = await deleteWorkspaceRemote(wid, { allowZeroRows: true });
+          if (!remoteDel.ok) {
+            console.error('[deleteHiddenWorkspace]', remoteDel.error);
+            return false;
           }
         }
       }
 
-      removeWorkspaceIdMapping(storageKey, workspaceId);
+      try {
+        await saveLocalWorkspaces(localWs.filter((w) => !uniqueIds.includes(w.id)));
+        for (const wid of uniqueIds) {
+          await clearLocalWorkspaceData(wid);
+        }
+        const pins = await getLocalWorkspacePins();
+        await saveLocalWorkspacePins(
+          pins.filter((p) => !uniqueIds.includes(p.workspace_id)),
+        );
+      } catch (e) {
+        console.error('[deleteHiddenWorkspace] local cleanup', e);
+      }
 
+      const canonicalKeys = uniqueIds.map((wid) => ({
+        wid,
+        key: getStorageKeyForWorkspaceId(wid),
+      }));
+      const activeWid = getWorkspaceIdForStorageKey(activeStorageKey);
       const wasActive =
         activeStorageKey === storageKey ||
-        (canonicalKey != null && activeStorageKey === canonicalKey);
+        (activeWid != null && uniqueIds.includes(activeWid));
+
+      for (const k of getAllWorkspaceKeys()) {
+        if (k === 'workspace_home') continue;
+        const kid = getWorkspaceIdForStorageKey(k);
+        if (kid && uniqueIds.includes(kid)) {
+          deleteWorkspace(k);
+        }
+      }
+
+      for (const wid of uniqueIds) {
+        removeWorkspaceIdMapping(null, wid);
+      }
 
       deleteWorkspace(storageKey);
-      if (canonicalKey && canonicalKey !== storageKey) {
-        deleteWorkspace(canonicalKey);
+      for (const { key: canonicalKey } of canonicalKeys) {
+        if (canonicalKey && canonicalKey !== storageKey) {
+          deleteWorkspace(canonicalKey);
+        }
       }
       if (wasActive) {
         let homeData = loadWorkspace('workspace_home');

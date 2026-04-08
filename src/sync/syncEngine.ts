@@ -276,9 +276,19 @@ export async function pushWorkspaces(
   }
 }
 
-/** Delete one workspace row for the signed-in user (RLS). Call before dropping local menu + IndexedDB row. */
+export type DeleteWorkspaceRemoteOptions = {
+  /** When false (default), treat "0 rows deleted" as failure so callers can surface a real error. */
+  allowZeroRows?: boolean;
+};
+
+/**
+ * Delete one workspace row for the signed-in user (RLS).
+ * Uses `.select()` so PostgREST returns how many rows were removed; otherwise "success" with 0
+ * rows is easy to mistake for a real delete.
+ */
 export async function deleteWorkspaceRemote(
   workspaceId: string,
+  options?: DeleteWorkspaceRemoteOptions,
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
@@ -287,8 +297,19 @@ export async function deleteWorkspaceRemote(
     if (!workspaceId || typeof workspaceId !== 'string') {
       return { ok: false, error: mkError('Missing workspace id', new Error()) };
     }
-    const { error } = await getSupabase().from('workspaces').delete().eq('id', workspaceId);
-    if (error) return { ok: false, error: mkError(error.message, error) };
+    const allowZero = options?.allowZeroRows === true;
+    const res = await getSupabase().from('workspaces').delete().eq('id', workspaceId).select('id');
+    if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
+    const n = Array.isArray(res.data) ? res.data.length : 0;
+    if (!allowZero && n < 1) {
+      return {
+        ok: false,
+        error: mkError(
+          'Workspace was not deleted (no matching row). Check sync and try again.',
+          new Error('delete_workspace_zero_rows'),
+        ),
+      };
+    }
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to delete workspace', e) };
@@ -350,7 +371,7 @@ async function pruneRedundantNumberedVisibleWorkspaces(
   if (removeIds.length === 0) return workspaces;
   const succeeded = new Set<string>();
   for (const id of removeIds) {
-    const del = await deleteWorkspaceRemote(id);
+    const del = await deleteWorkspaceRemote(id, { allowZeroRows: true });
     if (del.ok) {
       succeeded.add(id);
       await purgeWorkspaceClientSide(id);
