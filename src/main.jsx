@@ -1,7 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
 import './index.css'
 import App from './App.jsx'
+
+if (Capacitor.isNativePlatform()) {
+  void StatusBar.setStyle({ style: Style.Default })
+}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -9,8 +15,9 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-if ('serviceWorker' in navigator) {
+// PWA offline cache on web only; WKWebView + file bundle is unreliable for SW.
+if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
   })
 }
