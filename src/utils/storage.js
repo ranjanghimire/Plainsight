@@ -468,9 +468,52 @@ export function getAllWorkspaceKeys() {
   return keys;
 }
 
-/** Dot-command / legacy hidden keys: `workspace_*` except Home. */
+/** Sync mirror of localDB `plainsight_local_workspaces` — source of truth for sync merge. */
+const PLAINSIGHT_LOCAL_WORKSPACES_JSON_KEY = 'plainsight_local_workspaces';
+
+function readMergedWorkspacesFromLocalStorageSync() {
+  try {
+    const raw = localStorage.getItem(PLAINSIGHT_LOCAL_WORKSPACES_JSON_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Hidden workspaces for /manage: one entry per merged `kind: 'hidden'` row with the same storage
+ * key assignment as bind (not every loose `workspace_*` localStorage key).
+ */
+export function getHiddenWorkspaceManageEntries() {
+  const workspaces = readMergedWorkspacesFromLocalStorageSync();
+  if (workspaces.length === 0) return [];
+  const used = new Set();
+  const sorted = [...workspaces].sort((a, b) => {
+    const homeScore = (w) =>
+      w.kind === 'visible' && (w.name || '').trim().toLowerCase() === 'home'
+        ? 0
+        : 1;
+    return homeScore(a) - homeScore(b);
+  });
+  const out = [];
+  for (const w of sorted) {
+    if (!w?.id || w.kind !== 'hidden') continue;
+    const storageKey = assignStorageKeyForRemoteWorkspace(w, used);
+    used.add(storageKey);
+    if (!storageKey.startsWith(WORKSPACE_PREFIX) || storageKey === 'workspace_home') continue;
+    const displayName =
+      (typeof w.name === 'string' && w.name.trim()) ||
+      getWorkspaceNameFromKey(storageKey);
+    out.push({ storageKey, id: w.id, displayName });
+  }
+  return out;
+}
+
+/** Dot-command / legacy hidden keys: merged hidden rows (excludes orphan `workspace_*` keys). */
 export function countHiddenWorkspaceKeys() {
-  return getAllWorkspaceKeys().filter((k) => k !== 'workspace_home').length;
+  return getHiddenWorkspaceManageEntries().length;
 }
 
 function normalizeArchivedNotes(raw) {

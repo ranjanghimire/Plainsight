@@ -79,8 +79,10 @@ function WorkspaceContentShell({ children }) {
 
 function AppHeader({ onOpenSettings }) {
   const { currentWorkspace, visibleWorkspaces } = useWorkspace();
+  const { archiveMode } = useArchiveMode();
 
   const headerTitle = useMemo(() => {
+    if (archiveMode) return 'Archive';
     if (currentWorkspace === 'home') return 'Plainsight';
     if (typeof currentWorkspace === 'string' && currentWorkspace.startsWith('visible:')) {
       const id = currentWorkspace.slice('visible:'.length);
@@ -91,7 +93,7 @@ function AppHeader({ onOpenSettings }) {
     const spaced = slug.replace(/_/g, ' ').trim();
     if (!spaced) return 'Workspace';
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
-  }, [currentWorkspace, visibleWorkspaces]);
+  }, [archiveMode, currentWorkspace, visibleWorkspaces]);
 
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">
