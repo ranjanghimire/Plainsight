@@ -562,6 +562,19 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
 
 const FULL_SYNC_MAX_PK_RETRIES = 2;
 
+function mergeRemoteAndLocalWorkspaces(
+  remote: Workspace[],
+  local: Workspace[],
+): Workspace[] {
+  const localById = new Map(local.map((w) => [w.id, w]));
+  const remoteIdSet = new Set(remote.map((w) => w.id));
+  const merged: Workspace[] = [...remote];
+  for (const [id, lw] of localById.entries()) {
+    if (!remoteIdSet.has(id)) merged.push(lw);
+  }
+  return merged;
+}
+
 export async function fullSync(
   workspaceIds?: string[],
   pkRetryDepth = 0,
@@ -582,8 +595,16 @@ export async function fullSync(
   try {
     const ownerId = await getOwnerId();
 
-    // 1) Pull remote workspaces (required behavior: direct select)
-    const remoteWorkspacesRes = await getSupabase().from('workspaces').select('*');
+    // Pull pins first (does not depend on workspace list).
+    const remotePins = await pullWorkspacePins();
+    if (remotePins.error) return { ok: false, error: remotePins.error };
+
+    // Fetch remote + local together, merge, prune, then persist in one tight sequence so we never
+    // write a workspace list from a stale remote snapshot (e.g. user deleted rows while sync ran).
+    const [remoteWorkspacesRes, localWorkspaces] = await Promise.all([
+      getSupabase().from('workspaces').select('*'),
+      getLocalWorkspaces(),
+    ]);
     if (remoteWorkspacesRes.error) {
       return {
         ok: false,
@@ -591,33 +612,37 @@ export async function fullSync(
       };
     }
     const remoteWorkspaces = (remoteWorkspacesRes.data || []) as Workspace[];
+    let mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteWorkspaces, localWorkspaces);
 
-    // Pull remote pins (workspace_pins is owned via RLS)
-    const remotePins = await pullWorkspacePins();
-    if (remotePins.error) return { ok: false, error: remotePins.error };
-
-    // 2) Load local workspaces
-    const localWorkspaces = await getLocalWorkspaces();
-
-    // 3) Merge with REMOTE priority:
-    // - If workspace exists remotely -> use remote version
-    // - If exists only locally -> keep (offline-created)
-    const localById = new Map(localWorkspaces.map((w) => [w.id, w]));
-    const remoteIds = new Set(remoteWorkspaces.map((w) => w.id));
-    const mergedWorkspaces: Workspace[] = [];
-    for (const rw of remoteWorkspaces) mergedWorkspaces.push(rw);
-    for (const [id, lw] of localById.entries()) {
-      if (!remoteIds.has(id)) mergedWorkspaces.push(lw);
-    }
-
-    const mergedAfterNumberedPrune = ownerId
+    let mergedAfterNumberedPrune = ownerId
       ? await pruneRedundantNumberedVisibleWorkspaces(mergedWorkspaces)
       : mergedWorkspaces;
 
-    // owner_id + unique (owner, name)–safe labels before local save and push
-    const mergedWorkspacesWithOwner = ownerId
+    let mergedWorkspacesWithOwner = ownerId
       ? prepareWorkspacesForRemote(mergedAfterNumberedPrune, ownerId)
       : mergedAfterNumberedPrune;
+
+    // Second snapshot after prune/prepare: those steps can take long enough that the user finishes
+    // deletes (or another tab completes sync) before we persist — do not resurrect deleted rows.
+    const [remoteFinalRes, localFinal] = await Promise.all([
+      getSupabase().from('workspaces').select('*'),
+      getLocalWorkspaces(),
+    ]);
+    if (remoteFinalRes.error) {
+      return {
+        ok: false,
+        error: mkError(remoteFinalRes.error.message, remoteFinalRes.error),
+      };
+    }
+    const remoteFinal = (remoteFinalRes.data || []) as Workspace[];
+    mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteFinal, localFinal);
+    mergedAfterNumberedPrune = ownerId
+      ? await pruneRedundantNumberedVisibleWorkspaces(mergedWorkspaces)
+      : mergedWorkspaces;
+    mergedWorkspacesWithOwner = ownerId
+      ? prepareWorkspacesForRemote(mergedAfterNumberedPrune, ownerId)
+      : mergedAfterNumberedPrune;
+    const remoteIds = new Set(remoteFinal.map((w) => w.id));
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
     await saveLocalWorkspaces(mergedWorkspacesWithOwner);
