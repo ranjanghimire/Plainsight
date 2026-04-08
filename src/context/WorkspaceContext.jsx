@@ -616,7 +616,9 @@ export function WorkspaceProvider({ children }) {
 
       if (getCanUseSupabase()) {
         for (const wid of uniqueIds) {
-          const remoteDel = await deleteWorkspaceRemote(wid, { allowZeroRows: true });
+          // Require a real workspace row delete; allowZeroRows hid cases where the row stayed on
+          // Supabase and the same name (e.g. "tree") reappeared after the next sync.
+          const remoteDel = await deleteWorkspaceRemote(wid);
           if (!remoteDel.ok) {
             console.error('[deleteHiddenWorkspace]', remoteDel.error);
             return false;

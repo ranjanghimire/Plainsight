@@ -279,7 +279,28 @@ export async function pushWorkspaces(
 export type DeleteWorkspaceRemoteOptions = {
   /** When false (default), treat "0 rows deleted" as failure so callers can surface a real error. */
   allowZeroRows?: boolean;
+  /**
+   * When true (default), delete notes / archived / categories / pins for this workspace first so
+   * FK constraints cannot block the workspace row delete.
+   */
+  cascadeChildren?: boolean;
 };
+
+/** Notes before categories (category_id FK). RLS scopes rows to workspace ownership. */
+async function deleteWorkspaceChildrenRemote(
+  workspaceId: string,
+): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+  const sb = getSupabase();
+  const { error: nErr } = await sb.from('notes').delete().eq('workspace_id', workspaceId);
+  if (nErr) return { ok: false, error: mkError(nErr.message, nErr) };
+  const { error: aErr } = await sb.from('archived_notes').delete().eq('workspace_id', workspaceId);
+  if (aErr) return { ok: false, error: mkError(aErr.message, aErr) };
+  const { error: cErr } = await sb.from('categories').delete().eq('workspace_id', workspaceId);
+  if (cErr) return { ok: false, error: mkError(cErr.message, cErr) };
+  const { error: pErr } = await sb.from('workspace_pins').delete().eq('workspace_id', workspaceId);
+  if (pErr) return { ok: false, error: mkError(pErr.message, pErr) };
+  return { ok: true };
+}
 
 /**
  * Delete one workspace row for the signed-in user (RLS).
@@ -298,6 +319,13 @@ export async function deleteWorkspaceRemote(
       return { ok: false, error: mkError('Missing workspace id', new Error()) };
     }
     const allowZero = options?.allowZeroRows === true;
+    const cascadeChildren = options?.cascadeChildren !== false;
+
+    if (cascadeChildren) {
+      const ch = await deleteWorkspaceChildrenRemote(workspaceId);
+      if (!ch.ok) return ch;
+    }
+
     const res = await getSupabase().from('workspaces').delete().eq('id', workspaceId).select('id');
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     const n = Array.isArray(res.data) ? res.data.length : 0;
@@ -371,7 +399,10 @@ async function pruneRedundantNumberedVisibleWorkspaces(
   if (removeIds.length === 0) return workspaces;
   const succeeded = new Set<string>();
   for (const id of removeIds) {
-    const del = await deleteWorkspaceRemote(id, { allowZeroRows: true });
+    const del = await deleteWorkspaceRemote(id, {
+      allowZeroRows: true,
+      cascadeChildren: true,
+    });
     if (del.ok) {
       succeeded.add(id);
       await purgeWorkspaceClientSide(id);
