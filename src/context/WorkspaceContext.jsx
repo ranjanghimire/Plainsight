@@ -289,7 +289,10 @@ export function WorkspaceProvider({ children }) {
   }, [canUseSupabase, hydrationComplete]);
 
   useEffect(() => {
-    if (!canUseSupabase) return;
+    // Avoid writing placeholder workspace rows before the initial hydration assigns
+    // canonical workspace UUIDs (especially Home). Otherwise we can end up with two
+    // visible "Home" workspaces that later get disambiguated to "Home (2)" on push.
+    if (!canUseSupabase || !hydrationComplete) return;
     const key = activeStorageKey;
     const isHome = key === 'workspace_home';
     const visibleEntry = visibleWorkspaces.find((e) => e.key === key);
@@ -300,7 +303,7 @@ export function WorkspaceProvider({ children }) {
         : getWorkspaceNameFromKey(key);
     const kind = visibleEntry ? 'visible' : isHome ? 'visible' : 'hidden';
     void ensureWorkspaceRow({ storageKey: key, name, kind });
-  }, [canUseSupabase, activeStorageKey, visibleWorkspaces]);
+  }, [canUseSupabase, hydrationComplete, activeStorageKey, visibleWorkspaces]);
 
   useEffect(() => {
     if (!canUseSupabase) return undefined;

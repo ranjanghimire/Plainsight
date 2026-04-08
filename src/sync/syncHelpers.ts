@@ -67,6 +67,15 @@ export async function runInitialHydration(): Promise<void> {
     notifyHydrationComplete({ ok: false });
     return;
   }
-  await fullSync();
+  const result = await fullSync();
+  // When hydration runs on-demand (e.g. after OTP verify + enabling cloud sync),
+  // the UI needs the same refresh signal that `queueFullSync()` emits.
+  if (result && typeof result === 'object' && 'ok' in result && result.ok) {
+    try {
+      window.dispatchEvent(new CustomEvent('plainsight:full-sync'));
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
