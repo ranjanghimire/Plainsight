@@ -48,7 +48,10 @@ import {
   subscribeToWorkspacePins,
 } from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
-import { getSession as getLocalSession } from '../auth/localSession';
+import {
+  getSession as getLocalSession,
+  LOCAL_DEV_USER_ID,
+} from '../auth/localSession';
 import {
   clearLocalWorkspaceData,
   getLocalArchivedNoteTombstones,
@@ -63,12 +66,9 @@ import {
 import { archivedRowIdForText } from '../sync/workspaceStorageBridge';
 
 async function ensureWorkspaceRow({ storageKey, name, kind }) {
-  if (!getCanUseSupabase()) return;
   const now = new Date().toISOString();
   const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
-
-  const userId = getLocalSession().userId;
-  if (!userId) return;
+  const userId = getLocalSession().userId || LOCAL_DEV_USER_ID;
 
   const row = {
     id,
@@ -83,7 +83,13 @@ async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const idx = existing.findIndex((w) => w.id === id);
   const next = [...existing];
   if (idx >= 0) {
-    next[idx] = { ...next[idx], ...row, owner_id: userId };
+    const prev = next[idx];
+    next[idx] = {
+      ...prev,
+      ...row,
+      owner_id: userId,
+      created_at: prev.created_at || row.created_at,
+    };
   } else {
     next.push(row);
   }
@@ -346,10 +352,9 @@ export function WorkspaceProvider({ children }) {
   }, [canUseSupabase, hydrationComplete]);
 
   useEffect(() => {
-    // Avoid writing placeholder workspace rows before the initial hydration assigns
-    // canonical workspace UUIDs (especially Home). Otherwise we can end up with two
-    // visible "Home" workspaces that later get disambiguated to "Home (2)" on push.
-    if (!canUseSupabase || !hydrationComplete) return;
+    // With cloud sync: avoid writing workspace rows before hydration (duplicate Home rows on push).
+    // Local-only: always persist so /manage and quotas see hidden workspaces.
+    if (canUseSupabase && !hydrationComplete) return;
     const key = activeStorageKey;
     const isHome = key === 'workspace_home';
     const visibleEntry = visibleWorkspaces.find((e) => e.key === key);
@@ -381,12 +386,12 @@ export function WorkspaceProvider({ children }) {
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
         saveWorkspace(key, nextData);
-        void ensureWorkspaceRow({
-          storageKey: key,
-          name: name === 'home' ? 'Home' : name,
-          kind: name === 'home' ? 'visible' : 'hidden',
-        });
       }
+      void ensureWorkspaceRow({
+        storageKey: key,
+        name: name === 'home' ? 'Home' : name,
+        kind: name === 'home' ? 'visible' : 'hidden',
+      });
       setActiveStorageKey(key);
       setData(nextData);
       setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
@@ -431,12 +436,12 @@ export function WorkspaceProvider({ children }) {
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
         saveWorkspace(entry.key, nextData);
-        void ensureWorkspaceRow({
-          storageKey: entry.key,
-          name: entry.name,
-          kind: 'visible',
-        });
       }
+      void ensureWorkspaceRow({
+        storageKey: entry.key,
+        name: entry.name,
+        kind: 'visible',
+      });
       setActiveStorageKey(entry.key);
       setData(nextData);
       setCurrentWorkspace(entry.id === 'home' ? 'home' : `visible:${entry.id}`);

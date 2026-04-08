@@ -483,12 +483,12 @@ function readMergedWorkspacesFromLocalStorageSync() {
 }
 
 /**
- * Hidden workspaces for /manage: one entry per merged `kind: 'hidden'` row with the same storage
- * key assignment as bind (not every loose `workspace_*` localStorage key).
+ * Hidden workspaces for /manage: merged `kind: 'hidden'` rows (same key assignment as bind),
+ * plus any legacy `workspace_<slug>` blobs that were never mirrored into the merged list
+ * (e.g. local-only before ensureWorkspaceRow wrote rows).
  */
 export function getHiddenWorkspaceManageEntries() {
   const workspaces = readMergedWorkspacesFromLocalStorageSync();
-  if (workspaces.length === 0) return [];
   const used = new Set();
   const sorted = [...workspaces].sort((a, b) => {
     const homeScore = (w) =>
@@ -508,10 +508,25 @@ export function getHiddenWorkspaceManageEntries() {
       getWorkspaceNameFromKey(storageKey);
     out.push({ storageKey, id: w.id, displayName });
   }
+
+  const listed = new Set(out.map((e) => e.storageKey));
+  for (const storageKey of getAllWorkspaceKeys()) {
+    if (storageKey === 'workspace_home') continue;
+    if (!isLegacyHiddenWorkspaceKey(storageKey)) continue;
+    if (listed.has(storageKey)) continue;
+    const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
+    const fromMerged = workspaces.find((w) => w.id === id && w.kind === 'hidden');
+    const displayName =
+      (typeof fromMerged?.name === 'string' && fromMerged.name.trim()) ||
+      getWorkspaceNameFromKey(storageKey);
+    out.push({ storageKey, id, displayName });
+    listed.add(storageKey);
+  }
+
   return out;
 }
 
-/** Dot-command / legacy hidden keys: merged hidden rows (excludes orphan `workspace_*` keys). */
+/** Dot-command / legacy hidden keys: merged rows + orphan `workspace_*` blobs (see getHiddenWorkspaceManageEntries). */
 export function countHiddenWorkspaceKeys() {
   return getHiddenWorkspaceManageEntries().length;
 }
