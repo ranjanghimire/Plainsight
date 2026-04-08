@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { LIFETIME_SYNC_PRICE_DISPLAY } from '../constants/pricing';
 
 export function EnableSyncModal({
   open,
@@ -62,7 +63,7 @@ export function EnableSyncModal({
           </h2>
           <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">
             {subtitle?.trim() ||
-              'Subscribe once to sync notes across devices and keep a cloud backup.'}
+              `Lifetime membership ${LIFETIME_SYNC_PRICE_DISPLAY} (one-time). Sync notes across devices and keep a cloud backup.`}
           </p>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-stone-600 dark:text-stone-300">
             <li>Sync across your devices</li>
@@ -86,7 +87,7 @@ export function EnableSyncModal({
             disabled={unlockDisabled || unlocking}
             className="px-3 py-2 text-sm font-medium rounded-lg bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50 disabled:pointer-events-none dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
           >
-            {unlocking ? 'Processing…' : 'Pay'}
+            {unlocking ? 'Processing…' : `Pay ${LIFETIME_SYNC_PRICE_DISPLAY}`}
           </button>
           <button
             type="button"
