@@ -18,10 +18,12 @@ import {
   loadAppState,
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
+  getAllWorkspaceKeys,
   getOrCreateWorkspaceIdForStorageKey,
   getStorageKeyForWorkspaceId,
   getWorkspaceIdForStorageKey,
   removeWorkspaceIdMapping,
+  resolveHiddenWorkspaceIdBySlugFromList,
   resolveWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
   countHiddenWorkspaceKeys,
@@ -579,7 +581,8 @@ export function WorkspaceProvider({ children }) {
 
       const workspaceId =
         getWorkspaceIdForStorageKey(storageKey) ||
-        resolveWorkspaceIdForStorageKey(storageKey, localWs);
+        resolveWorkspaceIdForStorageKey(storageKey, localWs) ||
+        resolveHiddenWorkspaceIdBySlugFromList(storageKey, localWs);
 
       const canonicalKey =
         workspaceId != null ? getStorageKeyForWorkspaceId(workspaceId) : null;
@@ -603,6 +606,15 @@ export function WorkspaceProvider({ children }) {
         }
       } catch (e) {
         console.error('[deleteHiddenWorkspace] local cleanup', e);
+      }
+
+      if (workspaceId) {
+        for (const k of getAllWorkspaceKeys()) {
+          if (k === 'workspace_home') continue;
+          if (getWorkspaceIdForStorageKey(k) === workspaceId) {
+            deleteWorkspace(k);
+          }
+        }
       }
 
       removeWorkspaceIdMapping(storageKey, workspaceId);

@@ -326,9 +326,11 @@ export function resolveWorkspaceIdForStorageKey(storageKey, workspaces) {
 
 /**
  * Rebuild storageKey ↔ workspace UUID mappings for all merged workspaces (e.g. after local wipe).
+ * Replaces the entire map so deleted workspaces do not leave stale forwards/reverse entries.
  */
 export function bindMergedWorkspacesToStorageKeys(workspaces) {
   if (!Array.isArray(workspaces)) return;
+  const newMap = {};
   const used = new Set();
   const sorted = [...workspaces].sort((a, b) => {
     const homeScore = (w) =>
@@ -340,9 +342,94 @@ export function bindMergedWorkspacesToStorageKeys(workspaces) {
   for (const w of sorted) {
     if (!w?.id) continue;
     const key = assignStorageKeyForRemoteWorkspace(w, used);
-    setWorkspaceIdMapping(key, w.id);
+    newMap[key] = w.id;
+    newMap[`${WORKSPACE_ID_REVERSE_PREFIX}${w.id}`] = key;
     used.add(key);
   }
+  writeWorkspaceIdMap(newMap);
+}
+
+/** Keys assigned by {@link assignStorageKeyForRemoteWorkspace} for this merged list (in sort order). */
+export function collectMergedWorkspaceStorageKeys(workspaces) {
+  const used = new Set();
+  const sorted = [...(workspaces || [])].sort((a, b) => {
+    const homeScore = (w) =>
+      w.kind === 'visible' && (w.name || '').trim().toLowerCase() === 'home'
+        ? 0
+        : 1;
+    return homeScore(a) - homeScore(b);
+  });
+  const keys = [];
+  for (const w of sorted) {
+    if (!w?.id) continue;
+    const key = assignStorageKeyForRemoteWorkspace(w, used);
+    keys.push(key);
+    used.add(key);
+  }
+  return new Set(keys);
+}
+
+/**
+ * Remove workspace_* localStorage blobs that no longer belong to the merged set (orphans from an
+ * old hydration path that always used workspace_<slug>_<12hex> while bind uses workspace_<slug>).
+ */
+export function purgeOrphanWorkspaceBlobsFromLocalStorage(mergedWorkspaces, validKeysOverride) {
+  const valid =
+    validKeysOverride instanceof Set
+      ? validKeysOverride
+      : collectMergedWorkspaceStorageKeys(mergedWorkspaces);
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith(WORKSPACE_PREFIX)) continue;
+    if (!valid.has(k)) toRemove.push(k);
+  }
+  for (const k of toRemove) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Slug segment used for hidden workspace storage keys (matches assignStorageKeyForRemoteWorkspace). */
+export function hiddenWorkspaceSlugFromName(name) {
+  return (
+    (name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_]/g, '') || 'unnamed'
+  );
+}
+
+/**
+ * workspace_<slug> or workspace_<base>_<12hex> → lookup slug (base before disambiguation hex suffix).
+ */
+export function slugFromLegacyHiddenStorageKey(storageKey) {
+  if (
+    typeof storageKey !== 'string' ||
+    storageKey === 'workspace_home' ||
+    !storageKey.startsWith(WORKSPACE_PREFIX)
+  ) {
+    return null;
+  }
+  let rest = storageKey.slice(WORKSPACE_PREFIX.length);
+  const suffixed = rest.match(/^(.+)_([0-9a-f]{12})$/i);
+  if (suffixed) rest = suffixed[1];
+  return rest || null;
+}
+
+/** When the id map is stale, resolve a hidden row by unique name slug match (manage-page keys). */
+export function resolveHiddenWorkspaceIdBySlugFromList(storageKey, workspaces) {
+  const slug = slugFromLegacyHiddenStorageKey(storageKey);
+  if (!slug || !Array.isArray(workspaces)) return undefined;
+  const hiddenMatches = workspaces.filter(
+    (w) => w?.id && w.kind === 'hidden' && hiddenWorkspaceSlugFromName(w.name) === slug,
+  );
+  if (hiddenMatches.length !== 1) return undefined;
+  return hiddenMatches[0].id;
 }
 
 /**

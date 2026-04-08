@@ -51,6 +51,8 @@ import {
   getStorageKeyForWorkspaceId,
   isUuid,
   loadAppState,
+  collectMergedWorkspaceStorageKeys,
+  purgeOrphanWorkspaceBlobsFromLocalStorage,
   rebuildVisibleWorkspacesFromRemote,
   removeWorkspaceIdMapping,
   saveAppState,
@@ -573,24 +575,6 @@ export async function fullSync(
     const remotePins = await pullWorkspacePins();
     if (remotePins.error) return { ok: false, error: remotePins.error };
 
-    // 1b) Ensure every remote workspace has a storageKey mapping + UI blob (for post-wipe UI hydration).
-    // We also force the canonical visible key scheme for remote visible workspaces: ws_visible_<uuid>.
-    for (const rw of remoteWorkspaces) {
-      if (!rw?.id) continue;
-      const storageKey =
-        rw.kind === 'visible' && (rw.name || '').trim().toLowerCase() !== 'home'
-          ? `ws_visible_${rw.id}`
-          : rw.kind === 'visible' && (rw.name || '').trim().toLowerCase() === 'home'
-            ? 'workspace_home'
-            : `workspace_${(rw.name || 'workspace')
-                .toLowerCase()
-                .trim()
-                .replace(/\s+/g, '_')
-                .replace(/[^a-z0-9_]/g, '') || 'workspace'}_${String(rw.id).replace(/-/g, '').slice(0, 12)}`;
-      setWorkspaceIdMapping(storageKey, rw.id);
-      ensureWorkspaceUiBlob(storageKey);
-    }
-
     // 2) Load local workspaces
     const localWorkspaces = await getLocalWorkspaces();
 
@@ -619,6 +603,10 @@ export async function fullSync(
 
     // 4b) Rebuild storage-key ↔ UUID bindings and Menu-visible workspace list (e.g. after local wipe)
     bindMergedWorkspacesToStorageKeys(mergedWorkspacesWithOwner);
+    const mergedStorageKeys = collectMergedWorkspaceStorageKeys(
+      mergedWorkspacesWithOwner,
+    );
+    purgeOrphanWorkspaceBlobsFromLocalStorage(mergedWorkspacesWithOwner, mergedStorageKeys);
     const nextVisible = rebuildVisibleWorkspacesFromRemote(mergedWorkspacesWithOwner);
     const appPrev = loadAppState();
     const mergedIds = new Set(mergedWorkspacesWithOwner.map((w) => w.id));
@@ -627,10 +615,16 @@ export async function fullSync(
     if (lastActive.startsWith(visPrefix)) {
       const wid = lastActive.slice(visPrefix.length);
       if (!mergedIds.has(wid)) lastActive = 'workspace_home';
+    } else if (
+      lastActive.startsWith('workspace_') &&
+      lastActive !== 'workspace_home' &&
+      !mergedStorageKeys.has(lastActive)
+    ) {
+      lastActive = 'workspace_home';
     }
     saveAppState(nextVisible, lastActive);
 
-    // Ensure every merged workspace has a UI blob key present
+    // Ensure every merged workspace has a UI blob key present (includes hidden after bind).
     for (const w of mergedWorkspacesWithOwner) {
       if (!w?.id) continue;
       const key =
@@ -638,7 +632,9 @@ export async function fullSync(
           ? `ws_visible_${w.id}`
           : w.kind === 'visible' && (w.name || '').trim().toLowerCase() === 'home'
             ? 'workspace_home'
-            : undefined;
+            : w.kind === 'hidden'
+              ? getStorageKeyForWorkspaceId(w.id) ?? undefined
+              : undefined;
       if (key) ensureWorkspaceUiBlob(key);
     }
 
