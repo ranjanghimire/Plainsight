@@ -6,6 +6,7 @@ import { NoteCard } from './NoteCard';
 import { SearchCommandBar } from './SearchCommandBar';
 import { CategoryChips } from './CategoryChips';
 import { NoteList } from './NoteList';
+import { ConfirmDialog } from './ConfirmDialog';
 import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 
 /** Fade out → swap filter → fade in; lock blocks overlapping chip taps. */
@@ -217,15 +218,6 @@ export function NotesView() {
     setArchiveClearKeys(null);
   }, []);
 
-  useEffect(() => {
-    if (!archiveClearKeys) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setArchiveClearKeys(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [archiveClearKeys]);
-
   const handleRestoreArchived = useCallback(
     (textKey) => {
       const entry = archivedNotesMap[textKey];
@@ -380,54 +372,22 @@ export function NotesView() {
       </div>
     </div>
 
-    {archiveClearKeys ? (
-      <div
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
-        role="presentation"
-      >
-        <button
-          type="button"
-          className="absolute inset-0 cursor-default"
-          aria-label="Dismiss"
-          onClick={cancelArchiveClear}
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="archive-clear-title"
-          className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h2
-            id="archive-clear-title"
-            className="text-base font-medium text-stone-900 dark:text-stone-100"
-          >
-            Clear archived items
-          </h2>
-          <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-            Remove {archiveClearKeys.length}{' '}
-            archived {archiveClearKeys.length === 1 ? 'item' : 'items'}{' '}
-            currently shown? This cannot be undone.
-          </p>
-          <div className="mt-5 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={cancelArchiveClear}
-              className="px-3 py-1.5 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmArchiveClear}
-              className="px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null}
+    <ConfirmDialog
+      open={Array.isArray(archiveClearKeys) && archiveClearKeys.length > 0}
+      title="Clear archived items"
+      description={
+        archiveClearKeys?.length
+          ? `Remove ${archiveClearKeys.length} archived ${
+              archiveClearKeys.length === 1 ? 'item' : 'items'
+            } currently shown? This cannot be undone.`
+          : ''
+      }
+      confirmLabel="Clear"
+      cancelLabel="Cancel"
+      destructive
+      onCancel={cancelArchiveClear}
+      onConfirm={confirmArchiveClear}
+    />
     </>
   );
 }
