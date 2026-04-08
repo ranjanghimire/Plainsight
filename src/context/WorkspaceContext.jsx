@@ -19,8 +19,10 @@ import {
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
   getOrCreateWorkspaceIdForStorageKey,
+  getStorageKeyForWorkspaceId,
   getWorkspaceIdForStorageKey,
   removeWorkspaceIdMapping,
+  resolveWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
   countHiddenWorkspaceKeys,
 } from '../utils/storage';
@@ -45,11 +47,14 @@ import {
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { getSession as getLocalSession } from '../auth/localSession';
 import {
+  clearLocalWorkspaceData,
   getLocalArchivedNoteTombstones,
   getLocalNoteTombstones,
+  getLocalWorkspacePins,
   getLocalWorkspaces,
   saveLocalArchivedNoteTombstones,
   saveLocalNoteTombstones,
+  saveLocalWorkspacePins,
   saveLocalWorkspaces,
 } from '../sync/localDB';
 import { archivedRowIdForText } from '../sync/workspaceStorageBridge';
@@ -521,8 +526,13 @@ export function WorkspaceProvider({ children }) {
         await saveLocalWorkspaces(
           localWs.filter((w) => w.id !== workspaceId),
         );
-      } catch {
-        /* ignore */
+        await clearLocalWorkspaceData(workspaceId);
+        const pins = await getLocalWorkspacePins();
+        await saveLocalWorkspacePins(
+          pins.filter((p) => p.workspace_id !== workspaceId),
+        );
+      } catch (e) {
+        console.error('[deleteVisibleWorkspace] local cleanup', e);
       }
 
       removeWorkspaceIdMapping(entry.key, workspaceId);
@@ -559,7 +569,20 @@ export function WorkspaceProvider({ children }) {
   const deleteHiddenWorkspace = useCallback(
     async (storageKey) => {
       if (storageKey === 'workspace_home') return false;
-      const workspaceId = getWorkspaceIdForStorageKey(storageKey);
+
+      let localWs = [];
+      try {
+        localWs = await getLocalWorkspaces();
+      } catch {
+        /* ignore */
+      }
+
+      const workspaceId =
+        getWorkspaceIdForStorageKey(storageKey) ||
+        resolveWorkspaceIdForStorageKey(storageKey, localWs);
+
+      const canonicalKey =
+        workspaceId != null ? getStorageKeyForWorkspaceId(workspaceId) : null;
 
       if (getCanUseSupabase() && workspaceId) {
         const remoteDel = await deleteWorkspaceRemote(workspaceId);
@@ -571,17 +594,27 @@ export function WorkspaceProvider({ children }) {
 
       try {
         if (workspaceId) {
-          const localWs = await getLocalWorkspaces();
           await saveLocalWorkspaces(localWs.filter((w) => w.id !== workspaceId));
+          await clearLocalWorkspaceData(workspaceId);
+          const pins = await getLocalWorkspacePins();
+          await saveLocalWorkspacePins(
+            pins.filter((p) => p.workspace_id !== workspaceId),
+          );
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.error('[deleteHiddenWorkspace] local cleanup', e);
       }
 
       removeWorkspaceIdMapping(storageKey, workspaceId);
 
-      const wasActive = activeStorageKey === storageKey;
+      const wasActive =
+        activeStorageKey === storageKey ||
+        (canonicalKey != null && activeStorageKey === canonicalKey);
+
       deleteWorkspace(storageKey);
+      if (canonicalKey && canonicalKey !== storageKey) {
+        deleteWorkspace(canonicalKey);
+      }
       if (wasActive) {
         let homeData = loadWorkspace('workspace_home');
         if (isWorkspaceDataEmpty(homeData)) {

@@ -291,6 +291,40 @@ export function assignStorageKeyForRemoteWorkspace(w, usedKeys) {
 }
 
 /**
+ * When `getWorkspaceIdForStorageKey` is empty (orphan slug key vs canonical `workspace_<slug>_<12hex>`
+ * after bind, or stale map), find the workspace row id by replaying the same key assignment as
+ * `bindMergedWorkspacesToStorageKeys`.
+ */
+export function resolveWorkspaceIdForStorageKey(storageKey, workspaces) {
+  if (
+    typeof storageKey !== 'string' ||
+    !storageKey.startsWith(WORKSPACE_PREFIX) ||
+    storageKey === 'workspace_home' ||
+    !Array.isArray(workspaces)
+  ) {
+    return undefined;
+  }
+  const mapped = getWorkspaceIdForStorageKey(storageKey);
+  if (mapped) return mapped;
+
+  const used = new Set();
+  const sorted = [...workspaces].sort((a, b) => {
+    const homeScore = (w) =>
+      w.kind === 'visible' && (w.name || '').trim().toLowerCase() === 'home'
+        ? 0
+        : 1;
+    return homeScore(a) - homeScore(b);
+  });
+  for (const w of sorted) {
+    if (!w?.id) continue;
+    const assigned = assignStorageKeyForRemoteWorkspace(w, used);
+    if (assigned === storageKey) return w.id;
+    used.add(assigned);
+  }
+  return undefined;
+}
+
+/**
  * Rebuild storageKey ↔ workspace UUID mappings for all merged workspaces (e.g. after local wipe).
  */
 export function bindMergedWorkspacesToStorageKeys(workspaces) {

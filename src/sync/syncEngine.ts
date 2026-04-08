@@ -15,6 +15,7 @@ import {
   fetchWorkspacePins,
 } from './supabaseClient';
 import {
+  clearLocalWorkspaceData,
   getLocalArchivedNotes,
   getLocalArchivedNoteTombstones,
   getLocalCategories,
@@ -46,6 +47,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import {
   bindMergedWorkspacesToStorageKeys,
+  deleteWorkspace as deleteWorkspaceUiBlob,
   getStorageKeyForWorkspaceId,
   isUuid,
   loadAppState,
@@ -289,6 +291,71 @@ export async function deleteWorkspaceRemote(
   } catch (e) {
     return { ok: false, error: mkError('Failed to delete workspace', e) };
   }
+}
+
+/** Matches `disambiguateWorkspaceNamesForPush`: "Name (2)" or "Name(2)". */
+const NUMBERED_VISIBLE_NAME = /^(.+?)\s*\((\d+)\)\s*$/;
+
+function findRedundantNumberedVisibleWorkspaceIds(workspaces: Workspace[]): string[] {
+  const visible = workspaces.filter(
+    (w) =>
+      w?.id &&
+      w.kind === 'visible' &&
+      (w.name || '').trim().toLowerCase() !== 'home',
+  );
+  const canonicalNamesLower = new Set<string>();
+  for (const w of visible) {
+    const nm = (w.name || '').trim();
+    if (!nm) continue;
+    if (NUMBERED_VISIBLE_NAME.test(nm)) continue;
+    canonicalNamesLower.add(nm.toLowerCase());
+  }
+  const removeIds: string[] = [];
+  for (const w of visible) {
+    const nm = (w.name || '').trim();
+    const m = nm.match(NUMBERED_VISIBLE_NAME);
+    if (!m) continue;
+    const ord = parseInt(m[2], 10);
+    if (!Number.isFinite(ord) || ord < 2) continue;
+    const baseLower = m[1].trim().toLowerCase();
+    if (canonicalNamesLower.has(baseLower)) {
+      removeIds.push(w.id);
+    }
+  }
+  return removeIds;
+}
+
+async function purgeWorkspaceClientSide(workspaceId: string): Promise<void> {
+  await clearLocalWorkspaceData(workspaceId);
+  const pins = await getLocalWorkspacePins();
+  await saveLocalWorkspacePins(pins.filter((p) => p.workspace_id !== workspaceId));
+  const key = getStorageKeyForWorkspaceId(workspaceId);
+  if (key) {
+    removeWorkspaceIdMapping(key, workspaceId);
+    deleteWorkspaceUiBlob(key);
+  }
+}
+
+/**
+ * When sync merged two same-named visible tabs, push renamed one to "Name (2)". If a canonical
+ * "Name" row still exists, the numbered copy is junk — remove it from Supabase + client or it
+ * respawns every restart.
+ */
+async function pruneRedundantNumberedVisibleWorkspaces(
+  workspaces: Workspace[],
+): Promise<Workspace[]> {
+  const removeIds = findRedundantNumberedVisibleWorkspaceIds(workspaces);
+  if (removeIds.length === 0) return workspaces;
+  const succeeded = new Set<string>();
+  for (const id of removeIds) {
+    const del = await deleteWorkspaceRemote(id);
+    if (del.ok) {
+      succeeded.add(id);
+      await purgeWorkspaceClientSide(id);
+    }
+  }
+  if (succeeded.size === 0) return workspaces;
+  return workspaces.filter((w) => !succeeded.has(w.id));
 }
 
 export async function pushCategories(localCategories: Category[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
@@ -538,9 +605,14 @@ export async function fullSync(
       if (!remoteIds.has(id)) mergedWorkspaces.push(lw);
     }
 
+    const mergedAfterNumberedPrune = ownerId
+      ? await pruneRedundantNumberedVisibleWorkspaces(mergedWorkspaces)
+      : mergedWorkspaces;
+
     // owner_id + unique (owner, name)–safe labels before local save and push
-    const mergedWorkspacesWithOwner =
-      ownerId ? prepareWorkspacesForRemote(mergedWorkspaces, ownerId) : mergedWorkspaces;
+    const mergedWorkspacesWithOwner = ownerId
+      ? prepareWorkspacesForRemote(mergedAfterNumberedPrune, ownerId)
+      : mergedAfterNumberedPrune;
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
     await saveLocalWorkspaces(mergedWorkspacesWithOwner);
@@ -549,7 +621,14 @@ export async function fullSync(
     bindMergedWorkspacesToStorageKeys(mergedWorkspacesWithOwner);
     const nextVisible = rebuildVisibleWorkspacesFromRemote(mergedWorkspacesWithOwner);
     const appPrev = loadAppState();
-    saveAppState(nextVisible, appPrev.lastActiveStorageKey);
+    const mergedIds = new Set(mergedWorkspacesWithOwner.map((w) => w.id));
+    let lastActive = appPrev.lastActiveStorageKey;
+    const visPrefix = 'ws_visible_';
+    if (lastActive.startsWith(visPrefix)) {
+      const wid = lastActive.slice(visPrefix.length);
+      if (!mergedIds.has(wid)) lastActive = 'workspace_home';
+    }
+    saveAppState(nextVisible, lastActive);
 
     // Ensure every merged workspace has a UI blob key present
     for (const w of mergedWorkspacesWithOwner) {

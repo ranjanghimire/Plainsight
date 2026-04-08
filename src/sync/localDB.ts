@@ -52,6 +52,20 @@ export async function saveLocalWorkspaces(rows: Workspace[]): Promise<void> {
   writeJson(KEY.workspaces, rows);
 }
 
+/** Drop cached categories/notes/archived/tombstones for one workspace (e.g. after delete). */
+export async function clearLocalWorkspaceData(workspaceId: string): Promise<void> {
+  if (!workspaceId) return;
+  try {
+    localStorage.removeItem(KEY.categories(workspaceId));
+    localStorage.removeItem(KEY.notes(workspaceId));
+    localStorage.removeItem(KEY.archived(workspaceId));
+    localStorage.removeItem(KEY.noteTombstones(workspaceId));
+    localStorage.removeItem(KEY.archivedTombstones(workspaceId));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function getLocalCategories(workspaceId: string): Promise<Category[]> {
   return readJson<Category[]>(KEY.categories(workspaceId), []);
 }
