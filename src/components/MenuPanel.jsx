@@ -99,8 +99,8 @@ export function MenuPanel({ open, onClose }) {
   const {
     beginUpgradeFlow,
     showToast,
-    isLinkingPurchasesToSession,
     revenueCatReady,
+    isSubscriptionStatusPending,
   } = useSyncEntitlement();
   const { openSendCodeModal, signOut, authEmail, authReady } = useAuth();
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
@@ -251,7 +251,7 @@ export function MenuPanel({ open, onClose }) {
                 Sign in to sync
               </button>
             ) : !syncEntitled ? (
-              !revenueCatReady || isLinkingPurchasesToSession ? (
+              !revenueCatReady || isSubscriptionStatusPending ? (
                 <p className="text-sm text-stone-500 dark:text-stone-400 px-1 py-1">
                   Confirming your subscription…
                 </p>
@@ -421,7 +421,7 @@ export function MenuPanel({ open, onClose }) {
           {authReady &&
           customAuthSession &&
           revenueCatReady &&
-          !isLinkingPurchasesToSession ? (
+          !isSubscriptionStatusPending ? (
             <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
               <button
                 type="button"

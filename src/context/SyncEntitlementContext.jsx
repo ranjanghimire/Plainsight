@@ -64,6 +64,8 @@ export function SyncEntitlementProvider({ children }) {
   const toastTimerRef = useRef(null);
   /** True while OTP / session-restore queue is linking RevenueCat to the Supabase user (avoid flashing paywall). */
   const [isLinkingPurchasesToSession, setIsLinkingPurchasesToSession] = useState(false);
+  /** True while check-sync-entitlement + SDK confirmation runs (hide Unlock for paid users until resolved). */
+  const [isServerEntitlementCheckPending, setIsServerEntitlementCheckPending] = useState(false);
 
   useEffect(
     () => subscribeSyncGating(() => setSyncEntitled(getSyncEntitled())),
@@ -110,6 +112,28 @@ export function SyncEntitlementProvider({ children }) {
           } catch (e) {
             console.error('[RevenueCat] refresh customer info', e);
           }
+          return;
+        }
+        /**
+         * Must link RevenueCat to this Supabase user id. Previously we returned here without
+         * identifyUser when the ref was stale — the SDK stayed on the anonymous install user and
+         * `sync` never appeared for the signed-in account.
+         */
+        try {
+          let isAnon = false;
+          try {
+            isAnon = purchases.isAnonymous();
+          } catch {
+            isAnon = true;
+          }
+          if (isAnon && (await purchasesSdkHasSyncEntitlement(purchases))) {
+            return;
+          }
+          const out = await purchases.identifyUser(uid);
+          rcLinkedSupabaseUserIdRef.current = uid;
+          applyCustomerInfo(unwrapCustomerInfo(out));
+        } catch (e) {
+          console.error('[RevenueCat] link logged-in user to RevenueCat', e);
         }
         return;
       }
@@ -184,6 +208,7 @@ export function SyncEntitlementProvider({ children }) {
   }, [revenueCatReady, syncRevenueCatToPlainSightSession]);
 
   const beginUpgradeFlow = useCallback(() => {
+    if (getSyncEntitled()) return;
     setPaywallSubtitle(null);
     setEnableSyncOpen(true);
   }, []);
@@ -359,6 +384,102 @@ export function SyncEntitlementProvider({ children }) {
     }
   }, [applyCustomerInfo, showToast]);
 
+  /**
+   * Authoritative paid check via check-sync-entitlement (RevenueCat REST) after the SDK has had
+   * a chance to identify the Supabase user. Keeps menu off "Unlock" for subscribers even if SDK
+   * parsing lags.
+   */
+  useEffect(() => {
+    if (!revenueCatReady) return undefined;
+
+    if (hasCustomAuthSession()) setIsServerEntitlementCheckPending(true);
+
+    let cancelled = false;
+    let debounceTimer = null;
+
+    const reconcile = async () => {
+      if (!hasCustomAuthSession()) {
+        if (!cancelled) setIsServerEntitlementCheckPending(false);
+        return;
+      }
+      const uid = getLocalSession().userId?.trim();
+      if (!uid) {
+        if (!cancelled) setIsServerEntitlementCheckPending(false);
+        return;
+      }
+
+      if (!cancelled) setIsServerEntitlementCheckPending(true);
+      try {
+        const purchases = purchasesRef.current;
+        if (purchases && rcLinkedSupabaseUserIdRef.current !== uid) {
+          try {
+            let isAnon = false;
+            try {
+              isAnon = purchases.isAnonymous();
+            } catch {
+              isAnon = true;
+            }
+            const anonPaid = isAnon && (await purchasesSdkHasSyncEntitlement(purchases));
+            if (!anonPaid) {
+              const out = await purchases.identifyUser(uid);
+              rcLinkedSupabaseUserIdRef.current = uid;
+              applyCustomerInfo(unwrapCustomerInfo(out));
+            }
+          } catch (e) {
+            console.error('[RevenueCat] reconcile identify before entitlement check', e);
+          }
+        }
+
+        const remote = await checkSyncEntitlementRemote(uid);
+        if (cancelled) return;
+
+        if (remote === true) {
+          setSyncEntitlementActive(true);
+          setSyncRemoteActive(true);
+          return;
+        }
+
+        let sdk = false;
+        if (purchases) {
+          try {
+            sdk = await purchasesSdkHasSyncEntitlement(purchases);
+          } catch {
+            sdk = false;
+          }
+        }
+
+        if (remote === false) {
+          if (!sdk) setSyncEntitlementActive(false);
+          return;
+        }
+
+        if (sdk) {
+          setSyncEntitlementActive(true);
+          setSyncRemoteActive(true);
+        }
+      } finally {
+        if (!cancelled) setIsServerEntitlementCheckPending(false);
+      }
+    };
+
+    const schedule = () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void reconcile();
+      }, 280);
+    };
+
+    schedule();
+    window.addEventListener('plainsight:local-session', schedule);
+
+    return () => {
+      cancelled = true;
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      window.removeEventListener('plainsight:local-session', schedule);
+    };
+  }, [revenueCatReady, applyCustomerInfo]);
+
   useEffect(() => {
     if (!revenueCatReady) return undefined;
     const run = () => {
@@ -379,6 +500,8 @@ export function SyncEntitlementProvider({ children }) {
     purchaseUnlockSync,
     showToast,
     isLinkingPurchasesToSession,
+    isSubscriptionStatusPending:
+      isLinkingPurchasesToSession || isServerEntitlementCheckPending,
   };
 
   return (
