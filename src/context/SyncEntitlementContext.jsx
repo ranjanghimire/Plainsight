@@ -13,13 +13,16 @@ import {
   hasCustomAuthSession,
   setSyncRemoteActive,
   subscribeSyncGating,
-  SYNC_ENTITLEMENT_ID,
 } from '../sync/syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
 import { readAuthDisplayEmail } from '../auth/authDisplayEmail';
 import { checkSyncEntitlementRemote } from '../auth/checkSyncEntitlementRemote';
 import { drainOtpSessionQueue, OTP_SESSION_QUEUE_CHANGED } from '../auth/otpSessionQueue';
 import { EnableSyncModal } from '../components/EnableSyncModal';
+import {
+  customerInfoHasSyncEntitlement,
+  purchasesSdkHasSyncEntitlement,
+} from '../sync/rcEntitlements';
 
 const REVENUECAT_PUBLIC_API_KEY = 'test_smZiwCGJjgwRtkaZwQOrEZhEPfj';
 const RC_ANON_USER_STORAGE_KEY = 'plainsight_rc_anonymous_app_user_id';
@@ -35,10 +38,6 @@ function getOrCreateRcAnonymousAppUserId() {
   } catch {
     return Purchases.generateRevenueCatAnonymousAppUserId();
   }
-}
-
-function customerInfoHasSync(info) {
-  return Boolean(info?.entitlements?.active?.[SYNC_ENTITLEMENT_ID]);
 }
 
 /** purchases-js may return CustomerInfo or { customerInfo }. */
@@ -88,7 +87,7 @@ export function SyncEntitlementProvider({ children }) {
   );
 
   const applyCustomerInfo = useCallback((info) => {
-    const active = customerInfoHasSync(info);
+    const active = customerInfoHasSyncEntitlement(info);
     setSyncEntitlementActive(active);
     return active;
   }, []);
@@ -213,7 +212,7 @@ export function SyncEntitlementProvider({ children }) {
         skipSuccessPage: true,
       });
       let ci = unwrapCustomerInfo(result);
-      let active = customerInfoHasSync(ci);
+      let active = customerInfoHasSyncEntitlement(ci);
       if (active && hasCustomAuthSession()) {
         const uid = getLocalSession().userId?.trim();
         if (uid) {
@@ -221,7 +220,7 @@ export function SyncEntitlementProvider({ children }) {
             const linked = await purchases.identifyUser(uid);
             rcLinkedSupabaseUserIdRef.current = uid;
             ci = unwrapCustomerInfo(linked);
-            active = customerInfoHasSync(ci);
+            active = customerInfoHasSyncEntitlement(ci);
           } catch (e) {
             console.error('[RevenueCat] identify after purchase', e);
           }
@@ -284,22 +283,23 @@ export function SyncEntitlementProvider({ children }) {
             }
             if (source === 'restore') {
               /**
-               * App reopen: identifyUser then trust server or client entitlements.
+               * App reopen: link RC to Supabase user, then trust SDK + server (parallel).
                */
               try {
                 const out = await purchases.identifyUser(uid);
                 rcLinkedSupabaseUserIdRef.current = uid;
                 applyCustomerInfo(unwrapCustomerInfo(out));
-                const remoteAfter = await checkSyncEntitlementRemote(uid);
-                const entitled = remoteAfter === true || getSyncEntitled();
+                const [sdkEntitled, remoteAfter] = await Promise.all([
+                  purchasesSdkHasSyncEntitlement(purchases),
+                  checkSyncEntitlementRemote(uid),
+                ]);
+                const entitled = sdkEntitled || remoteAfter === true;
                 if (entitled) {
                   setSyncEntitlementActive(true);
                   setSyncRemoteActive(true);
-                } else {
-                  if (remoteAfter === false) {
-                    setSyncEntitlementActive(false);
-                    setSyncRemoteActive(false);
-                  }
+                } else if (remoteAfter === false && !sdkEntitled) {
+                  setSyncEntitlementActive(false);
+                  setSyncRemoteActive(false);
                 }
               } catch (e) {
                 console.error('[RevenueCat] restore session RevenueCat link', e);
@@ -307,8 +307,7 @@ export function SyncEntitlementProvider({ children }) {
             } else if (source === 'verify') {
               let anonHasSync = false;
               try {
-                const anonInfo = unwrapCustomerInfo(await purchases.getCustomerInfo());
-                anonHasSync = customerInfoHasSync(anonInfo);
+                anonHasSync = await purchasesSdkHasSyncEntitlement(purchases);
               } catch {
                 anonHasSync = false;
               }
@@ -317,14 +316,9 @@ export function SyncEntitlementProvider({ children }) {
                 // Anonymous RC user already has sync — do not merge onto this OTP account.
                 setSyncEntitlementActive(false);
                 setSyncRemoteActive(false);
-                if (remoteEntitled === false) {
-                  setPaywallSubtitle(
-                    'Subscribe once to sync notes across devices and keep a cloud backup.',
-                  );
-                  setEnableSyncOpen(true);
-                } else {
-                  showToast('Could not verify sync status right now. Try again in a moment.');
-                }
+                showToast(
+                  'Cloud sync on this browser is tied to another profile. Clear site data and sign in again, or use Unlock if you need a new subscription.',
+                );
                 continue;
               }
 
@@ -332,27 +326,19 @@ export function SyncEntitlementProvider({ children }) {
                 const out = await purchases.identifyUser(uid);
                 rcLinkedSupabaseUserIdRef.current = uid;
                 applyCustomerInfo(unwrapCustomerInfo(out));
-                const remoteAfter = await checkSyncEntitlementRemote(uid);
-                let ci;
-                try {
-                  ci = unwrapCustomerInfo(await purchases.getCustomerInfo());
-                } catch {
-                  ci = null;
-                }
-                const sdkActive = customerInfoHasSync(ci);
-                const entitled = remoteAfter === true || sdkActive;
+                const [sdkEntitled, remoteAfter] = await Promise.all([
+                  purchasesSdkHasSyncEntitlement(purchases),
+                  checkSyncEntitlementRemote(uid),
+                ]);
+                const entitled = sdkEntitled || remoteAfter === true;
 
                 if (entitled) {
                   setSyncEntitlementActive(true);
                   setSyncRemoteActive(true);
                   showToast('Cloud sync is on');
-                } else if (remoteAfter === false && !sdkActive) {
+                } else if (remoteAfter === false && !sdkEntitled) {
                   setSyncEntitlementActive(false);
                   setSyncRemoteActive(false);
-                  setPaywallSubtitle(
-                    'Subscribe once to sync notes across devices and keep a cloud backup.',
-                  );
-                  setEnableSyncOpen(true);
                 } else {
                   showToast('Could not verify sync status right now. Try again in a moment.');
                 }
