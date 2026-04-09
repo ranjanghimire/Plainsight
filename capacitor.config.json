@@ -1,0 +1,19 @@
+{
+  "appId": "com.plainsight.app",
+  "appName": "Plainsight",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "automatic",
+    "preferredContentMode": "mobile"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "launchAutoHide": true,
+      "backgroundColor": "#ffffff"
+    },
+    "StatusBar": {
+      "style": "DEFAULT"
+    }
+  }
+}

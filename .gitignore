@@ -26,3 +26,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Capacitor / Xcode (keep ios/ project; ignore local noise)
+ios/App/Pods
+ios/App/build
+ios/DerivedData
+*.xcuserstate
+**/xcuserdata/
