@@ -476,6 +476,33 @@ export function getAllWorkspaceKeys() {
   return keys;
 }
 
+/** Every localStorage key that holds a workspace notes blob (home, visible tabs, hidden). */
+export function enumerateWorkspaceBlobStorageKeys() {
+  const seen = new Set();
+  const out = [];
+  const push = (k) => {
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    out.push(k);
+  };
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k) continue;
+    if (k === 'workspace_home') {
+      push(k);
+      continue;
+    }
+    if (k.startsWith(VISIBLE_WS_PREFIX)) {
+      push(k);
+      continue;
+    }
+    if (isLegacyHiddenWorkspaceKey(k)) {
+      push(k);
+    }
+  }
+  return out;
+}
+
 /** Sync mirror of localDB `plainsight_local_workspaces` — source of truth for sync merge. */
 const PLAINSIGHT_LOCAL_WORKSPACES_JSON_KEY = 'plainsight_local_workspaces';
 

@@ -24,6 +24,45 @@ export function parseNoteBodyAndTags(raw) {
   return { tags, body };
 }
 
+export function normalizeTagSlug(input) {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^#+/, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+}
+
+/** Remove one tag from the hashtag line; leaves body and non–tag-line notes unchanged. */
+export function removeTagFromNoteText(raw, tagSlug) {
+  const target = normalizeTagSlug(tagSlug);
+  if (!target) return typeof raw === 'string' ? raw : '';
+  const { tags, body } = parseNoteBodyAndTags(typeof raw === 'string' ? raw : '');
+  if (tags.length === 0 || !tags.includes(target)) {
+    return typeof raw === 'string' ? raw : '';
+  }
+  const next = tags.filter((t) => t !== target);
+  return composeNoteWithTags(next, body);
+}
+
+/** Rename a tag in the hashtag line (normalized slugs). */
+export function renameTagInNoteText(raw, oldSlug, newSlug) {
+  const o = normalizeTagSlug(oldSlug);
+  const n = normalizeTagSlug(newSlug);
+  if (!o || !n || o === n) return typeof raw === 'string' ? raw : '';
+  const { tags, body } = parseNoteBodyAndTags(typeof raw === 'string' ? raw : '');
+  if (tags.length === 0 || !tags.includes(o)) {
+    return typeof raw === 'string' ? raw : '';
+  }
+  let next;
+  if (tags.includes(n)) {
+    next = tags.filter((t) => t !== o);
+  } else {
+    next = tags.map((t) => (t === o ? n : t));
+  }
+  return composeNoteWithTags(next, body);
+}
+
 export function composeNoteWithTags(tags, body) {
   const b = typeof body === 'string' ? body : '';
   const list = Array.isArray(tags)

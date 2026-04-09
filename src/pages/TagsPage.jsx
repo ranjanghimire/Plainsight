@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useTagsNav } from '../context/TagsNavContext';
+import {
+  useItemContextMenu,
+  CONTEXT_MENU_TRIGGER_CLASS,
+} from '../hooks/useItemContextMenu';
+import { ContextActionPopover } from '../components/ContextActionPopover';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { queueFullSync } from '../sync/syncHelpers';
 import {
   getAllWorkspaceKeys,
   getWorkspaceNameFromKey,
@@ -10,7 +18,97 @@ import {
   loadAppState,
   loadWorkspace,
 } from '../utils/storage';
-import { parseNoteBodyAndTags } from '../utils/noteTags';
+import { normalizeTagSlug, parseNoteBodyAndTags } from '../utils/noteTags';
+import {
+  applyTagRemovalAcrossAllWorkspaces,
+  applyTagRenameAcrossAllWorkspaces,
+} from '../utils/tagWorkspaceMutate';
+
+function notifyWorkspaceStorageMutated() {
+  try {
+    window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
+  } catch {
+    /* ignore */
+  }
+}
+
+function TagRenameDialog({ open, tagSlug, draft, setDraft, busy, onSave, onCancel }) {
+  const titleId = `ps-tag-rename-${useId().replace(/:/g, '')}`;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onCancel]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
+      role="presentation"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        aria-label="Dismiss"
+        onClick={onCancel}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          id={titleId}
+          className="text-base font-medium text-stone-900 dark:text-stone-100"
+        >
+          Rename tag
+        </h2>
+        <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+          Updates <span className="font-mono text-stone-600 dark:text-stone-300">#{tagSlug}</span>{' '}
+          in every workspace.
+        </p>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSave();
+          }}
+          disabled={busy}
+          placeholder="tag_name"
+          className="mt-4 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:placeholder-stone-500 dark:focus:ring-stone-600"
+          autoFocus
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 function workspaceLabelForKey(key, visibleList) {
   const entry = (visibleList || []).find((e) => e.key === key);
@@ -67,8 +165,18 @@ export function TagsPage() {
   const location = useLocation();
   const { goBackFromTags, setTagsReturnTo } = useTagsNav();
   const { currentWorkspace, visibleWorkspaces, switchVisibleWorkspace, load } = useWorkspace();
+  const tagMenu = useItemContextMenu();
   const [selectedTag, setSelectedTag] = useState(null);
   const [query, setQuery] = useState('');
+  const [tagMutationEpoch, setTagMutationEpoch] = useState(0);
+  const [pendingDeleteTag, setPendingDeleteTag] = useState(null);
+  const [renameOldSlug, setRenameOldSlug] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [tagActionBusy, setTagActionBusy] = useState(false);
+
+  useEffect(() => {
+    tagMenu.closeMenu();
+  }, [currentWorkspace, tagMenu.closeMenu]);
 
   useEffect(() => {
     const st = location.state;
@@ -129,7 +237,7 @@ export function TagsPage() {
       }
     }
     return out;
-  }, [scope, visibleWorkspaces]);
+  }, [scope, visibleWorkspaces, tagMutationEpoch]);
 
   const tags = useMemo(() => {
     const counts = new Map();
@@ -160,6 +268,52 @@ export function TagsPage() {
 
   const toggleTag = (tag) => {
     setSelectedTag((prev) => (prev === tag ? null : tag));
+  };
+
+  const bumpAfterGlobalTagMutation = () => {
+    notifyWorkspaceStorageMutated();
+    setTagMutationEpoch((n) => n + 1);
+    queueFullSync();
+  };
+
+  const cancelTagRename = () => {
+    setRenameOldSlug(null);
+    setRenameDraft('');
+  };
+
+  const commitTagRename = async () => {
+    if (tagActionBusy) return;
+    if (renameOldSlug == null) return;
+    const newN = normalizeTagSlug(renameDraft);
+    if (!newN) return;
+    if (newN === renameOldSlug) {
+      cancelTagRename();
+      return;
+    }
+    setTagActionBusy(true);
+    try {
+      await applyTagRenameAcrossAllWorkspaces(renameOldSlug, newN);
+      bumpAfterGlobalTagMutation();
+      setSelectedTag((prev) => (prev === renameOldSlug ? newN : prev));
+      cancelTagRename();
+    } finally {
+      setTagActionBusy(false);
+    }
+  };
+
+  const confirmTagDelete = async () => {
+    if (tagActionBusy) return;
+    const slug = pendingDeleteTag;
+    if (slug == null) return;
+    setTagActionBusy(true);
+    try {
+      await applyTagRemovalAcrossAllWorkspaces(slug);
+      bumpAfterGlobalTagMutation();
+      setSelectedTag((prev) => (prev === slug ? null : prev));
+      setPendingDeleteTag(null);
+    } finally {
+      setTagActionBusy(false);
+    }
   };
 
   const filterTrim = query.trim();
@@ -237,9 +391,9 @@ export function TagsPage() {
             >
               <button
                 type="button"
-                onClick={() => toggleTag(t.tag)}
+                {...tagMenu.bindTrigger({ kind: 'tag', name: t.tag }, () => toggleTag(t.tag))}
                 aria-expanded={isOpen}
-                className={`w-full text-left px-4 py-3 flex items-center justify-between gap-3 transition-colors duration-200 ${
+                className={`w-full text-left px-4 py-3 flex items-center justify-between gap-3 transition-colors duration-200 ${CONTEXT_MENU_TRIGGER_CLASS} ${
                   isOpen
                     ? 'bg-stone-50/90 dark:bg-stone-800'
                     : 'hover:bg-stone-50/70 dark:hover:bg-stone-700/35'
@@ -302,6 +456,53 @@ export function TagsPage() {
           <p className="text-sm text-stone-500 dark:text-stone-400">No tags yet.</p>
         )}
       </div>
+
+      <ContextActionPopover
+        open={tagMenu.menu.open}
+        entered={tagMenu.entered}
+        x={tagMenu.menu.x}
+        y={tagMenu.menu.y}
+        showDelete={tagMenu.menu.target?.kind === 'tag'}
+        renameLabel="Edit"
+        deleteLabel="Delete"
+        onRename={() => {
+          const t = tagMenu.menu.target;
+          if (t?.kind === 'tag') {
+            setRenameOldSlug(t.name);
+            setRenameDraft(t.name);
+          }
+        }}
+        onDelete={() => {
+          const t = tagMenu.menu.target;
+          if (t?.kind === 'tag') setPendingDeleteTag(t.name);
+        }}
+        onDismiss={tagMenu.closeMenu}
+      />
+
+      <TagRenameDialog
+        open={renameOldSlug != null}
+        tagSlug={renameOldSlug ?? ''}
+        draft={renameDraft}
+        setDraft={setRenameDraft}
+        busy={tagActionBusy}
+        onSave={() => void commitTagRename()}
+        onCancel={cancelTagRename}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteTag != null}
+        title="Delete tag"
+        description={
+          pendingDeleteTag
+            ? `Remove “#${pendingDeleteTag}” from all notes in every workspace? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        destructive
+        busy={tagActionBusy}
+        onCancel={() => setPendingDeleteTag(null)}
+        onConfirm={() => void confirmTagDelete()}
+      />
     </div>
   );
 }

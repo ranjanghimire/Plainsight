@@ -12,6 +12,7 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   destructive = false,
+  busy = false,
   onConfirm,
   onCancel,
 }) {
@@ -20,11 +21,11 @@ export function ConfirmDialog({
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Escape' && !busy) onCancel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onCancel]);
+  }, [open, onCancel, busy]);
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -41,7 +42,7 @@ export function ConfirmDialog({
         type="button"
         className="absolute inset-0 cursor-default"
         aria-label="Dismiss"
-        onClick={onCancel}
+        onClick={() => !busy && onCancel()}
       />
       <div
         role="dialog"
@@ -63,11 +64,17 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
+            disabled={busy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
           >
             {cancelLabel}
           </button>
-          <button type="button" onClick={onConfirm} className={confirmBtnClass}>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`${confirmBtnClass} disabled:opacity-50`}
+          >
             {confirmLabel}
           </button>
         </div>

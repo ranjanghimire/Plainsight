@@ -259,6 +259,19 @@ export function WorkspaceProvider({ children }) {
   }, [data, activeStorageKey, save]);
 
   useEffect(() => {
+    const onStorageMutated = () => {
+      try {
+        setData(loadWorkspace(activeStorageKey));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('plainsight:workspace-storage-mutated', onStorageMutated);
+    return () =>
+      window.removeEventListener('plainsight:workspace-storage-mutated', onStorageMutated);
+  }, [activeStorageKey]);
+
+  useEffect(() => {
     if (!canUseSupabase) {
       if (hydrationRetryTimerRef.current != null) {
         window.clearTimeout(hydrationRetryTimerRef.current);
