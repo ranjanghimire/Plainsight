@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useTagsNav } from '../context/TagsNavContext';
 import {
@@ -64,10 +64,40 @@ function ChevronIcon({ open }) {
 
 export function TagsPage() {
   const navigate = useNavigate();
-  const { goBackFromTags } = useTagsNav();
+  const location = useLocation();
+  const { goBackFromTags, setTagsReturnTo } = useTagsNav();
   const { currentWorkspace, visibleWorkspaces, switchVisibleWorkspace, load } = useWorkspace();
   const [selectedTag, setSelectedTag] = useState(null);
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    const st = location.state;
+    if (st == null || typeof st !== 'object') return;
+
+    const hasExpand = typeof st.expandTag === 'string';
+    const hasReturn = st.tagsReturnTo != null && typeof st.tagsReturnTo.pathname === 'string';
+    if (!hasExpand && !hasReturn) return;
+
+    if (hasReturn) {
+      setTagsReturnTo(st.tagsReturnTo);
+    }
+    if (hasExpand) {
+      const tag = st.expandTag.trim().toLowerCase().replace(/\s+/g, '_');
+      if (tag) {
+        setSelectedTag(tag);
+        setQuery('');
+      }
+    }
+
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: {} });
+  }, [
+    location.state,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+    setTagsReturnTo,
+  ]);
 
   const scope = useMemo(() => {
     if (currentWorkspace === 'home') return 'visible';

@@ -85,14 +85,60 @@ export function TagsNavProvider({ children }) {
     });
   }, [location.pathname, navigate, runTagsTransition]);
 
+  /** Deep-link to /tags (e.g. from a note tag pill) — align Back with that screen. */
+  const setTagsReturnTo = useCallback((target) => {
+    if (!target || typeof target.pathname !== 'string') return;
+    returnToRef.current = {
+      pathname: target.pathname,
+      search: typeof target.search === 'string' ? target.search : '',
+      hash: typeof target.hash === 'string' ? target.hash : '',
+    };
+  }, []);
+
+  /** Open /tags with the same transition as the header toggle (optional expand + return path). */
+  const openTagsPage = useCallback(
+    (payload) => {
+      const rt = payload?.tagsReturnTo;
+      const ex = payload?.expandTag;
+
+      if (location.pathname === '/tags') {
+        if (ex != null && typeof ex === 'string') {
+          runTagsTransition(() => {
+            navigate('/tags', { replace: true, state: { expandTag: ex } });
+          });
+        }
+        return;
+      }
+
+      if (rt && typeof rt.pathname === 'string') {
+        setTagsReturnTo(rt);
+      }
+      runTagsTransition(() => {
+        navigate('/tags', {
+          state: ex != null && typeof ex === 'string' ? { expandTag: ex } : {},
+        });
+      });
+    },
+    [location.pathname, navigate, runTagsTransition, setTagsReturnTo],
+  );
+
   const value = useMemo(
     () => ({
       isTagsRoute,
       tagsViewTransitioning,
       toggleTagsPage,
       goBackFromTags,
+      setTagsReturnTo,
+      openTagsPage,
     }),
-    [isTagsRoute, tagsViewTransitioning, toggleTagsPage, goBackFromTags],
+    [
+      isTagsRoute,
+      tagsViewTransitioning,
+      toggleTagsPage,
+      goBackFromTags,
+      setTagsReturnTo,
+      openTagsPage,
+    ],
   );
 
   return (

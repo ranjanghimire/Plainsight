@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useTagsNav } from '../context/TagsNavContext';
 import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
 import { composeNoteWithTags, parseNoteBodyAndTags } from '../utils/noteTags';
@@ -53,6 +55,8 @@ export function NoteCard({
   archiveAnimating = false,
   bulkDissolve = false,
 }) {
+  const location = useLocation();
+  const { openTagsPage } = useTagsNav();
   const parsed = useMemo(() => parseNoteBodyAndTags(note.text), [note.text]);
   const [editBody, setEditBody] = useState(() => parsed.body);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -259,16 +263,29 @@ export function NoteCard({
                 />
                 <div className="flex flex-wrap gap-1 min-w-0">
                   {parsed.tags.map((t) => (
-                    <span
+                    <button
                       key={t}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTagsPage({
+                          expandTag: t,
+                          tagsReturnTo: {
+                            pathname: location.pathname,
+                            search: location.search,
+                            hash: location.hash,
+                          },
+                        });
+                      }}
+                      aria-label={`Open tags for ${t}`}
                       className={
                         isArchived
-                          ? 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-neutral-200/80 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
-                          : 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-stone-100 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
+                          ? 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-neutral-200/80 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200 hover:bg-neutral-300/90 dark:hover:bg-neutral-600 cursor-pointer transition-colors'
+                          : 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-stone-100 text-stone-700 dark:bg-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-600 cursor-pointer transition-colors'
                       }
                     >
                       {t}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
