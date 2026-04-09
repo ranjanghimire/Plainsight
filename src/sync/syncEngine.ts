@@ -6,6 +6,7 @@ import type {
   Workspace,
   WorkspacePin,
 } from './types';
+import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import {
   getSupabase,
   fetchAllWorkspaces,
@@ -16,16 +17,20 @@ import {
 } from './supabaseClient';
 import {
   clearLocalWorkspaceData,
+  getLocalArchivedNoteTags,
   getLocalArchivedNotes,
   getLocalArchivedNoteTombstones,
   getLocalCategories,
+  getLocalNoteTags,
   getLocalNoteTombstones,
   getLocalNotes,
   getLocalWorkspaces,
   getLocalWorkspacePins,
+  saveLocalArchivedNoteTags,
   saveLocalArchivedNotes,
   saveLocalCategories,
   saveLocalArchivedNoteTombstones,
+  saveLocalNoteTags,
   saveLocalNoteTombstones,
   saveLocalNotes,
   saveLocalWorkspaces,
@@ -125,6 +130,8 @@ async function remapLocalWorkspaceUuidAfterPkCollision(
   const arch = await getLocalArchivedNotes(oldId);
   const nt = await getLocalNoteTombstones(oldId);
   const at = await getLocalArchivedNoteTombstones(oldId);
+  const noteTags = await getLocalNoteTags(oldId);
+  const archivedNoteTags = await getLocalArchivedNoteTags(oldId);
 
   const rewriteWs = <T extends { workspace_id: string }>(rows: T[]): T[] =>
     rows.map((r) => ({ ...r, workspace_id: newId }));
@@ -134,6 +141,8 @@ async function remapLocalWorkspaceUuidAfterPkCollision(
   await saveLocalArchivedNotes(newId, rewriteWs(arch));
   await saveLocalNoteTombstones(newId, rewriteWs(nt));
   await saveLocalArchivedNoteTombstones(newId, rewriteWs(at));
+  await saveLocalNoteTags(newId, noteTags);
+  await saveLocalArchivedNoteTags(newId, archivedNoteTags);
 
   try {
     localStorage.removeItem(`plainsight_local_categories_${oldId}`);
@@ -141,6 +150,8 @@ async function remapLocalWorkspaceUuidAfterPkCollision(
     localStorage.removeItem(`plainsight_local_archived_${oldId}`);
     localStorage.removeItem(`plainsight_local_note_tombstones_${oldId}`);
     localStorage.removeItem(`plainsight_local_archived_tombstones_${oldId}`);
+    localStorage.removeItem(`plainsight_local_note_tags_${oldId}`);
+    localStorage.removeItem(`plainsight_local_archived_note_tags_${oldId}`);
   } catch {
     /* ignore */
   }
@@ -819,6 +830,11 @@ export async function fullSync(
         saveLocalNotes(wid, mergedNotes[wid].merged),
         saveLocalArchivedNotes(wid, mergedArchived[wid].merged),
       ]);
+      await saveLocalNoteTags(wid, noteTagRowsFromNotes(mergedNotes[wid].merged));
+      await saveLocalArchivedNoteTags(
+        wid,
+        archivedNoteTagRowsFromArchived(mergedArchived[wid].merged),
+      );
     }
 
     for (const wid of ids) {

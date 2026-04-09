@@ -57,6 +57,20 @@ export type WorkspacePin = {
   created_at: Timestamptz;
 };
 
+/** Derived from `notes.text` first line; mirrored on the server in `note_tags`. */
+export type NoteTag = {
+  note_id: UUID;
+  workspace_id: UUID;
+  tag: string;
+};
+
+/** Derived from `archived_notes.text`; mirrored in `archived_note_tags`. */
+export type ArchivedNoteTag = {
+  archived_note_id: UUID;
+  workspace_id: UUID;
+  tag: string;
+};
+
 export type SyncError = {
   message: string;
   details?: unknown;

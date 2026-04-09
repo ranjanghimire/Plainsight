@@ -4,6 +4,8 @@ import type {
   Category,
   Note,
   NoteTombstone,
+  NoteTag,
+  ArchivedNoteTag,
   Workspace,
   WorkspacePin,
 } from './types';
@@ -23,6 +25,8 @@ const KEY = {
   noteTombstones: (workspaceId: string) => `plainsight_local_note_tombstones_${workspaceId}`,
   archived: (workspaceId: string) => `plainsight_local_archived_${workspaceId}`,
   archivedTombstones: (workspaceId: string) => `plainsight_local_archived_tombstones_${workspaceId}`,
+  noteTags: (workspaceId: string) => `plainsight_local_note_tags_${workspaceId}`,
+  archivedNoteTags: (workspaceId: string) => `plainsight_local_archived_note_tags_${workspaceId}`,
   pins: 'plainsight_local_workspace_pins',
 } as const;
 
@@ -61,6 +65,8 @@ export async function clearLocalWorkspaceData(workspaceId: string): Promise<void
     localStorage.removeItem(KEY.archived(workspaceId));
     localStorage.removeItem(KEY.noteTombstones(workspaceId));
     localStorage.removeItem(KEY.archivedTombstones(workspaceId));
+    localStorage.removeItem(KEY.noteTags(workspaceId));
+    localStorage.removeItem(KEY.archivedNoteTags(workspaceId));
   } catch {
     /* ignore */
   }
@@ -104,6 +110,34 @@ export async function getLocalArchivedNoteTombstones(workspaceId: string): Promi
 
 export async function saveLocalArchivedNoteTombstones(workspaceId: string, rows: ArchivedNoteTombstone[]): Promise<void> {
   writeJson(KEY.archivedTombstones(workspaceId), rows);
+}
+
+/** Flat rows (workspace implied by key); matches Supabase `note_tags` sans workspace_id column in JSON. */
+export async function getLocalNoteTags(workspaceId: string): Promise<Pick<NoteTag, 'note_id' | 'tag'>[]> {
+  return readJson<Pick<NoteTag, 'note_id' | 'tag'>[]>(KEY.noteTags(workspaceId), []);
+}
+
+export async function saveLocalNoteTags(
+  workspaceId: string,
+  rows: Pick<NoteTag, 'note_id' | 'tag'>[],
+): Promise<void> {
+  writeJson(KEY.noteTags(workspaceId), rows);
+}
+
+export async function getLocalArchivedNoteTags(
+  workspaceId: string,
+): Promise<Pick<ArchivedNoteTag, 'archived_note_id' | 'tag'>[]> {
+  return readJson<Pick<ArchivedNoteTag, 'archived_note_id' | 'tag'>[]>(
+    KEY.archivedNoteTags(workspaceId),
+    [],
+  );
+}
+
+export async function saveLocalArchivedNoteTags(
+  workspaceId: string,
+  rows: Pick<ArchivedNoteTag, 'archived_note_id' | 'tag'>[],
+): Promise<void> {
+  writeJson(KEY.archivedNoteTags(workspaceId), rows);
 }
 
 export async function getLocalWorkspacePins(): Promise<WorkspacePin[]> {

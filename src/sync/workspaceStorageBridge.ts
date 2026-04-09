@@ -4,10 +4,13 @@ import {
   getLocalArchivedNotes,
   getLocalCategories,
   getLocalNotes,
+  saveLocalArchivedNoteTags,
   saveLocalArchivedNotes,
   saveLocalCategories,
+  saveLocalNoteTags,
   saveLocalNotes,
 } from './localDB';
+import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import {
   loadWorkspace,
   saveWorkspace,
@@ -138,7 +141,9 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
       updated_at: updatedRaw,
     };
   });
-  await saveLocalNotes(workspaceId, mergeNotesById(localNotes, uiNoteRows));
+  const mergedActiveNotes = mergeNotesById(localNotes, uiNoteRows);
+  await saveLocalNotes(workspaceId, mergedActiveNotes);
+  await saveLocalNoteTags(workspaceId, noteTagRowsFromNotes(mergedActiveNotes));
 
   const localArch = await getLocalArchivedNotes(workspaceId);
   const uiArch: ArchivedNote[] = Object.values(ui.archivedNotes || {}).map(
@@ -164,7 +169,9 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
       };
     },
   );
-  await saveLocalArchivedNotes(workspaceId, mergeArchivedById(localArch, uiArch));
+  const mergedArch = mergeArchivedById(localArch, uiArch);
+  await saveLocalArchivedNotes(workspaceId, mergedArch);
+  await saveLocalArchivedNoteTags(workspaceId, archivedNoteTagRowsFromArchived(mergedArch));
 }
 
 /** Push helper: drop category_id values that do not exist in the merged category set. */

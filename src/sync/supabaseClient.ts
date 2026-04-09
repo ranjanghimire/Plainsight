@@ -1,8 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   ArchivedNote,
+  ArchivedNoteTag,
   Category,
   Note,
+  NoteTag,
   SyncError,
   Workspace,
   WorkspacePin,
@@ -149,6 +151,41 @@ export async function fetchArchivedNotes(workspaceId: string) {
     return { data: data || [] };
   } catch (e) {
     return { data: [], error: err('Failed to fetch archived notes', e) };
+  }
+}
+
+/** Rows mirror `notes.text` first line; maintained by DB triggers. */
+export async function fetchNoteTags(workspaceId: string) {
+  if (!getCanUseSupabase()) return { data: [] };
+  try {
+    const client = getSupabase();
+    const { data, error } = await client
+      .from('note_tags')
+      .select('note_id, workspace_id, tag')
+      .eq('workspace_id', workspaceId)
+      .order('tag', { ascending: true });
+
+    if (error) return { data: [], error: err(error.message, error) };
+    return { data: (data || []) as NoteTag[] };
+  } catch (e) {
+    return { data: [], error: err('Failed to fetch note tags', e) };
+  }
+}
+
+export async function fetchArchivedNoteTags(workspaceId: string) {
+  if (!getCanUseSupabase()) return { data: [] };
+  try {
+    const client = getSupabase();
+    const { data, error } = await client
+      .from('archived_note_tags')
+      .select('archived_note_id, workspace_id, tag')
+      .eq('workspace_id', workspaceId)
+      .order('tag', { ascending: true });
+
+    if (error) return { data: [], error: err(error.message, error) };
+    return { data: (data || []) as ArchivedNoteTag[] };
+  } catch (e) {
+    return { data: [], error: err('Failed to fetch archived note tags', e) };
   }
 }
 
