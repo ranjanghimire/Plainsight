@@ -6,10 +6,28 @@ import { SyncEntitlementProvider } from './context/SyncEntitlementContext';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
+import { TagsNavProvider, useTagsNav } from './context/TagsNavContext';
+
+/** Same motion as archive toggle in {@link NotesView} (origin-top, scale, opacity, brightness). */
+function TagsRouteTransitionShell({ children }) {
+  const { tagsViewTransitioning } = useTagsNav();
+  return (
+    <div
+      className={`origin-top transition-all duration-200 ease-out ${
+        tagsViewTransitioning
+          ? 'opacity-0 scale-[0.98] brightness-95'
+          : 'opacity-100 scale-100 brightness-100'
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
 import { MenuPanel, MenuButton } from './components/MenuPanel';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
+import { TagsPage } from './pages/TagsPage';
 
 function RedirectWorkspaceOnLoad() {
   const navigate = useNavigate();
@@ -77,11 +95,39 @@ function WorkspaceContentShell({ children }) {
   );
 }
 
+function TagsToggleButton() {
+  const { isTagsRoute, toggleTagsPage } = useTagsNav();
+  return (
+    <button
+      type="button"
+      onClick={toggleTagsPage}
+      aria-pressed={isTagsRoute}
+      aria-label={isTagsRoute ? 'Exit tags' : 'Tags'}
+      className={`p-2 rounded-lg transition-colors ${
+        isTagsRoute
+          ? 'text-stone-800 bg-stone-200 dark:text-stone-100 dark:bg-stone-600'
+          : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700'
+      }`}
+    >
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.75}
+          d="M7 7h.01M3 11l8.5 8.5a2 2 0 002.828 0L21 12.828a2 2 0 000-2.828L13.5 2.5A2 2 0 0012.086 2H5a2 2 0 00-2 2v7.086A2 2 0 003 11z"
+        />
+      </svg>
+    </button>
+  );
+}
+
 function AppHeader({ onOpenSettings }) {
   const { currentWorkspace, visibleWorkspaces } = useWorkspace();
   const { archiveMode } = useArchiveMode();
+  const { isTagsRoute } = useTagsNav();
 
   const headerTitle = useMemo(() => {
+    if (isTagsRoute) return 'Tags';
     if (archiveMode) return 'Archive';
     if (currentWorkspace === 'home') return 'Plainsight';
     if (typeof currentWorkspace === 'string' && currentWorkspace.startsWith('visible:')) {
@@ -93,7 +139,7 @@ function AppHeader({ onOpenSettings }) {
     const spaced = slug.replace(/_/g, ' ').trim();
     if (!spaced) return 'Workspace';
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
-  }, [archiveMode, currentWorkspace, visibleWorkspaces]);
+  }, [archiveMode, currentWorkspace, visibleWorkspaces, isTagsRoute]);
 
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">
@@ -101,6 +147,7 @@ function AppHeader({ onOpenSettings }) {
         {headerTitle}
       </h1>
       <div className="flex items-center gap-0.5 shrink-0">
+        <TagsToggleButton />
         <ArchiveHistoryButton />
         <MenuButton onOpen={onOpenSettings} />
       </div>
@@ -126,12 +173,15 @@ function AppRoutes() {
       <AppHeader onOpenSettings={openDrawer} />
       <MenuPanel open={settingsOpen} onClose={closeDrawer} />
       <WorkspaceContentShell>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/w/:workspace" element={<WorkspacePage />} />
-          <Route path="/ws/:workspace" element={<WorkspacePage />} />
-          <Route path="/manage" element={<ManagePage />} />
-        </Routes>
+        <TagsRouteTransitionShell>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/w/:workspace" element={<WorkspacePage />} />
+            <Route path="/ws/:workspace" element={<WorkspacePage />} />
+            <Route path="/manage" element={<ManagePage />} />
+            <Route path="/tags" element={<TagsPage />} />
+          </Routes>
+        </TagsRouteTransitionShell>
       </WorkspaceContentShell>
     </>
   );
@@ -220,7 +270,9 @@ export default function App() {
           <WorkspaceProvider>
             <BrowserRouter>
               <ArchiveModeProvider>
-                <AppRoutes />
+                <TagsNavProvider>
+                  <AppRoutes />
+                </TagsNavProvider>
               </ArchiveModeProvider>
             </BrowserRouter>
           </WorkspaceProvider>

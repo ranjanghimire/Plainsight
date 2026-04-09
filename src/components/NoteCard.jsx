@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
+import { composeNoteWithTags, parseNoteBodyAndTags } from '../utils/noteTags';
 
 const ACTIVE_DELETE_MS = 180;
 const ARCHIVE_DELETE_MS = 170;
@@ -9,6 +10,19 @@ function TrashIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  );
+}
+
+function TagRowIcon({ className = 'w-3.5 h-3.5' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M7 7h.01M3 11l8.5 8.5a2 2 0 002.828 0L21 12.828a2 2 0 000-2.828L13.5 2.5A2 2 0 0012.086 2H5a2 2 0 00-2 2v7.086A2 2 0 003 11z"
+      />
     </svg>
   );
 }
@@ -39,7 +53,8 @@ export function NoteCard({
   archiveAnimating = false,
   bulkDissolve = false,
 }) {
-  const [text, setText] = useState(note.text);
+  const parsed = useMemo(() => parseNoteBodyAndTags(note.text), [note.text]);
+  const [editBody, setEditBody] = useState(() => parsed.body);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
@@ -50,6 +65,12 @@ export function NoteCard({
   const isArchived = variant === 'archived';
 
   useEffect(() => {
+    if (!isEditing) {
+      setEditBody(parsed.body);
+    }
+  }, [parsed.body, isEditing]);
+
+  useEffect(() => {
     return () => {
       if (toggleEditTimerRef.current) clearTimeout(toggleEditTimerRef.current);
       if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
@@ -57,14 +78,16 @@ export function NoteCard({
   }, []);
 
   const commitText = () => {
+    const { tags } = parseNoteBodyAndTags(note.text);
+    const full = composeNoteWithTags(tags, editBody);
     if (isArchived) {
-      if (text !== note.text) {
-        onArchivedUpdate?.(archivedEditKeyRef.current, { text });
+      if (full !== note.text) {
+        onArchivedUpdate?.(archivedEditKeyRef.current, { text: full });
       }
       setIsEditing(false);
       return;
     }
-    if (text !== note.text) onUpdate(note.id, { text });
+    if (full !== note.text) onUpdate(note.id, { text: full });
     setIsEditing(false);
   };
 
@@ -136,8 +159,8 @@ export function NoteCard({
       >
         {isEditing ? (
           <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
             onBlur={commitText}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -154,7 +177,7 @@ export function NoteCard({
           />
         ) : (
           <p onClick={handleTextBodyPointerPick} className={bodyTextClass}>
-            {text || 'Double-click or double-tap to edit…'}
+            {parsed.body || 'Double-click or double-tap to edit…'}
           </p>
         )}
         <div
@@ -220,6 +243,36 @@ export function NoteCard({
                 </button>
               )}
             </div>
+
+            {parsed.tags.length > 0 ? (
+              <div
+                className={`flex items-start gap-1.5 pt-2 transition-opacity duration-150 ease-out ${
+                  showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                <TagRowIcon
+                  className={
+                    isArchived
+                      ? 'w-3.5 h-3.5 shrink-0 text-neutral-400 dark:text-neutral-500 mt-0.5'
+                      : 'w-3.5 h-3.5 shrink-0 text-stone-400 dark:text-stone-500 mt-0.5'
+                  }
+                />
+                <div className="flex flex-wrap gap-1 min-w-0">
+                  {parsed.tags.map((t) => (
+                    <span
+                      key={t}
+                      className={
+                        isArchived
+                          ? 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-neutral-200/80 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
+                          : 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-stone-100 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
+                      }
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
