@@ -7,14 +7,22 @@ import {
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
-function chipBase(active) {
-  return active
-    ? 'bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200'
-    : 'bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-stone-700 dark:text-stone-300 dark:hover:bg-stone-600';
+/** Selected state keeps legacy highlight; unselected uses subtle empty vs non-empty tonality. */
+function chipTone(selected, hasItems) {
+  if (selected) {
+    return 'bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200';
+  }
+  if (hasItems) {
+    return 'bg-stone-100 text-stone-700 hover:bg-stone-200/95 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600';
+  }
+  return 'bg-stone-50 text-stone-400 hover:bg-stone-100/90 dark:bg-stone-800/50 dark:text-stone-500 dark:hover:bg-stone-800/80';
 }
+
+const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
 
 export function CategoryChips({
   categories,
+  categoryNamesWithItems = new Set(),
   categoryFilter,
   onCategoryChange,
   hasUncategorizedNotes,
@@ -56,19 +64,25 @@ export function CategoryChips({
     cancelCategoryEdit();
   };
 
+  const hasItems = (name) => categoryNamesWithItems.has(name);
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+      <div className="w-full min-w-0 -mx-0.5">
+        <div
+          className="flex flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain py-0.5 pl-0.5 pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(120,113,108,0.35)_transparent] dark:[scrollbar-color:rgba(168,162,158,0.3)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/45 dark:[&::-webkit-scrollbar-thumb]:bg-stone-500/40"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
         <button
           type="button"
           onClick={() => onCategoryChange(null)}
-          className={`px-2.5 py-1 rounded-md text-sm ${chipBase(categoryFilter === null)}`}
+          className={`${CHIP_PAD} ${chipTone(categoryFilter === null, true)}`}
         >
           All
         </button>
         {categories.map((cat) =>
           categoryEditKey === cat ? (
-            <span key={cat} className="inline-flex items-center gap-1">
+            <span key={cat} className="inline-flex shrink-0 items-center gap-1">
               <input
                 type="text"
                 value={categoryEditDraft}
@@ -103,7 +117,7 @@ export function CategoryChips({
                 { kind: 'category', name: cat },
                 () => onCategoryChange(cat),
               )}
-              className={`px-2.5 py-1 rounded-md text-sm ${CONTEXT_MENU_TRIGGER_CLASS} ${chipBase(categoryFilter === cat)}`}
+              className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipTone(categoryFilter === cat, hasItems(cat))}`}
             >
               {cat}
             </button>
@@ -113,13 +127,13 @@ export function CategoryChips({
           <button
             type="button"
             onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
-            className={`px-2.5 py-1 rounded-md text-sm ${chipBase(categoryFilter === UNCATEGORIZED_FILTER)}`}
+            className={`${CHIP_PAD} ${chipTone(categoryFilter === UNCATEGORIZED_FILTER, true)}`}
           >
             Undefined
           </button>
         )}
         {showInlineAddCategory ? (
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex shrink-0 items-center gap-1">
             <input
               type="text"
               value={inlineNewCategoryName}
@@ -157,11 +171,12 @@ export function CategoryChips({
           <button
             type="button"
             onClick={() => setShowInlineAddCategory(true)}
-            className="px-2.5 py-1 rounded-md text-sm bg-stone-100 text-stone-500 hover:bg-stone-200 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600"
+            className={`${CHIP_PAD} bg-stone-50 text-stone-400 hover:bg-stone-100/90 dark:bg-stone-800/50 dark:text-stone-500 dark:hover:bg-stone-800/80`}
           >
             + Add category
           </button>
         )}
+        </div>
       </div>
 
       <ContextActionPopover

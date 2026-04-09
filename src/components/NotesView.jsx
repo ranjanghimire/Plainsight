@@ -82,6 +82,20 @@ export function NotesView() {
     );
   }, [notes, archivedNotesMap]);
 
+  /** Category names with ≥1 active or archived note (for chip tonality). */
+  const categoryNamesWithItems = useMemo(() => {
+    const s = new Set();
+    for (const n of notes) {
+      const c = n.category;
+      if (typeof c === 'string' && c.trim() !== '') s.add(c);
+    }
+    for (const e of Object.values(archivedNotesMap)) {
+      const c = e?.category;
+      if (typeof c === 'string' && c.trim() !== '') s.add(c);
+    }
+    return s;
+  }, [notes, archivedNotesMap]);
+
   useEffect(() => {
     if (
       categoryFilter === UNCATEGORIZED_FILTER &&
@@ -291,6 +305,7 @@ export function NotesView() {
 
       <CategoryChips
         categories={categories}
+        categoryNamesWithItems={categoryNamesWithItems}
         categoryFilter={categoryFilter}
         onCategoryChange={applyCategoryFilter}
         hasUncategorizedNotes={hasUncategorizedNotes}
