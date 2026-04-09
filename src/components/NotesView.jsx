@@ -82,16 +82,22 @@ export function NotesView() {
     );
   }, [notes, archivedNotesMap]);
 
-  /** Category names with ≥1 active or archived note (for chip tonality). */
+  /** Category names with ≥1 active or archived note (for chip tonality). Trimmed keys so chip labels match hydrated/synced notes. */
   const categoryNamesWithItems = useMemo(() => {
     const s = new Set();
     for (const n of notes) {
       const c = n.category;
-      if (typeof c === 'string' && c.trim() !== '') s.add(c);
+      if (typeof c === 'string') {
+        const t = c.trim();
+        if (t !== '') s.add(t);
+      }
     }
     for (const e of Object.values(archivedNotesMap)) {
       const c = e?.category;
-      if (typeof c === 'string' && c.trim() !== '') s.add(c);
+      if (typeof c === 'string') {
+        const t = c.trim();
+        if (t !== '') s.add(t);
+      }
     }
     return s;
   }, [notes, archivedNotesMap]);

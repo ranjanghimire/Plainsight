@@ -7,15 +7,15 @@ import {
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
-/** Selected state keeps legacy highlight; unselected uses subtle empty vs non-empty tonality. */
+/** Selected state keeps legacy highlight; unselected uses empty vs non-empty tonality (stronger light-mode contrast — stone-50 body made stone-100 chips nearly invisible). */
 function chipTone(selected, hasItems) {
   if (selected) {
-    return 'bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200';
+    return 'bg-stone-300 text-stone-800 ring-1 ring-inset ring-stone-400/35 dark:bg-stone-600 dark:text-stone-200 dark:ring-stone-500/50';
   }
   if (hasItems) {
-    return 'bg-stone-100 text-stone-700 hover:bg-stone-200/95 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600';
+    return 'bg-stone-200/90 text-stone-800 ring-1 ring-inset ring-stone-300/70 hover:bg-stone-300/85 dark:bg-stone-700 dark:text-stone-200 dark:ring-stone-500/45 dark:hover:bg-stone-600';
   }
-  return 'bg-stone-50 text-stone-400 hover:bg-stone-100/90 dark:bg-stone-800/50 dark:text-stone-500 dark:hover:bg-stone-800/80';
+  return 'bg-stone-50 text-stone-500 ring-1 ring-inset ring-stone-200/80 hover:bg-stone-100/95 dark:bg-stone-800/55 dark:text-stone-500 dark:ring-stone-600/45 dark:hover:bg-stone-800/85';
 }
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
@@ -64,7 +64,8 @@ export function CategoryChips({
     cancelCategoryEdit();
   };
 
-  const hasItems = (name) => categoryNamesWithItems.has(name);
+  const hasItems = (name) =>
+    typeof name === 'string' && categoryNamesWithItems.has(name.trim());
 
   return (
     <>
