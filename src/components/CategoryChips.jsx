@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 import {
   useItemContextMenu,
@@ -7,18 +7,25 @@ import {
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
-/** Chip surface classes live in `index.css` @layer components so production builds always ship them. */
-function chipVariantClass(selected, hasNotes) {
-  if (selected) return 'ps-category-chip-selected';
-  if (hasNotes) return 'ps-category-chip-populated';
-  return 'ps-category-chip-empty';
+/** @returns {'selected' | 'populated' | 'empty'} */
+function categoryChipVariant(selected, hasNotes) {
+  if (selected) return 'selected';
+  if (hasNotes) return 'populated';
+  return 'empty';
+}
+
+function categoryNameFromValue(c) {
+  if (c == null || c === '') return null;
+  const t = String(c).trim();
+  return t || null;
 }
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
 
 export function CategoryChips({
   categories,
-  categoryNamesWithItems = new Set(),
+  notes = [],
+  archivedNotesMap = {},
   categoryFilter,
   onCategoryChange,
   hasUncategorizedNotes,
@@ -35,6 +42,20 @@ export function CategoryChips({
   const [categoryEditKey, setCategoryEditKey] = useState(null);
   const [categoryEditDraft, setCategoryEditDraft] = useState('');
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState(null);
+
+  /** Built here (not from a Set prop) so deploy/runtime cannot lose Set identity or confuse serialized props. */
+  const namesWithNotes = useMemo(() => {
+    const s = new Set();
+    for (const n of notes) {
+      const key = categoryNameFromValue(n?.category);
+      if (key) s.add(key);
+    }
+    for (const e of Object.values(archivedNotesMap)) {
+      const key = categoryNameFromValue(e?.category);
+      if (key) s.add(key);
+    }
+    return s;
+  }, [notes, archivedNotesMap]);
 
   useEffect(() => {
     catMenu.closeMenu();
@@ -60,15 +81,6 @@ export function CategoryChips({
     cancelCategoryEdit();
   };
 
-  const namesWithNotes =
-    categoryNamesWithItems instanceof Set
-      ? categoryNamesWithItems
-      : new Set(
-          Array.isArray(categoryNamesWithItems)
-            ? categoryNamesWithItems.map((x) => String(x).trim()).filter(Boolean)
-            : [],
-        );
-
   const hasItems = (name) =>
     typeof name === 'string' && namesWithNotes.has(name.trim());
 
@@ -79,37 +91,101 @@ export function CategoryChips({
           className="flex flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain py-0.5 pl-0.5 pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(120,113,108,0.35)_transparent] dark:[scrollbar-color:rgba(168,162,158,0.3)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/45 dark:[&::-webkit-scrollbar-thumb]:bg-stone-500/40"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
-        <button
-          type="button"
-          onClick={() => onCategoryChange(null)}
-          className={`${CHIP_PAD} ${chipVariantClass(categoryFilter === null, true)}`}
-        >
-          All
-        </button>
-        {categories.map((cat) =>
-          categoryEditKey === cat ? (
-            <span key={cat} className="inline-flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onCategoryChange(null)}
+            data-chip={categoryChipVariant(categoryFilter === null, true)}
+            className={`ps-cat-chip ${CHIP_PAD}`}
+          >
+            All
+          </button>
+          {categories.map((cat) =>
+            categoryEditKey === cat ? (
+              <span key={cat} className="inline-flex shrink-0 items-center gap-1">
+                <input
+                  type="text"
+                  value={categoryEditDraft}
+                  onChange={(e) => setCategoryEditDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitCategoryRename(cat);
+                    if (e.key === 'Escape') cancelCategoryEdit();
+                  }}
+                  className="w-28 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => commitCategoryRename(cat)}
+                  className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelCategoryEdit}
+                  className="px-2 py-1 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                key={cat}
+                type="button"
+                {...catMenu.bindTrigger(
+                  { kind: 'category', name: cat },
+                  () => onCategoryChange(cat),
+                )}
+                data-chip={categoryChipVariant(categoryFilter === cat, hasItems(cat))}
+                className={`ps-cat-chip ${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS}`}
+              >
+                {cat}
+              </button>
+            ),
+          )}
+          {hasUncategorizedNotes && (
+            <button
+              type="button"
+              onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
+              data-chip={categoryChipVariant(
+                categoryFilter === UNCATEGORIZED_FILTER,
+                true,
+              )}
+              className={`ps-cat-chip ${CHIP_PAD}`}
+            >
+              Undefined
+            </button>
+          )}
+          {showInlineAddCategory ? (
+            <span className="inline-flex shrink-0 items-center gap-1">
               <input
                 type="text"
-                value={categoryEditDraft}
-                onChange={(e) => setCategoryEditDraft(e.target.value)}
+                value={inlineNewCategoryName}
+                onChange={(e) => setInlineNewCategoryName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitCategoryRename(cat);
-                  if (e.key === 'Escape') cancelCategoryEdit();
+                  if (e.key === 'Enter') handleInlineAddCategory();
+                  if (e.key === 'Escape') {
+                    setInlineNewCategoryName('');
+                    setShowInlineAddCategory(false);
+                  }
                 }}
+                placeholder="New category"
                 className="w-28 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
                 autoFocus
               />
               <button
                 type="button"
-                onClick={() => commitCategoryRename(cat)}
+                onClick={handleInlineAddCategory}
                 className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
               >
-                Save
+                Add
               </button>
               <button
                 type="button"
-                onClick={cancelCategoryEdit}
+                onClick={() => {
+                  setInlineNewCategoryName('');
+                  setShowInlineAddCategory(false);
+                }}
                 className="px-2 py-1 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
               >
                 Cancel
@@ -117,71 +193,13 @@ export function CategoryChips({
             </span>
           ) : (
             <button
-              key={cat}
               type="button"
-              {...catMenu.bindTrigger(
-                { kind: 'category', name: cat },
-                () => onCategoryChange(cat),
-              )}
-              className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipVariantClass(categoryFilter === cat, hasItems(cat))}`}
+              onClick={() => setShowInlineAddCategory(true)}
+              className={`${CHIP_PAD} bg-stone-50 text-stone-400 hover:bg-stone-100/90 dark:bg-stone-800/50 dark:text-stone-500 dark:hover:bg-stone-800/80`}
             >
-              {cat}
+              + Add category
             </button>
-          ),
-        )}
-        {hasUncategorizedNotes && (
-          <button
-            type="button"
-            onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
-            className={`${CHIP_PAD} ${chipVariantClass(categoryFilter === UNCATEGORIZED_FILTER, true)}`}
-          >
-            Undefined
-          </button>
-        )}
-        {showInlineAddCategory ? (
-          <span className="inline-flex shrink-0 items-center gap-1">
-            <input
-              type="text"
-              value={inlineNewCategoryName}
-              onChange={(e) => setInlineNewCategoryName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleInlineAddCategory();
-                if (e.key === 'Escape') {
-                  setInlineNewCategoryName('');
-                  setShowInlineAddCategory(false);
-                }
-              }}
-              placeholder="New category"
-              className="w-28 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
-              autoFocus
-            />
-            <button
-              type="button"
-              onClick={handleInlineAddCategory}
-              className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setInlineNewCategoryName('');
-                setShowInlineAddCategory(false);
-              }}
-              className="px-2 py-1 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
-            >
-              Cancel
-            </button>
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowInlineAddCategory(true)}
-            className={`${CHIP_PAD} bg-stone-50 text-stone-400 hover:bg-stone-100/90 dark:bg-stone-800/50 dark:text-stone-500 dark:hover:bg-stone-800/80`}
-          >
-            + Add category
-          </button>
-        )}
+          )}
         </div>
       </div>
 

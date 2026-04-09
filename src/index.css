@@ -20,31 +20,6 @@ html {
 }
 
 /*
- * Category filter chips: defined here (not only via JS string helpers) so production CSS
- * always includes these utilities — some deploy scanners miss classes inside nested returns.
- * Populated vs empty use different border styles so they stay distinct on any background.
- */
-@layer components {
-  .ps-category-chip-selected {
-    @apply bg-stone-500 text-white border border-solid border-stone-600 shadow-sm
-      hover:bg-stone-600 hover:border-stone-700
-      dark:bg-stone-500 dark:border-stone-400 dark:hover:bg-stone-400 dark:hover:border-stone-300;
-  }
-  .ps-category-chip-populated {
-    @apply bg-stone-200 text-stone-900 border border-solid border-stone-400 shadow-sm
-      hover:bg-stone-300 hover:border-stone-500
-      dark:bg-stone-600 dark:text-stone-100 dark:border-stone-500
-      dark:hover:bg-stone-500 dark:hover:border-stone-400;
-  }
-  .ps-category-chip-empty {
-    @apply bg-white text-stone-500 border border-dashed border-stone-300 shadow-none
-      hover:bg-stone-50 hover:border-stone-400
-      dark:bg-stone-800 dark:text-stone-500 dark:border-dashed dark:border-stone-600
-      dark:hover:bg-stone-700 dark:hover:border-stone-500;
-  }
-}
-
-/*
  * iOS Safari zooms the viewport when focused inputs use font-size < 16px.
  * Enforce at least 16px on common form controls (Tailwind text-base = 1rem).
  */
@@ -67,4 +42,78 @@ body {
   margin: 0 auto;
   padding: 1.5rem 1rem;
   box-sizing: border-box;
+}
+
+/*
+ * Category filter chips — plain CSS (not Tailwind utilities):
+ * - Mobile Safari / iOS often paints native <button> chrome that ignores dashed borders / subtle fills.
+ * - `appearance: none` + explicit borders/backgrounds keep empty (dashed) vs populated (solid) distinct everywhere.
+ * - `html.dark` matches ThemeProvider toggling class on documentElement.
+ */
+button.ps-cat-chip {
+  font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+button.ps-cat-chip[data-chip='empty'] {
+  background-color: #ffffff;
+  color: #78716c;
+  border: 1px dashed #d6d3d1;
+  box-shadow: none;
+}
+button.ps-cat-chip[data-chip='empty']:hover {
+  background-color: #fafaf9;
+  border-color: #a8a29e;
+}
+html.dark button.ps-cat-chip[data-chip='empty'] {
+  background-color: #292524;
+  color: #a8a29e;
+  border: 1px dashed #57534e;
+}
+html.dark button.ps-cat-chip[data-chip='empty']:hover {
+  background-color: #44403c;
+  border-color: #78716c;
+}
+
+button.ps-cat-chip[data-chip='populated'] {
+  background-color: #e7e5e4;
+  color: #1c1917;
+  border: 1px solid #a8a29e;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+button.ps-cat-chip[data-chip='populated']:hover {
+  background-color: #d6d3d1;
+  border-color: #78716c;
+}
+html.dark button.ps-cat-chip[data-chip='populated'] {
+  background-color: #57534e;
+  color: #f5f5f4;
+  border: 1px solid #78716c;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+}
+html.dark button.ps-cat-chip[data-chip='populated']:hover {
+  background-color: #78716c;
+  border-color: #a8a29e;
+}
+
+button.ps-cat-chip[data-chip='selected'] {
+  background-color: #78716c;
+  color: #ffffff;
+  border: 1px solid #57534e;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+button.ps-cat-chip[data-chip='selected']:hover {
+  background-color: #57534e;
+  border-color: #44403c;
+}
+html.dark button.ps-cat-chip[data-chip='selected'] {
+  background-color: #78716c;
+  color: #ffffff;
+  border: 1px solid #a8a29e;
+}
+html.dark button.ps-cat-chip[data-chip='selected']:hover {
+  background-color: #a8a29e;
+  border-color: #d6d3d1;
 }
