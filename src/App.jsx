@@ -109,7 +109,13 @@ function TagsToggleButton() {
           : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700'
       }`}
     >
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <svg
+        className="w-6 h-6 block translate-y-0.5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"

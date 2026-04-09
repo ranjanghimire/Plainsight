@@ -197,7 +197,7 @@ export function TagsPage() {
         </button>
       </div>
 
-      <div className="rounded-lg border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 px-3 py-2">
+      <div className="rounded-xl bg-white px-3.5 py-2.5 shadow-sm shadow-stone-200/50 ring-1 ring-stone-200/80 dark:bg-stone-800 dark:shadow-none dark:ring-stone-600/50">
         <input
           type="text"
           value={query}
@@ -221,7 +221,7 @@ export function TagsPage() {
         </p>
       ) : null}
 
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {tags.map((t) => {
           const isOpen = selectedTag === t.tag;
           const notesForTag = notesByTag.get(t.tag) ?? [];
@@ -229,21 +229,27 @@ export function TagsPage() {
           return (
             <div
               key={t.tag}
-              className={`rounded-lg border transition-[border-color,background-color] duration-200 ease-out ${
+              className={`rounded-2xl overflow-hidden transition-[box-shadow,background-color] duration-200 ease-out ${
                 isOpen
-                  ? 'border-stone-400 bg-stone-50 dark:border-stone-500 dark:bg-stone-800/90'
-                  : 'border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800'
+                  ? 'bg-white shadow-md shadow-stone-200/60 ring-1 ring-stone-300/80 dark:bg-stone-800 dark:shadow-black/25 dark:ring-stone-500/40'
+                  : 'bg-white shadow-sm shadow-stone-200/40 ring-1 ring-stone-200/70 dark:bg-stone-800/90 dark:shadow-none dark:ring-stone-600/45'
               }`}
             >
               <button
                 type="button"
                 onClick={() => toggleTag(t.tag)}
                 aria-expanded={isOpen}
-                className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-3 rounded-lg transition-colors duration-200 hover:bg-stone-100/80 dark:hover:bg-stone-700/50"
+                className={`w-full text-left px-4 py-3 flex items-center justify-between gap-3 transition-colors duration-200 ${
+                  isOpen
+                    ? 'bg-stone-50/90 dark:bg-stone-800'
+                    : 'hover:bg-stone-50/70 dark:hover:bg-stone-700/35'
+                }`}
               >
                 <span className="text-sm font-medium text-stone-800 dark:text-stone-200">#{t.tag}</span>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-stone-500 dark:text-stone-400 tabular-nums">{t.count}</span>
+                  <span className="text-xs font-medium text-stone-400 dark:text-stone-500 tabular-nums">
+                    {t.count}
+                  </span>
                   <ChevronIcon open={isOpen} />
                 </div>
               </button>
@@ -255,33 +261,35 @@ export function TagsPage() {
               >
                 <div className="min-h-0 overflow-hidden">
                   <div
-                    className={`px-3 pb-3 pt-1 space-y-2 border-t border-stone-200/80 dark:border-stone-600/80 transition-opacity duration-200 ease-out ${
+                    className={`px-2 pb-2 pt-0 transition-opacity duration-200 ease-out ${
                       isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
                     }`}
                   >
                     {notesForTag.length === 0 ? (
-                      <p className="text-sm text-stone-500 dark:text-stone-400 py-1">
+                      <p className="text-sm text-stone-500 dark:text-stone-400 px-2 py-3">
                         No notes found for #{t.tag}.
                       </p>
                     ) : (
-                      notesForTag.map((n) => (
-                        <button
-                          key={`${n.workspaceKey}:${n.id}`}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openWorkspaceForNote(n);
-                          }}
-                          className="w-full text-left p-3 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900/40 dark:hover:bg-stone-700/60 transition-colors duration-150"
-                        >
-                          <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">
-                            {n.workspaceLabel}
-                          </div>
-                          <div className="text-sm text-stone-800 dark:text-stone-200 whitespace-pre-wrap">
-                            {n.displayText || '(empty)'}
-                          </div>
-                        </button>
-                      ))
+                      <div className="mx-1 rounded-xl bg-stone-100/90 dark:bg-stone-950/50 overflow-hidden divide-y divide-stone-200/60 dark:divide-stone-600/35">
+                        {notesForTag.map((n) => (
+                          <button
+                            key={`${n.workspaceKey}:${n.id}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openWorkspaceForNote(n);
+                            }}
+                            className="w-full text-left px-3.5 py-3 bg-white/0 hover:bg-white/95 dark:hover:bg-stone-800/85 active:bg-stone-100/80 dark:active:bg-stone-700/60 transition-colors duration-150"
+                          >
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500 mb-1">
+                              {n.workspaceLabel}
+                            </div>
+                            <div className="text-sm text-stone-800 dark:text-stone-200 whitespace-pre-wrap leading-snug">
+                              {n.displayText || '(empty)'}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

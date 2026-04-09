@@ -18,7 +18,13 @@ function TrashIcon() {
 
 function TagRowIcon({ className = 'w-3.5 h-3.5' }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <svg
+      className={`${className} block translate-y-px`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
