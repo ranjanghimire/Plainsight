@@ -30,9 +30,11 @@ import {
   countHiddenWorkspaceKeys,
 } from '../utils/storage';
 import {
+  MAX_ARCHIVED_ITEMS_PER_WORKSPACE,
   MAX_FREE_HIDDEN_WORKSPACES,
   MAX_FREE_VISIBLE_WORKSPACES,
 } from '../constants/workspaceLimits';
+import { pruneArchivedNotesUi } from '../utils/archivedPrune';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
 import {
   getCanUseSupabase,
@@ -732,10 +734,37 @@ export function WorkspaceProvider({ children }) {
             : n.category;
         arch[textKey] = { text: textKey, category: cat, lastDeletedAt: now };
       }
+      const pruned = pruneArchivedNotesUi(arch, MAX_ARCHIVED_ITEMS_PER_WORKSPACE);
+      const archOut = pruned.map;
+      if (pruned.removedTextKeys.length > 0) {
+        queueMicrotask(() => {
+          try {
+            const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+            const deletedAt = new Date().toISOString();
+            const ids = pruned.removedTextKeys.map((t) =>
+              archivedRowIdForText(workspaceId, t),
+            );
+            void (async () => {
+              const existing = await getLocalArchivedNoteTombstones(workspaceId);
+              const next = [
+                ...ids.map((tid) => ({
+                  id: tid,
+                  workspace_id: workspaceId,
+                  deleted_at: deletedAt,
+                })),
+                ...existing.filter((t) => !ids.includes(t.id)),
+              ];
+              await saveLocalArchivedNoteTombstones(workspaceId, next);
+            })();
+          } catch {
+            /* ignore */
+          }
+        });
+      }
       return {
         ...prev,
         notes: (prev.notes || []).filter((x) => x.id !== id),
-        archivedNotes: arch,
+        archivedNotes: archOut,
       };
     });
     // Record a tombstone so sync can delete the Supabase row.

@@ -1,3 +1,11 @@
+import { pruneArchivedNotesUi } from './archivedPrune';
+import { MAX_ARCHIVED_ITEMS_PER_WORKSPACE } from '../constants/workspaceLimits';
+import { archivedRowIdForText } from './archivedIds';
+import {
+  getLocalArchivedNoteTombstones,
+  saveLocalArchivedNoteTombstones,
+} from '../sync/localDB';
+
 const WORKSPACE_PREFIX = 'workspace_';
 const MASTER_KEY = 'masterKey';
 
@@ -561,8 +569,37 @@ export function loadWorkspace(key) {
       archivedNotes: normalizeArchivedNotes(data.archivedNotes),
     };
     const { next, changed } = migrateWorkspaceNotesForSync(base);
-    if (changed) saveWorkspace(key, next);
-    return next;
+    let out = next;
+    let needsSave = changed;
+    const pruned = pruneArchivedNotesUi(
+      out.archivedNotes,
+      MAX_ARCHIVED_ITEMS_PER_WORKSPACE,
+    );
+    if (pruned.removedTextKeys.length > 0) {
+      out = { ...out, archivedNotes: pruned.map };
+      needsSave = true;
+      const wid = getOrCreateWorkspaceIdForStorageKey(key);
+      const deletedAt = new Date().toISOString();
+      void (async () => {
+        try {
+          const existing = await getLocalArchivedNoteTombstones(wid);
+          const newTombs = pruned.removedTextKeys.map((text) => ({
+            id: archivedRowIdForText(wid, text),
+            workspace_id: wid,
+            deleted_at: deletedAt,
+          }));
+          const idSet = new Set(newTombs.map((t) => t.id));
+          await saveLocalArchivedNoteTombstones(wid, [
+            ...newTombs,
+            ...existing.filter((t) => !idSet.has(t.id)),
+          ]);
+        } catch {
+          /* ignore */
+        }
+      })();
+    }
+    if (needsSave) saveWorkspace(key, out);
+    return out;
   } catch {
     return getDefaultWorkspaceData();
   }

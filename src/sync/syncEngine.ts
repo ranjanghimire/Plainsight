@@ -66,6 +66,7 @@ import {
 import { notifyHydrationComplete } from './hydrationBridge';
 import { getCanUseSupabase } from './syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
+import { pruneArchivedNoteRows } from '../utils/archivedPrune';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -820,6 +821,27 @@ export async function fullSync(
         ...mergedArchived[wid],
         merged: mergedArchived[wid].merged.filter((n) => !tombIds.has(n.id)),
       };
+    }
+
+    // Cap archived notes per workspace (newest kept); queue remote deletes for trimmed rows.
+    for (const wid of ids) {
+      const merged = mergedArchived[wid].merged;
+      const { kept, removed } = pruneArchivedNoteRows(merged);
+      if (removed.length === 0) continue;
+      mergedArchived[wid] = { ...mergedArchived[wid], merged: kept };
+      const deletedAt = new Date().toISOString();
+      const removedIdSet = new Set(removed.map((r) => r.id));
+      const pruneTombs = removed.map((r) => ({
+        id: r.id,
+        workspace_id: wid,
+        deleted_at: deletedAt,
+      }));
+      const existingTombs = localArchivedTombstones[wid] || [];
+      localArchivedTombstones[wid] = [
+        ...pruneTombs,
+        ...existingTombs.filter((t) => !removedIdSet.has(t.id)),
+      ];
+      await saveLocalArchivedNoteTombstones(wid, localArchivedTombstones[wid]);
     }
 
     // Save local merged for the rest of tables (workspaces already persisted above)

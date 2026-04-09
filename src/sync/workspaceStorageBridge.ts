@@ -1,29 +1,27 @@
-import { v4 as uuidv4, v5 as uuidv5 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import type { ArchivedNote, Category, Note } from './types';
 import {
+  getLocalArchivedNoteTombstones,
   getLocalArchivedNotes,
   getLocalCategories,
   getLocalNotes,
   saveLocalArchivedNoteTags,
   saveLocalArchivedNotes,
+  saveLocalArchivedNoteTombstones,
   saveLocalCategories,
   saveLocalNoteTags,
   saveLocalNotes,
 } from './localDB';
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
+import { pruneArchivedNoteRows } from '../utils/archivedPrune';
 import {
   loadWorkspace,
   saveWorkspace,
   getStorageKeyForWorkspaceId,
   isUuid,
 } from '../utils/storage';
-
-/** Fixed namespace for deterministic archived row ids (v5). */
-const ARCHIVE_ID_NAMESPACE = '018d0e28-8f3a-7000-8000-000000000001';
-
-export function archivedRowIdForText(workspaceId: string, text: string): string {
-  return uuidv5(`${workspaceId}\0${text}`, ARCHIVE_ID_NAMESPACE);
-}
+import { archivedRowIdForText } from '../utils/archivedIds';
+export { archivedRowIdForText };
 
 function mergeNotesById(a: Note[], b: Note[]): Note[] {
   const map = new Map<string, Note>();
@@ -170,8 +168,23 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
     },
   );
   const mergedArch = mergeArchivedById(localArch, uiArch);
-  await saveLocalArchivedNotes(workspaceId, mergedArch);
-  await saveLocalArchivedNoteTags(workspaceId, archivedNoteTagRowsFromArchived(mergedArch));
+  const { kept: archKept, removed: archRemoved } = pruneArchivedNoteRows(mergedArch);
+  await saveLocalArchivedNotes(workspaceId, archKept);
+  await saveLocalArchivedNoteTags(workspaceId, archivedNoteTagRowsFromArchived(archKept));
+  if (archRemoved.length > 0) {
+    const deletedAt = new Date().toISOString();
+    const removedIds = new Set(archRemoved.map((r) => r.id));
+    const existingTombs = await getLocalArchivedNoteTombstones(workspaceId);
+    const newTombs = archRemoved.map((r) => ({
+      id: r.id,
+      workspace_id: workspaceId,
+      deleted_at: deletedAt,
+    }));
+    await saveLocalArchivedNoteTombstones(workspaceId, [
+      ...newTombs,
+      ...existingTombs.filter((t) => !removedIds.has(t.id)),
+    ]);
+  }
 }
 
 /** Push helper: drop category_id values that do not exist in the merged category set. */
