@@ -271,8 +271,8 @@ function BackNavigationLock({ drawerOpen, closeDrawer }) {
 export default function App() {
   return (
     <ThemeProvider>
-      <SyncEntitlementProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <SyncEntitlementProvider>
           <WorkspaceProvider>
             <BrowserRouter>
               <ArchiveModeProvider>
@@ -282,8 +282,8 @@ export default function App() {
               </ArchiveModeProvider>
             </BrowserRouter>
           </WorkspaceProvider>
-        </AuthProvider>
-      </SyncEntitlementProvider>
+        </SyncEntitlementProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

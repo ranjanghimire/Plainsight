@@ -31,9 +31,10 @@ export function WorkspacePage() {
     if (!peekHiddenWorkspaceCreationAllowed(workspace)) {
       if (hiddenQuotaWarnedForRef.current !== workspace) {
         hiddenQuotaWarnedForRef.current = workspace;
-        showToast(
-          'Free plan allows one hidden workspace. Upgrade to cloud sync for more.',
-        );
+        showToast('Free plan allows one hidden workspace. Upgrade to cloud sync for more.', {
+          persistent: true,
+          showUpgradeCta: true,
+        });
       }
       if (hydrationComplete) navigate('/', { replace: true });
       return undefined;

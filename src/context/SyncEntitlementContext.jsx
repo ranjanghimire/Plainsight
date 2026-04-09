@@ -19,6 +19,7 @@ import { readAuthDisplayEmail } from '../auth/authDisplayEmail';
 import { checkSyncEntitlementRemote } from '../auth/checkSyncEntitlementRemote';
 import { drainOtpSessionQueue, OTP_SESSION_QUEUE_CHANGED } from '../auth/otpSessionQueue';
 import { EnableSyncModal } from '../components/EnableSyncModal';
+import { useAuth } from './AuthContext';
 import {
   customerInfoHasSyncEntitlement,
   purchasesSdkHasSyncEntitlement,
@@ -50,6 +51,7 @@ function unwrapCustomerInfo(result) {
 const SyncEntitlementContext = createContext(null);
 
 export function SyncEntitlementProvider({ children }) {
+  const { openSendCodeModal } = useAuth();
   const purchasesRef = useRef(null);
   /** Last Supabase user id passed to RevenueCat identifyUser; null when using anonymous RC user. */
   const rcLinkedSupabaseUserIdRef = useRef(null);
@@ -60,7 +62,8 @@ export function SyncEntitlementProvider({ children }) {
   const [enableSyncOpen, setEnableSyncOpen] = useState(false);
   const [paywallSubtitle, setPaywallSubtitle] = useState(null);
   const [unlocking, setUnlocking] = useState(false);
-  const [toastMessage, setToastMessage] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastRef = useRef(null);
   const toastTimerRef = useRef(null);
   /** True while OTP / session-restore queue is linking RevenueCat to the Supabase user (avoid flashing paywall). */
   const [isLinkingPurchasesToSession, setIsLinkingPurchasesToSession] = useState(false);
@@ -72,14 +75,37 @@ export function SyncEntitlementProvider({ children }) {
     [],
   );
 
-  const showToast = useCallback((message) => {
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    setToastMessage(message);
-    toastTimerRef.current = window.setTimeout(() => {
-      setToastMessage(null);
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
       toastTimerRef.current = null;
-    }, 3200);
+    }
+    setToast(null);
   }, []);
+
+  /**
+   * @param {string} message
+   * @param {{ persistent?: boolean; showUpgradeCta?: boolean }} [options]
+   * - `persistent`: no auto-dismiss; user taps Got it (or Escape). Use for paywall / quota copy.
+   * - `showUpgradeCta`: show Unlock cloud sync (opens paywall); only with persistent.
+   */
+  const showToast = useCallback(
+    (message, options = {}) => {
+      const text = typeof message === 'string' ? message.trim() : '';
+      if (!text) return;
+      const persistent = Boolean(options.persistent);
+      const showUpgradeCta = persistent && Boolean(options.showUpgradeCta);
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+      setToast({ message: text, persistent, showUpgradeCta });
+      if (!persistent) {
+        toastTimerRef.current = window.setTimeout(dismissToast, 3200);
+      }
+    },
+    [dismissToast],
+  );
 
   useEffect(
     () => () => {
@@ -87,6 +113,24 @@ export function SyncEntitlementProvider({ children }) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!toast?.persistent) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') dismissToast();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toast?.persistent, dismissToast]);
+
+  useEffect(() => {
+    if (!toast?.persistent) return;
+    const t = window.setTimeout(() => {
+      const el = toastRef.current?.querySelector('button');
+      if (el instanceof HTMLElement) el.focus();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [toast?.message, toast?.persistent]);
 
   const applyCustomerInfo = useCallback((info) => {
     const active = customerInfoHasSyncEntitlement(info);
@@ -209,9 +253,13 @@ export function SyncEntitlementProvider({ children }) {
 
   const beginUpgradeFlow = useCallback(() => {
     if (getSyncEntitled()) return;
+    if (!hasCustomAuthSession()) {
+      openSendCodeModal();
+      return;
+    }
     setPaywallSubtitle(null);
     setEnableSyncOpen(true);
-  }, []);
+  }, [openSendCodeModal]);
   const closeEnableSync = useCallback(() => {
     setEnableSyncOpen(false);
     setPaywallSubtitle(null);
@@ -515,13 +563,43 @@ export function SyncEntitlementProvider({ children }) {
         unlocking={unlocking}
         subtitle={paywallSubtitle}
       />
-      {toastMessage ? (
+      {toast ? (
         <div
-          className="fixed bottom-6 left-1/2 z-[120] max-w-[min(90vw,20rem)] -translate-x-1/2 rounded-lg bg-stone-900/90 px-4 py-2 text-center text-sm text-stone-100 shadow-lg dark:bg-stone-100/95 dark:text-stone-900"
-          role="status"
-          aria-live="polite"
+          ref={toastRef}
+          className={`fixed bottom-6 left-1/2 z-[120] w-[min(92vw,22rem)] -translate-x-1/2 rounded-xl bg-stone-900/95 px-4 text-sm text-stone-100 shadow-lg ring-1 ring-stone-700/40 dark:bg-stone-100/95 dark:text-stone-900 dark:ring-stone-300/50 ${
+            toast.persistent ? 'py-4' : 'py-2.5 text-center'
+          }`}
+          role={toast.persistent ? 'alert' : 'status'}
+          aria-live={toast.persistent ? 'assertive' : 'polite'}
         >
-          {toastMessage}
+          <p className={toast.persistent ? 'text-center leading-snug' : ''}>{toast.message}</p>
+          {toast.persistent ? (
+            <div className="mt-3 flex flex-col gap-2">
+              {toast.showUpgradeCta ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissToast();
+                    beginUpgradeFlow();
+                  }}
+                  className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-center text-sm font-medium text-stone-900 shadow-sm hover:bg-white dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700"
+                >
+                  {hasCustomAuthSession() ? 'Unlock cloud sync' : 'Sign in with email'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={dismissToast}
+                className={`w-full rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors ${
+                  toast.showUpgradeCta
+                    ? 'border border-stone-500/45 text-stone-100 hover:bg-stone-800/60 dark:border-stone-400/55 dark:text-stone-800 dark:hover:bg-stone-200/90'
+                    : 'bg-stone-100 text-stone-900 hover:bg-white dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700'
+                }`}
+              >
+                {toast.showUpgradeCta ? 'Got it' : 'Dismiss'}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </SyncEntitlementContext.Provider>

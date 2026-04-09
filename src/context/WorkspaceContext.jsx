@@ -146,9 +146,10 @@ export function WorkspaceProvider({ children }) {
   const canOpenOrCreateHiddenWorkspace = useCallback(
     (name) => {
       if (peekHiddenWorkspaceCreationAllowed(name)) return true;
-      showToast(
-        'Free plan allows one hidden workspace. Upgrade to cloud sync for more.',
-      );
+      showToast('Free plan allows one hidden workspace. Upgrade to cloud sync for more.', {
+        persistent: true,
+        showUpgradeCta: true,
+      });
       return false;
     },
     [peekHiddenWorkspaceCreationAllowed, showToast],
@@ -160,6 +161,7 @@ export function WorkspaceProvider({ children }) {
       if (currentVisibleCount >= MAX_FREE_VISIBLE_WORKSPACES) {
         showToast(
           `Free plan allows ${MAX_FREE_VISIBLE_WORKSPACES} visible workspaces (including Home). Upgrade to cloud sync for more.`,
+          { persistent: true, showUpgradeCta: true },
         );
         return false;
       }
