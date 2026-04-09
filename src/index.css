@@ -20,6 +20,31 @@ html {
 }
 
 /*
+ * Category filter chips: defined here (not only via JS string helpers) so production CSS
+ * always includes these utilities — some deploy scanners miss classes inside nested returns.
+ * Populated vs empty use different border styles so they stay distinct on any background.
+ */
+@layer components {
+  .ps-category-chip-selected {
+    @apply bg-stone-500 text-white border border-solid border-stone-600 shadow-sm
+      hover:bg-stone-600 hover:border-stone-700
+      dark:bg-stone-500 dark:border-stone-400 dark:hover:bg-stone-400 dark:hover:border-stone-300;
+  }
+  .ps-category-chip-populated {
+    @apply bg-stone-200 text-stone-900 border border-solid border-stone-400 shadow-sm
+      hover:bg-stone-300 hover:border-stone-500
+      dark:bg-stone-600 dark:text-stone-100 dark:border-stone-500
+      dark:hover:bg-stone-500 dark:hover:border-stone-400;
+  }
+  .ps-category-chip-empty {
+    @apply bg-white text-stone-500 border border-dashed border-stone-300 shadow-none
+      hover:bg-stone-50 hover:border-stone-400
+      dark:bg-stone-800 dark:text-stone-500 dark:border-dashed dark:border-stone-600
+      dark:hover:bg-stone-700 dark:hover:border-stone-500;
+  }
+}
+
+/*
  * iOS Safari zooms the viewport when focused inputs use font-size < 16px.
  * Enforce at least 16px on common form controls (Tailwind text-base = 1rem).
  */

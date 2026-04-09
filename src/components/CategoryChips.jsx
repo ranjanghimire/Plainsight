@@ -7,15 +7,11 @@ import {
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
-/** Selected state keeps legacy highlight; unselected uses empty vs non-empty tonality (stronger light-mode contrast — stone-50 body made stone-100 chips nearly invisible). */
-function chipTone(selected, hasItems) {
-  if (selected) {
-    return 'bg-stone-300 text-stone-800 ring-1 ring-inset ring-stone-400/35 dark:bg-stone-600 dark:text-stone-200 dark:ring-stone-500/50';
-  }
-  if (hasItems) {
-    return 'bg-stone-200/90 text-stone-800 ring-1 ring-inset ring-stone-300/70 hover:bg-stone-300/85 dark:bg-stone-700 dark:text-stone-200 dark:ring-stone-500/45 dark:hover:bg-stone-600';
-  }
-  return 'bg-stone-50 text-stone-500 ring-1 ring-inset ring-stone-200/80 hover:bg-stone-100/95 dark:bg-stone-800/55 dark:text-stone-500 dark:ring-stone-600/45 dark:hover:bg-stone-800/85';
+/** Chip surface classes live in `index.css` @layer components so production builds always ship them. */
+function chipVariantClass(selected, hasNotes) {
+  if (selected) return 'ps-category-chip-selected';
+  if (hasNotes) return 'ps-category-chip-populated';
+  return 'ps-category-chip-empty';
 }
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
@@ -64,8 +60,17 @@ export function CategoryChips({
     cancelCategoryEdit();
   };
 
+  const namesWithNotes =
+    categoryNamesWithItems instanceof Set
+      ? categoryNamesWithItems
+      : new Set(
+          Array.isArray(categoryNamesWithItems)
+            ? categoryNamesWithItems.map((x) => String(x).trim()).filter(Boolean)
+            : [],
+        );
+
   const hasItems = (name) =>
-    typeof name === 'string' && categoryNamesWithItems.has(name.trim());
+    typeof name === 'string' && namesWithNotes.has(name.trim());
 
   return (
     <>
@@ -77,7 +82,7 @@ export function CategoryChips({
         <button
           type="button"
           onClick={() => onCategoryChange(null)}
-          className={`${CHIP_PAD} ${chipTone(categoryFilter === null, true)}`}
+          className={`${CHIP_PAD} ${chipVariantClass(categoryFilter === null, true)}`}
         >
           All
         </button>
@@ -118,7 +123,7 @@ export function CategoryChips({
                 { kind: 'category', name: cat },
                 () => onCategoryChange(cat),
               )}
-              className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipTone(categoryFilter === cat, hasItems(cat))}`}
+              className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipVariantClass(categoryFilter === cat, hasItems(cat))}`}
             >
               {cat}
             </button>
@@ -128,7 +133,7 @@ export function CategoryChips({
           <button
             type="button"
             onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
-            className={`${CHIP_PAD} ${chipTone(categoryFilter === UNCATEGORIZED_FILTER, true)}`}
+            className={`${CHIP_PAD} ${chipVariantClass(categoryFilter === UNCATEGORIZED_FILTER, true)}`}
           >
             Undefined
           </button>
