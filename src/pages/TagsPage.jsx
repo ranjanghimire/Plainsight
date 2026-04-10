@@ -336,12 +336,9 @@ export function TagsPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">Tags</h2>
-          <p className="text-xs text-stone-500 dark:text-stone-400">
-            Showing {scope === 'visible' ? 'visible' : 'hidden'} workspace tags
-          </p>
-        </div>
+        <p className="text-xs text-stone-500 dark:text-stone-400">
+          Showing {scope === 'visible' ? 'visible' : 'hidden'} workspace tags
+        </p>
         <button
           type="button"
           onClick={goBackFromTags}
