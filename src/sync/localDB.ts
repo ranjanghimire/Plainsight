@@ -2,6 +2,7 @@ import type {
   ArchivedNoteTombstone,
   ArchivedNote,
   Category,
+  CategoryTombstone,
   Note,
   NoteTombstone,
   NoteTag,
@@ -21,6 +22,7 @@ import type {
 const KEY = {
   workspaces: 'plainsight_local_workspaces',
   categories: (workspaceId: string) => `plainsight_local_categories_${workspaceId}`,
+  categoryTombstones: (workspaceId: string) => `plainsight_local_category_tombstones_${workspaceId}`,
   notes: (workspaceId: string) => `plainsight_local_notes_${workspaceId}`,
   noteTombstones: (workspaceId: string) => `plainsight_local_note_tombstones_${workspaceId}`,
   archived: (workspaceId: string) => `plainsight_local_archived_${workspaceId}`,
@@ -61,6 +63,7 @@ export async function clearLocalWorkspaceData(workspaceId: string): Promise<void
   if (!workspaceId) return;
   try {
     localStorage.removeItem(KEY.categories(workspaceId));
+    localStorage.removeItem(KEY.categoryTombstones(workspaceId));
     localStorage.removeItem(KEY.notes(workspaceId));
     localStorage.removeItem(KEY.archived(workspaceId));
     localStorage.removeItem(KEY.noteTombstones(workspaceId));
@@ -78,6 +81,17 @@ export async function getLocalCategories(workspaceId: string): Promise<Category[
 
 export async function saveLocalCategories(workspaceId: string, rows: Category[]): Promise<void> {
   writeJson(KEY.categories(workspaceId), rows);
+}
+
+export async function getLocalCategoryTombstones(workspaceId: string): Promise<CategoryTombstone[]> {
+  return readJson<CategoryTombstone[]>(KEY.categoryTombstones(workspaceId), []);
+}
+
+export async function saveLocalCategoryTombstones(
+  workspaceId: string,
+  rows: CategoryTombstone[],
+): Promise<void> {
+  writeJson(KEY.categoryTombstones(workspaceId), rows);
 }
 
 export async function getLocalNotes(workspaceId: string): Promise<Note[]> {

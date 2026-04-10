@@ -57,10 +57,13 @@ import {
 import {
   clearLocalWorkspaceData,
   getLocalArchivedNoteTombstones,
+  getLocalCategories,
+  getLocalCategoryTombstones,
   getLocalNoteTombstones,
   getLocalWorkspacePins,
   getLocalWorkspaces,
   saveLocalArchivedNoteTombstones,
+  saveLocalCategoryTombstones,
   saveLocalNoteTombstones,
   saveLocalWorkspacePins,
   saveLocalWorkspaces,
@@ -917,23 +920,44 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   const deleteCategory = useCallback((name) => {
-    setData((prev) => {
-      const arch = { ...(prev.archivedNotes || {}) };
-      for (const [k, v] of Object.entries(arch)) {
-        if (v.category === name) {
-          arch[k] = { ...v, category: undefined };
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    void (async () => {
+      try {
+        const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+        const cats = await getLocalCategories(workspaceId);
+        const row = cats.find((c) => c.name === trimmed);
+        if (row?.id) {
+          const deletedAt = new Date().toISOString();
+          const existing = await getLocalCategoryTombstones(workspaceId);
+          const next = [
+            ...existing.filter((t) => t.id !== row.id),
+            { id: row.id, workspace_id: workspaceId, deleted_at: deletedAt },
+          ];
+          await saveLocalCategoryTombstones(workspaceId, next);
         }
+      } catch {
+        /* ignore */
       }
-      return {
-        ...prev,
-        categories: (prev.categories || []).filter((c) => c !== name),
-        notes: (prev.notes || []).map((n) =>
-          n.category === name ? { ...n, category: null } : n,
-        ),
-        archivedNotes: arch,
-      };
+    })().then(() => {
+      setData((prev) => {
+        const arch = { ...(prev.archivedNotes || {}) };
+        for (const [k, v] of Object.entries(arch)) {
+          if (v.category === trimmed) {
+            arch[k] = { ...v, category: undefined };
+          }
+        }
+        return {
+          ...prev,
+          categories: (prev.categories || []).filter((c) => c !== trimmed),
+          notes: (prev.notes || []).map((n) =>
+            n.category === trimmed ? { ...n, category: null } : n,
+          ),
+          archivedNotes: arch,
+        };
+      });
     });
-  }, []);
+  }, [activeStorageKey]);
 
   const renameCategory = useCallback((oldName, newName) => {
     const trimmed = (newName || '').trim();

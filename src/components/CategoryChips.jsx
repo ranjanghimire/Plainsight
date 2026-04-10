@@ -17,6 +17,16 @@ function chipTone(selected) {
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
 
+/** Stable `data-testid` segment for a category label (home page tests). */
+export function categoryChipTestIdSlug(name) {
+  const s = String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_-]/g, '');
+  return s || 'category';
+}
+
 export function CategoryChips({
   categories,
   categoryFilter,
@@ -64,11 +74,13 @@ export function CategoryChips({
     <>
       <div className="w-full min-w-0 -mx-0.5">
         <div
+          data-testid="category-chips-row"
           className="flex flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain py-0.5 pl-0.5 pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(120,113,108,0.35)_transparent] dark:[scrollbar-color:rgba(168,162,158,0.3)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/45 dark:[&::-webkit-scrollbar-thumb]:bg-stone-500/40"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           <button
             type="button"
+            data-testid="category-chip--all"
             onClick={() => onCategoryChange(null)}
             className={`${CHIP_PAD} ${chipTone(categoryFilter === null)}`}
           >
@@ -107,6 +119,7 @@ export function CategoryChips({
               <button
                 key={cat}
                 type="button"
+                data-testid={`category-chip--${categoryChipTestIdSlug(cat)}`}
                 {...catMenu.bindTrigger(
                   { kind: 'category', name: cat },
                   () => onCategoryChange(cat),
@@ -120,6 +133,7 @@ export function CategoryChips({
           {hasUncategorizedNotes && (
             <button
               type="button"
+              data-testid="category-chip--undefined-filter"
               onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
               className={`${CHIP_PAD} ${chipTone(categoryFilter === UNCATEGORIZED_FILTER)}`}
             >
@@ -130,6 +144,7 @@ export function CategoryChips({
             <span className="inline-flex shrink-0 items-center gap-1">
               <input
                 type="text"
+                data-testid="category-inline-name-input"
                 value={inlineNewCategoryName}
                 onChange={(e) => setInlineNewCategoryName(e.target.value)}
                 onKeyDown={(e) => {
@@ -145,6 +160,7 @@ export function CategoryChips({
               />
               <button
                 type="button"
+                data-testid="category-inline-submit"
                 onClick={handleInlineAddCategory}
                 className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
               >
@@ -164,6 +180,7 @@ export function CategoryChips({
           ) : (
             <button
               type="button"
+              data-testid="category-chip--add"
               onClick={() => setShowInlineAddCategory(true)}
               className={`${CHIP_PAD} bg-stone-50 text-stone-400 hover:bg-stone-100/90 dark:bg-stone-800/50 dark:text-stone-500 dark:hover:bg-stone-800/80`}
             >

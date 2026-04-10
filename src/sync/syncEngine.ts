@@ -1,6 +1,7 @@
 import type {
   ArchivedNote,
   Category,
+  CategoryTombstone,
   Note,
   SyncError,
   Workspace,
@@ -21,6 +22,7 @@ import {
   getLocalArchivedNotes,
   getLocalArchivedNoteTombstones,
   getLocalCategories,
+  getLocalCategoryTombstones,
   getLocalNoteTags,
   getLocalNoteTombstones,
   getLocalNotes,
@@ -29,6 +31,7 @@ import {
   saveLocalArchivedNoteTags,
   saveLocalArchivedNotes,
   saveLocalCategories,
+  saveLocalCategoryTombstones,
   saveLocalArchivedNoteTombstones,
   saveLocalNoteTags,
   saveLocalNoteTombstones,
@@ -131,6 +134,7 @@ async function remapLocalWorkspaceUuidAfterPkCollision(
   const arch = await getLocalArchivedNotes(oldId);
   const nt = await getLocalNoteTombstones(oldId);
   const at = await getLocalArchivedNoteTombstones(oldId);
+  const ct = await getLocalCategoryTombstones(oldId);
   const noteTags = await getLocalNoteTags(oldId);
   const archivedNoteTags = await getLocalArchivedNoteTags(oldId);
 
@@ -142,6 +146,7 @@ async function remapLocalWorkspaceUuidAfterPkCollision(
   await saveLocalArchivedNotes(newId, rewriteWs(arch));
   await saveLocalNoteTombstones(newId, rewriteWs(nt));
   await saveLocalArchivedNoteTombstones(newId, rewriteWs(at));
+  await saveLocalCategoryTombstones(newId, rewriteWs(ct) as CategoryTombstone[]);
   await saveLocalNoteTags(newId, noteTags);
   await saveLocalArchivedNoteTags(newId, archivedNoteTags);
 
@@ -150,6 +155,7 @@ async function remapLocalWorkspaceUuidAfterPkCollision(
     localStorage.removeItem(`plainsight_local_notes_${oldId}`);
     localStorage.removeItem(`plainsight_local_archived_${oldId}`);
     localStorage.removeItem(`plainsight_local_note_tombstones_${oldId}`);
+    localStorage.removeItem(`plainsight_local_category_tombstones_${oldId}`);
     localStorage.removeItem(`plainsight_local_archived_tombstones_${oldId}`);
     localStorage.removeItem(`plainsight_local_note_tags_${oldId}`);
     localStorage.removeItem(`plainsight_local_archived_note_tags_${oldId}`);
@@ -434,6 +440,22 @@ export async function pushCategories(localCategories: Category[]): Promise<{ ok:
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to push categories', e) };
+  }
+}
+
+export async function pushCategoryDeletes(
+  workspaceId: string,
+  categoryIds: string[],
+): Promise<{ ok: true } | { ok: false; error: SyncError }> {
+  if (!getCanUseSupabase()) return { ok: true };
+  try {
+    const ids = (categoryIds || []).filter((id) => isUuid(id));
+    if (ids.length === 0) return { ok: true };
+    const res = await getSupabase().from('categories').delete().in('id', ids).select('*');
+    if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: mkError('Failed to delete categories', e) };
   }
 }
 
@@ -771,20 +793,23 @@ export async function fullSync(
     const localArchived: Record<string, ArchivedNote[]> = {};
     const localNoteTombstones: Record<string, { id: string; deleted_at: string }[]> = {};
     const localArchivedTombstones: Record<string, { id: string; deleted_at: string }[]> = {};
+    const localCategoryTombstones: Record<string, CategoryTombstone[]> = {};
 
     for (const wid of ids) {
-      const [cats, notes, arch, tombs, archTombs] = await Promise.all([
+      const [cats, notes, arch, tombs, archTombs, catTombs] = await Promise.all([
         getLocalCategories(wid),
         getLocalNotes(wid),
         getLocalArchivedNotes(wid),
         getLocalNoteTombstones(wid),
         getLocalArchivedNoteTombstones(wid),
+        getLocalCategoryTombstones(wid),
       ]);
       localCategories[wid] = cats;
       localNotes[wid] = notes;
       localArchived[wid] = arch;
       localNoteTombstones[wid] = tombs;
       localArchivedTombstones[wid] = archTombs;
+      localCategoryTombstones[wid] = catTombs;
     }
 
     // Merge
@@ -820,6 +845,16 @@ export async function fullSync(
       mergedArchived[wid] = {
         ...mergedArchived[wid],
         merged: mergedArchived[wid].merged.filter((n) => !tombIds.has(n.id)),
+      };
+    }
+
+    // Apply tombstones: locally deleted categories must not be resurrected by remote merges.
+    for (const wid of ids) {
+      const tombIds = new Set((localCategoryTombstones[wid] || []).map((t) => t.id));
+      if (tombIds.size === 0) continue;
+      mergedCategories[wid] = {
+        ...mergedCategories[wid],
+        merged: mergedCategories[wid].merged.filter((c) => !tombIds.has(c.id)),
       };
     }
 
@@ -901,9 +936,14 @@ export async function fullSync(
       const archRes = await pushArchivedNotes(archAligned);
       if (!archRes.ok) return { ok: false, error: archRes.error };
 
+      const catDelIds = (localCategoryTombstones[wid] || []).map((t) => t.id);
+      const catDelRes = await pushCategoryDeletes(wid, catDelIds);
+      if (!catDelRes.ok) return { ok: false, error: catDelRes.error };
+
       // Clear tombstones after successful remote deletes.
       if (delIds.length) await saveLocalNoteTombstones(wid, []);
       if (archDelIds.length) await saveLocalArchivedNoteTombstones(wid, []);
+      if (catDelIds.length) await saveLocalCategoryTombstones(wid, []);
     }
 
     syncSucceeded = true;

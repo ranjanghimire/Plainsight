@@ -20,6 +20,13 @@ export type Category = {
   updated_at: Timestamptz;
 };
 
+/** Queued remote deletes for categories (same shape as note tombstones). */
+export type CategoryTombstone = {
+  id: UUID;
+  workspace_id: UUID;
+  deleted_at: Timestamptz;
+};
+
 export type Note = {
   id: UUID;
   workspace_id: UUID;
