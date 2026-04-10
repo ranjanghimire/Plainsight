@@ -88,7 +88,7 @@ export const workspaceTestHandlesRef: {
   } | null;
 } = { current: null };
 
-function WorkspaceTestBridge(): null {
+export function WorkspaceTestBridge(): null {
   const w = useWorkspace();
   useLayoutEffect(() => {
     workspaceTestHandlesRef.current = {

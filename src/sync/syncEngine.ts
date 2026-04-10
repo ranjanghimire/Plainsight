@@ -627,7 +627,8 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
 
 const FULL_SYNC_MAX_PK_RETRIES = 2;
 
-function mergeRemoteAndLocalWorkspaces(
+/** Remote rows take precedence when the same workspace id exists on both sides (hydration merge). */
+export function mergeRemoteAndLocalWorkspaces(
   remote: Workspace[],
   local: Workspace[],
 ): Workspace[] {

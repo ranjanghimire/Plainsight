@@ -194,6 +194,7 @@ export function MenuPanel({ open, onClose }) {
     <div className="fixed inset-0 z-50 flex justify-end" role="presentation">
       <button
         type="button"
+        data-testid="menu-panel-backdrop"
         className={`absolute inset-0 bg-stone-900/40 transition-opacity duration-300 ease-out ${
           entered ? 'opacity-100' : 'opacity-0'
         }`}
@@ -201,6 +202,7 @@ export function MenuPanel({ open, onClose }) {
         onClick={onClose}
       />
       <aside
+        data-testid="menu-panel"
         className={`
           relative h-full w-full max-w-xs border-l border-stone-200 dark:border-stone-600
           bg-white dark:bg-stone-800 shadow-2xl transition-transform duration-300 ease-out

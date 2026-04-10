@@ -161,7 +161,7 @@ function AppHeader({ onOpenSettings }) {
   );
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openDrawer = useCallback(() => setSettingsOpen(true), []);
   const closeDrawer = useCallback(() => setSettingsOpen(false), []);

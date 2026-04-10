@@ -139,3 +139,65 @@ export async function ensureRemoteWorkspaceRow(options: {
   );
   if (error) throw error;
 }
+
+export async function countNotesInWorkspace(workspaceId: string): Promise<number> {
+  const sb = getSupabaseServiceClient();
+  const { count, error } = await sb
+    .from('notes')
+    .select('*', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function deleteAllNotesInWorkspace(workspaceId: string): Promise<void> {
+  const sb = getSupabaseServiceClient();
+  const { error } = await sb.from('notes').delete().eq('workspace_id', workspaceId);
+  if (error) throw error;
+}
+
+export async function deleteAllCategoriesInWorkspace(workspaceId: string): Promise<void> {
+  const sb = getSupabaseServiceClient();
+  const { error } = await sb.from('categories').delete().eq('workspace_id', workspaceId);
+  if (error) throw error;
+}
+
+/** Service-role insert for hydration regression tests (simulates remote state after a prior sync). */
+export async function insertNoteRowViaService(row: {
+  id: string;
+  workspace_id: string;
+  text: string;
+  category_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}): Promise<void> {
+  const sb = getSupabaseServiceClient();
+  const { error } = await sb.from('notes').insert({
+    id: row.id,
+    workspace_id: row.workspace_id,
+    text: row.text,
+    category_id: row.category_id ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Service-role teardown for a workspace (child rows then `workspaces` row).
+ */
+export async function deleteRemoteWorkspaceCascadeViaService(workspaceId: string): Promise<void> {
+  const id = (workspaceId || '').trim();
+  if (!id) return;
+  const sb = getSupabaseServiceClient();
+  const { error: nErr } = await sb.from('notes').delete().eq('workspace_id', id);
+  if (nErr) throw nErr;
+  const { error: aErr } = await sb.from('archived_notes').delete().eq('workspace_id', id);
+  if (aErr) throw aErr;
+  const { error: cErr } = await sb.from('categories').delete().eq('workspace_id', id);
+  if (cErr) throw cErr;
+  const { error: pErr } = await sb.from('workspace_pins').delete().eq('workspace_id', id);
+  if (pErr) throw pErr;
+  const { error: wErr } = await sb.from('workspaces').delete().eq('id', id);
+  if (wErr) throw wErr;
+}
