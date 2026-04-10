@@ -291,8 +291,6 @@ export function NotesView() {
 
       <CategoryChips
         categories={categories}
-        notes={notes}
-        archivedNotesMap={archivedNotesMap}
         categoryFilter={categoryFilter}
         onCategoryChange={applyCategoryFilter}
         hasUncategorizedNotes={hasUncategorizedNotes}

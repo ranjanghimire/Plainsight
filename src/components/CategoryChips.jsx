@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 import {
   useItemContextMenu,
@@ -7,25 +7,18 @@ import {
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
-/** @returns {'selected' | 'populated' | 'empty'} */
-function categoryChipVariant(selected, hasNotes) {
-  if (selected) return 'selected';
-  if (hasNotes) return 'populated';
-  return 'empty';
-}
-
-function categoryNameFromValue(c) {
-  if (c == null || c === '') return null;
-  const t = String(c).trim();
-  return t || null;
+/** One look for all unselected chips; selected state stays obvious. */
+function chipTone(selected) {
+  if (selected) {
+    return 'bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200';
+  }
+  return 'bg-stone-100 text-stone-700 hover:bg-stone-200/95 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600';
 }
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
 
 export function CategoryChips({
   categories,
-  notes = [],
-  archivedNotesMap = {},
   categoryFilter,
   onCategoryChange,
   hasUncategorizedNotes,
@@ -42,20 +35,6 @@ export function CategoryChips({
   const [categoryEditKey, setCategoryEditKey] = useState(null);
   const [categoryEditDraft, setCategoryEditDraft] = useState('');
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState(null);
-
-  /** Built here (not from a Set prop) so deploy/runtime cannot lose Set identity or confuse serialized props. */
-  const namesWithNotes = useMemo(() => {
-    const s = new Set();
-    for (const n of notes) {
-      const key = categoryNameFromValue(n?.category);
-      if (key) s.add(key);
-    }
-    for (const e of Object.values(archivedNotesMap)) {
-      const key = categoryNameFromValue(e?.category);
-      if (key) s.add(key);
-    }
-    return s;
-  }, [notes, archivedNotesMap]);
 
   useEffect(() => {
     catMenu.closeMenu();
@@ -81,9 +60,6 @@ export function CategoryChips({
     cancelCategoryEdit();
   };
 
-  const hasItems = (name) =>
-    typeof name === 'string' && namesWithNotes.has(name.trim());
-
   return (
     <>
       <div className="w-full min-w-0 -mx-0.5">
@@ -94,8 +70,7 @@ export function CategoryChips({
           <button
             type="button"
             onClick={() => onCategoryChange(null)}
-            data-chip={categoryChipVariant(categoryFilter === null, true)}
-            className={`ps-cat-chip ${CHIP_PAD}`}
+            className={`${CHIP_PAD} ${chipTone(categoryFilter === null)}`}
           >
             All
           </button>
@@ -136,8 +111,7 @@ export function CategoryChips({
                   { kind: 'category', name: cat },
                   () => onCategoryChange(cat),
                 )}
-                data-chip={categoryChipVariant(categoryFilter === cat, hasItems(cat))}
-                className={`ps-cat-chip ${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS}`}
+                className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipTone(categoryFilter === cat)}`}
               >
                 {cat}
               </button>
@@ -147,11 +121,7 @@ export function CategoryChips({
             <button
               type="button"
               onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
-              data-chip={categoryChipVariant(
-                categoryFilter === UNCATEGORIZED_FILTER,
-                true,
-              )}
-              className={`ps-cat-chip ${CHIP_PAD}`}
+              className={`${CHIP_PAD} ${chipTone(categoryFilter === UNCATEGORIZED_FILTER)}`}
             >
               Undefined
             </button>

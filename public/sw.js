@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plainsight-v2';
+const CACHE_NAME = 'plainsight-v1';
 
 // Network first, fallback to cache
 self.addEventListener('fetch', (event) => {
