@@ -79,3 +79,28 @@ export async function runInitialHydration(): Promise<void> {
   }
 }
 
+/**
+ * Introspection for Vitest (entitlement-loss / sync harness). Not used in production UI.
+ */
+export function getSyncQueueStateForTests(): {
+  pending: boolean;
+  inFlight: boolean;
+  debounceScheduled: boolean;
+} {
+  return {
+    pending,
+    inFlight: inFlight != null,
+    debounceScheduled: timer != null,
+  };
+}
+
+/** Vitest: clear debounced sync work so assertions stay deterministic after gating flips. */
+export function resetSyncQueueForTests(): void {
+  if (timer != null) {
+    window.clearTimeout(timer);
+    timer = null;
+  }
+  pending = false;
+  inFlight = null;
+}
+

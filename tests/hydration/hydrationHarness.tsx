@@ -1,5 +1,6 @@
 /**
  * Shared shell for hydration tests: real WorkspaceProvider + HomePage (runs runInitialHydration when paid).
+ * Entitlement-loss mid-session: see `entitlementLossHarness.tsx` + `entitlement-loss-mid-session.test.tsx`.
  */
 
 import React from 'react';
