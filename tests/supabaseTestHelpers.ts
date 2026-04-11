@@ -186,10 +186,24 @@ export async function insertNoteRowViaService(row: {
 /**
  * Service-role teardown for a workspace (child rows then `workspaces` row).
  */
+/** Service-role read of `public.note_tags` (RLS bypass for Vitest). */
+export async function getNoteTagsForWorkspace(workspaceId: string) {
+  const sb = getSupabaseServiceClient();
+  const { data, error } = await sb
+    .from('note_tags')
+    .select('note_id, workspace_id, tag')
+    .eq('workspace_id', workspaceId)
+    .order('tag', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function deleteRemoteWorkspaceCascadeViaService(workspaceId: string): Promise<void> {
   const id = (workspaceId || '').trim();
   if (!id) return;
   const sb = getSupabaseServiceClient();
+  const { error: ntErr } = await sb.from('note_tags').delete().eq('workspace_id', id);
+  if (ntErr) throw ntErr;
   const { error: nErr } = await sb.from('notes').delete().eq('workspace_id', id);
   if (nErr) throw nErr;
   const { error: aErr } = await sb.from('archived_notes').delete().eq('workspace_id', id);
