@@ -85,6 +85,11 @@ export const workspaceTestHandlesRef: {
   current: {
     switchVisibleWorkspace: (e: VisibleWorkspaceEntry) => void;
     switchWorkspace: (name: string) => void;
+    createVisibleWorkspace: (displayName: string) => void | null;
+    renameVisibleWorkspace: (e: VisibleWorkspaceEntry, newDisplayName: string) => void;
+    deleteVisibleWorkspace: (e: VisibleWorkspaceEntry) => Promise<boolean>;
+    deleteHiddenWorkspace: (storageKey: string) => Promise<boolean>;
+    activeStorageKey: string;
   } | null;
 } = { current: null };
 
@@ -94,11 +99,24 @@ export function WorkspaceTestBridge(): null {
     workspaceTestHandlesRef.current = {
       switchVisibleWorkspace: w.switchVisibleWorkspace,
       switchWorkspace: w.switchWorkspace,
+      createVisibleWorkspace: w.createVisibleWorkspace,
+      renameVisibleWorkspace: w.renameVisibleWorkspace,
+      deleteVisibleWorkspace: w.deleteVisibleWorkspace,
+      deleteHiddenWorkspace: w.deleteHiddenWorkspace,
+      activeStorageKey: w.activeStorageKey,
     };
     return () => {
       workspaceTestHandlesRef.current = null;
     };
-  }, [w.switchVisibleWorkspace, w.switchWorkspace]);
+  }, [
+    w.switchVisibleWorkspace,
+    w.switchWorkspace,
+    w.createVisibleWorkspace,
+    w.renameVisibleWorkspace,
+    w.deleteVisibleWorkspace,
+    w.deleteHiddenWorkspace,
+    w.activeStorageKey,
+  ]);
   return null;
 }
 
