@@ -47,15 +47,33 @@ function RedirectWorkspaceOnLoad() {
 }
 
 function ArchiveHistoryButton() {
-  const { archiveMode, toggleArchiveMode } = useArchiveMode();
+  const { archiveMode, toggleArchiveMode, setArchiveMode } = useArchiveMode();
+  const { isTagsRoute, goBackFromTags } = useTagsNav();
+
+  const handleArchiveClick = useCallback(() => {
+    if (isTagsRoute) {
+      goBackFromTags();
+      setArchiveMode(true);
+      return;
+    }
+    toggleArchiveMode();
+  }, [goBackFromTags, isTagsRoute, setArchiveMode, toggleArchiveMode]);
+
+  const archivePressed = archiveMode && !isTagsRoute;
+  const archiveAriaLabel = isTagsRoute
+    ? 'Archive and history'
+    : archiveMode
+      ? 'Exit archive'
+      : 'Archive and history';
+
   return (
     <button
       type="button"
-      onClick={toggleArchiveMode}
-      aria-pressed={archiveMode}
-      aria-label={archiveMode ? 'Exit archive' : 'Archive and history'}
+      onClick={handleArchiveClick}
+      aria-pressed={archivePressed}
+      aria-label={archiveAriaLabel}
       className={`p-2 rounded-lg transition-colors ${
-        archiveMode
+        archivePressed
           ? 'text-stone-800 bg-stone-200 dark:text-stone-100 dark:bg-stone-600'
           : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700'
       }`}
@@ -96,11 +114,22 @@ function WorkspaceContentShell({ children }) {
 }
 
 function TagsToggleButton() {
+  const { archiveMode, setArchiveMode } = useArchiveMode();
   const { isTagsRoute, toggleTagsPage } = useTagsNav();
+
+  const handleTagsClick = useCallback(() => {
+    if (archiveMode && !isTagsRoute) {
+      setArchiveMode(false);
+      toggleTagsPage();
+      return;
+    }
+    toggleTagsPage();
+  }, [archiveMode, isTagsRoute, setArchiveMode, toggleTagsPage]);
+
   return (
     <button
       type="button"
-      onClick={toggleTagsPage}
+      onClick={handleTagsClick}
       aria-pressed={isTagsRoute}
       aria-label={isTagsRoute ? 'Exit tags' : 'Tags'}
       className={`p-2 rounded-lg transition-colors ${
