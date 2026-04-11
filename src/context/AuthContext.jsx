@@ -12,6 +12,7 @@ import {
   getSyncRemoteActive,
   getSyncEntitled,
   hasCustomAuthSession,
+  persistLastKnownSyncEntitledForMenu,
 } from '../sync/syncEnabled';
 import {
   clearSession,
@@ -105,6 +106,7 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
 
         if (!result.loggedIn) {
+          persistLastKnownSyncEntitledForMenu(false);
           clearSession();
           setSyncRemoteActive(false);
           clearAuthDisplayEmailStorage();
@@ -164,6 +166,7 @@ export function AuthProvider({ children }) {
   }, [closeSendCodeModal]);
 
   const signOut = useCallback(() => {
+    persistLastKnownSyncEntitledForMenu(null);
     clearSession();
     setSyncRemoteActive(false);
     clearAuthDisplayEmailStorage();

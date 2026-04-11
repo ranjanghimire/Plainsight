@@ -15,6 +15,18 @@ import {
 
 const ENTITLEMENT_KEY = 'sync';
 const REMOTE_SYNC_STORAGE_KEY = 'plainsight_sync_remote_active';
+/** Persisted hint for menu while session restore runs (`authReady` false). */
+const LAST_KNOWN_MENU_SYNC_ENTITLED_KEY = 'plainsight_last_known_sync_entitled';
+
+function writeLastKnownMenuSyncEntitled(value: boolean | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (value === null) localStorage.removeItem(LAST_KNOWN_MENU_SYNC_ENTITLED_KEY);
+    else localStorage.setItem(LAST_KNOWN_MENU_SYNC_ENTITLED_KEY, value ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
 
 function readPersistedSyncRemoteActive(): boolean {
   try {
@@ -83,10 +95,39 @@ export function hasCustomAuthSession(): boolean {
   return sessionAllowsCloudData();
 }
 
+/**
+ * Clears or sets the menu optimistic hint (e.g. after sign-out).
+ * `null` removes the explicit key so the menu can fall back to remote-sync inference or "checking".
+ */
+export function persistLastKnownSyncEntitledForMenu(value: boolean | null): void {
+  writeLastKnownMenuSyncEntitled(value);
+}
+
+/**
+ * Last confirmed sync entitlement for optimistic menu copy while `authReady` is false.
+ * - `true`: had paid sync entitlement before (show paid menu shell, verify in background).
+ * - `false`: was not entitled (show "Sign in to sync" shell while verifying).
+ * - `null`: no hint — show "Checking sign-in…".
+ * If no explicit key exists, `plainsight_sync_remote_active` implies the user had cloud on → treat as `true`.
+ */
+export function getOptimisticLastKnownSyncEntitledForMenu(): boolean | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(LAST_KNOWN_MENU_SYNC_ENTITLED_KEY);
+    if (raw === '1') return true;
+    if (raw === '0') return false;
+    if (readPersistedSyncRemoteActive()) return true;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** @internal RevenueCat (SyncEntitlementContext). */
 export function setSyncEntitlementActive(active: boolean): void {
   if (syncEntitledFlag === active) return;
   syncEntitledFlag = active;
+  writeLastKnownMenuSyncEntitled(active);
   notify();
 }
 

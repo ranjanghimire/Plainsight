@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getSyncEntitled,
   getSyncRemoteActive,
+  getOptimisticLastKnownSyncEntitledForMenu,
   hasCustomAuthSession,
   setSyncRemoteActive as persistSyncRemoteActive,
   subscribeSyncGating,
@@ -127,6 +128,12 @@ export function MenuPanel({ open, onClose }) {
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const wsMenu = useItemContextMenu();
 
+  const menuSyncRestoreHint = getOptimisticLastKnownSyncEntitledForMenu();
+  const showAuthCheckingLine = !authReady && menuSyncRestoreHint === null;
+  /** Signed-out shell only; if tokens exist we fall through to subscription / sync rows. */
+  const optimisticFreeMenuWhileRestoring =
+    !authReady && menuSyncRestoreHint === false && !customAuthSession;
+
   useEffect(() => {
     if (!open) wsMenu.closeMenu();
   }, [open, wsMenu.closeMenu]);
@@ -240,10 +247,18 @@ export function MenuPanel({ open, onClose }) {
           </div>
 
           <div className="border-b border-stone-100 dark:border-stone-700 py-3 px-1 space-y-2">
-            {!authReady ? (
+            {showAuthCheckingLine ? (
               <p className="text-sm text-stone-500 dark:text-stone-400 px-1 py-1">
                 Checking sign-in…
               </p>
+            ) : optimisticFreeMenuWhileRestoring ? (
+              <button
+                type="button"
+                onClick={openSendCodeModal}
+                className="w-full px-3 py-2.5 text-sm font-medium text-center rounded-lg bg-stone-800 text-white hover:bg-stone-900 dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
+              >
+                Sign in to sync
+              </button>
             ) : !customAuthSession ? (
               <button
                 type="button"
