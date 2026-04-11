@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
 import React from 'react';
 import { afterEach, vi } from 'vitest';
+import { resetSyncQueueForTests } from '../src/sync/syncHelpers';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -121,6 +123,8 @@ vi.mock('../src/components/ConfirmDialog.jsx', () => ({
 }));
 
 afterEach(() => {
+  cleanup();
+  resetSyncQueueForTests();
   try {
     localStorage.clear();
   } catch {

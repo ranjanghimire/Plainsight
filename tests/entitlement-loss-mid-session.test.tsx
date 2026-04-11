@@ -155,7 +155,9 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
   it(
     'D. after loss, local edits do not trigger remote note writes',
     async () => {
-      const pushSpy = vi.spyOn(syncEngine, 'pushNotes').mockImplementation((...args) => realPushNotes(...args));
+      const pushSpy = vi.spyOn(syncEngine.fullSyncIpc, 'pushNotes').mockImplementation((...args) =>
+        realPushNotes(...args),
+      );
       renderEntitlementLossHome();
       await waitForPaidGatingReady();
       await waitForHydrationCompleteAttr();

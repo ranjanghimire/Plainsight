@@ -553,6 +553,26 @@ export async function pushWorkspacePins(localPins: WorkspacePin[]): Promise<{ ok
   }
 }
 
+/**
+ * Indirection used by `fullSync` for pull/push entry points. Vitest can
+ * `vi.spyOn(fullSyncIpc, 'pullCategories')` and affect orchestration; spying the co-exported
+ * `pullCategories` function does not (ESM keeps direct call bindings).
+ */
+export const fullSyncIpc = {
+  pullWorkspacePins,
+  pullCategories,
+  pullNotes,
+  pullArchivedNotes,
+  pushWorkspaces,
+  pushWorkspacePins,
+  pushCategories,
+  pushNotes,
+  pushArchivedNotes,
+  pushNoteDeletes,
+  pushArchivedDeletes,
+  pushCategoryDeletes,
+};
+
 // -----------------------------
 // Realtime listeners
 // -----------------------------
@@ -662,7 +682,7 @@ export async function fullSync(
     const ownerId = await getOwnerId();
 
     // Pull pins first (does not depend on workspace list).
-    const remotePins = await pullWorkspacePins();
+    const remotePins = await fullSyncIpc.pullWorkspacePins();
     if (remotePins.error) return { ok: false, error: remotePins.error };
 
     // Fetch remote + local together, merge, prune, then persist in one tight sequence so we never
@@ -762,9 +782,9 @@ export async function fullSync(
 
     for (const wid of ids) {
       const [cats, notes, arch] = await Promise.all([
-        pullCategories(wid),
-        pullNotes(wid),
-        pullArchivedNotes(wid),
+        fullSyncIpc.pullCategories(wid),
+        fullSyncIpc.pullNotes(wid),
+        fullSyncIpc.pullArchivedNotes(wid),
       ]);
       if (cats.error) return { ok: false, error: cats.error };
       if (notes.error) return { ok: false, error: notes.error };
@@ -900,7 +920,7 @@ export async function fullSync(
     }
 
     // Push merged (ensure category FK order: categories before notes)
-    const wsPush = await pushWorkspaces(mergedWorkspacesWithOwner, remoteIds);
+    const wsPush = await fullSyncIpc.pushWorkspaces(mergedWorkspacesWithOwner, remoteIds);
     if (!wsPush.ok) return { ok: false, error: wsPush.error };
     if (
       wsPush.ok &&
@@ -912,7 +932,7 @@ export async function fullSync(
       return again;
     }
 
-    const pinsPush = await pushWorkspacePins(mergedPins.merged);
+    const pinsPush = await fullSyncIpc.pushWorkspacePins(mergedPins.merged);
     if (!pinsPush.ok) return { ok: false, error: pinsPush.error };
 
     for (const wid of ids) {
@@ -921,24 +941,24 @@ export async function fullSync(
       const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
 
       const delIds = (localNoteTombstones[wid] || []).map((t) => t.id);
-      const delRes = await pushNoteDeletes(wid, delIds);
+      const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return { ok: false, error: delRes.error };
 
       const archDelIds = (localArchivedTombstones[wid] || []).map((t) => t.id);
-      const archDelRes = await pushArchivedDeletes(wid, archDelIds);
+      const archDelRes = await fullSyncIpc.pushArchivedDeletes(wid, archDelIds);
       if (!archDelRes.ok) return { ok: false, error: archDelRes.error };
 
-      const catRes = await pushCategories(cats);
+      const catRes = await fullSyncIpc.pushCategories(cats);
       if (!catRes.ok) return { ok: false, error: catRes.error };
 
-      const noteRes = await pushNotes(notesAligned);
+      const noteRes = await fullSyncIpc.pushNotes(notesAligned);
       if (!noteRes.ok) return { ok: false, error: noteRes.error };
 
-      const archRes = await pushArchivedNotes(archAligned);
+      const archRes = await fullSyncIpc.pushArchivedNotes(archAligned);
       if (!archRes.ok) return { ok: false, error: archRes.error };
 
       const catDelIds = (localCategoryTombstones[wid] || []).map((t) => t.id);
-      const catDelRes = await pushCategoryDeletes(wid, catDelIds);
+      const catDelRes = await fullSyncIpc.pushCategoryDeletes(wid, catDelIds);
       if (!catDelRes.ok) return { ok: false, error: catDelRes.error };
 
       // Clear tombstones after successful remote deletes.
