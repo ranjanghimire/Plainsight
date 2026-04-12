@@ -3,10 +3,11 @@
  */
 
 import { invokeEdgeFunction } from './functionsInvoke';
+import { raceInvokeWithTimeout } from './raceWithTimeout';
 
 export type SessionUserResult =
   | { loggedIn: true; userId: string; email: string }
-  | { loggedIn: false };
+  | { loggedIn: false; staleNetwork?: boolean };
 
 export async function fetchSessionUser(sessionToken: string): Promise<SessionUserResult> {
   const trimmed = sessionToken.trim();
@@ -20,14 +21,20 @@ export async function fetchSessionUser(sessionToken: string): Promise<SessionUse
     return { loggedIn: false };
   }
 
-  const { data, error } = await invokeEdgeFunction<{
-    loggedIn?: boolean;
-    userId?: string;
-    email?: string;
-  }>('auth-session-user', {
-    method: 'GET',
-    headers: { 'x-plainsight-session': trimmed },
-  });
+  const { data, error } = await raceInvokeWithTimeout(() =>
+    invokeEdgeFunction<{
+      loggedIn?: boolean;
+      userId?: string;
+      email?: string;
+    }>('auth-session-user', {
+      method: 'GET',
+      headers: { 'x-plainsight-session': trimmed },
+    }),
+  );
+
+  if (error === 'timeout' || error === 'network') {
+    return { loggedIn: false, staleNetwork: true };
+  }
 
   if (error || !data || data.loggedIn !== true) {
     return { loggedIn: false };

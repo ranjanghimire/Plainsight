@@ -106,6 +106,10 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
 
         if (!result.loggedIn) {
+          if (result.staleNetwork) {
+            /** Degraded network: keep local session; RevenueCat + menu optimistic hints catch up later. */
+            return;
+          }
           persistLastKnownSyncEntitledForMenu(false);
           clearSession();
           setSyncRemoteActive(false);
@@ -118,14 +122,13 @@ export function AuthProvider({ children }) {
         setAuthEmail(result.email);
         persistAuthDisplayEmail(result.email);
 
-        await new Promise((resolve) => {
-          enqueueOtpSessionProcessing({
-            userId: result.userId,
-            email: result.email,
-            source: 'restore',
-            done: resolve,
-          });
+        enqueueOtpSessionProcessing({
+          userId: result.userId,
+          email: result.email,
+          source: 'restore',
         });
+      } catch (e) {
+        console.error('[Auth] session restore', e);
       } finally {
         if (!cancelled) setAuthReady(true);
       }

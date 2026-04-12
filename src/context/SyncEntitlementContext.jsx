@@ -215,7 +215,10 @@ export function SyncEntitlementProvider({ children }) {
         });
         purchasesRef.current = purchases;
 
-        const offerings = await purchases.getOfferings();
+        const [offerings, info] = await Promise.all([
+          purchases.getOfferings(),
+          purchases.getCustomerInfo(),
+        ]);
         if (cancelled) return;
 
         const current = offerings?.current ?? null;
@@ -228,8 +231,6 @@ export function SyncEntitlementProvider({ children }) {
           ) ?? null;
         setLifetimePackage(lifetime);
 
-        const info = await purchases.getCustomerInfo();
-        if (cancelled) return;
         applyCustomerInfo(info);
       } catch (e) {
         console.error('[RevenueCat]', e);
