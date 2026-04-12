@@ -46,11 +46,23 @@ export function useCategorySwipeNavigation({
     let startY = 0;
     let tracking = false;
     let ignoreGesture = false;
+    /** Identifier of the touch we're tracking (document-level listeners survive subtree remounts). */
+    let activeTouchId = -1;
     /** @type {'next' | 'prev' | null} */
     let panMode = null;
     let rafId = 0;
     /** Bumps on touchstart / touchend so RAFs from touchmove cannot apply pan after the gesture ended. */
     let panGestureGen = 0;
+
+    const docMoveOpts = { capture: true, passive: false };
+    const docEndOpts = { capture: true, passive: true };
+
+    const getTouchById = (touchList, id) => {
+      for (let i = 0; i < touchList.length; i += 1) {
+        if (touchList[i].identifier === id) return touchList[i];
+      }
+      return null;
+    };
 
     const shouldIgnoreTarget = (target) => {
       if (!(target instanceof Element)) return false;
@@ -100,16 +112,22 @@ export function useCategorySwipeNavigation({
       startX = t.clientX;
       startY = t.clientY;
       if (interactiveRef.current) clearPan();
+      activeTouchId = t.identifier;
+      document.addEventListener('touchmove', onDocumentTouchMove, docMoveOpts);
+      document.addEventListener('touchend', onDocumentTouchEnd, docEndOpts);
+      document.addEventListener('touchcancel', onDocumentTouchCancel, docEndOpts);
     };
 
-    const onTouchMove = (e) => {
-      if (!tracking || ignoreGesture || e.touches.length !== 1) return;
-      const t = e.touches[0];
+    /** Document-level: interactive pan replaces the touch target subtree; element-level move stops. */
+    function onDocumentTouchMove(e) {
+      if (!tracking || ignoreGesture) return;
+      const t = getTouchById(e.touches, activeTouchId);
+      if (!t) return;
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
 
       if (interactiveRef.current) {
-        const w = el.clientWidth || 1;
+        const w = (elementRef.current?.clientWidth ?? el.clientWidth) || 1;
         if (
           !panMode &&
           Math.abs(dx) > 14 &&
@@ -133,24 +151,27 @@ export function useCategorySwipeNavigation({
       if (Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO && Math.abs(dx) > 12) {
         e.preventDefault();
       }
-    };
+    }
 
-    const onTouchEnd = (e) => {
-      if (!tracking || ignoreGesture) {
-        tracking = false;
-        ignoreGesture = false;
-        panMode = null;
-        panGestureGen += 1;
-        clearPan();
-        return;
-      }
+    function onDocumentTouchEnd(e) {
+      const t = getTouchById(e.changedTouches, activeTouchId);
+      if (!t) return;
 
-      const t = e.changedTouches[0];
-      const dx = t ? t.clientX - startX : 0;
-      const dy = t ? t.clientY - startY : 0;
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      const wasTracking = tracking && !ignoreGesture;
+
       tracking = false;
       ignoreGesture = false;
       panGestureGen += 1;
+      activeTouchId = -1;
+      removeDocumentTracking();
+
+      if (!wasTracking) {
+        panMode = null;
+        clearPan();
+        return;
+      }
 
       const seq = seqRef.current;
       if (!seq || seq.length < 2) {
@@ -164,7 +185,7 @@ export function useCategorySwipeNavigation({
 
       if (interactiveRef.current) {
         if (panMode) {
-          const w = el.clientWidth || 1;
+          const w = (elementRef.current?.clientWidth ?? el.clientWidth) || 1;
           const threshold = Math.max(SWIPE_THRESHOLD_PX, w * COMMIT_WIDTH_RATIO);
           let commit = false;
           if (panMode === 'next') commit = dx <= -threshold;
@@ -198,27 +219,33 @@ export function useCategorySwipeNavigation({
       } else {
         onSelectRef.current(seq[(idx - 1 + seq.length) % seq.length]);
       }
-    };
+    }
 
-    const onTouchCancel = () => {
+    function onDocumentTouchCancel(e) {
+      const t = getTouchById(e.changedTouches, activeTouchId);
+      if (!t) return;
+
       tracking = false;
       ignoreGesture = false;
       panMode = null;
       panGestureGen += 1;
+      activeTouchId = -1;
+      removeDocumentTracking();
       clearPan();
-    };
+    }
+
+    function removeDocumentTracking() {
+      document.removeEventListener('touchmove', onDocumentTouchMove, docMoveOpts);
+      document.removeEventListener('touchend', onDocumentTouchEnd, docEndOpts);
+      document.removeEventListener('touchcancel', onDocumentTouchCancel, docEndOpts);
+    }
 
     el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchCancel, { passive: true });
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
+      removeDocumentTracking();
       el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchCancel);
     };
   }, [elementRef]);
 }
