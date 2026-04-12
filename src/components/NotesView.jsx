@@ -47,6 +47,14 @@ function resolveRestoreCategory(categoryFilter, categories, entryCategory) {
   return null;
 }
 
+function filterNotesByCategory(source, filter) {
+  if (!filter) return source;
+  if (filter === UNCATEGORIZED_FILTER) {
+    return source.filter(noteHasNoCategory);
+  }
+  return source.filter((n) => n.category === filter);
+}
+
 export function NotesView() {
   const {
     data,
@@ -71,6 +79,8 @@ export function NotesView() {
   const categoryListLockRef = useRef(false);
   const categoryListTimersRef = useRef([]);
   const workspaceSwipeRef = useRef(null);
+  /** Live category swipe pan (non-archive); cleared when gesture ends. */
+  const [categorySwipePan, setCategorySwipePan] = useState(null);
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
@@ -94,6 +104,16 @@ export function NotesView() {
     return seq;
   }, [categories, hasUncategorizedNotes]);
 
+  const { categoryPrevFilter, categoryNextFilter } = useMemo(() => {
+    const seq = categorySwipeSequence;
+    let i = seq.findIndex((f) => Object.is(f, categoryFilter));
+    if (i < 0) i = 0;
+    return {
+      categoryPrevFilter: seq[(i - 1 + seq.length) % seq.length],
+      categoryNextFilter: seq[(i + 1) % seq.length],
+    };
+  }, [categorySwipeSequence, categoryFilter]);
+
   useEffect(() => {
     if (
       categoryFilter === UNCATEGORIZED_FILTER &&
@@ -114,7 +134,8 @@ export function NotesView() {
     };
   }, []);
 
-  const applyCategoryFilter = useCallback((next) => {
+  const applyCategoryFilter = useCallback((next, opts = {}) => {
+    const useViewTransition = opts.useViewTransition !== false;
     if (next === categoryFilter) return;
     if (categoryListLockRef.current) return;
     categoryListLockRef.current = true;
@@ -133,7 +154,7 @@ export function NotesView() {
     };
 
     const doc = typeof document !== 'undefined' ? document : null;
-    if (doc && typeof doc.startViewTransition === 'function') {
+    if (useViewTransition && doc && typeof doc.startViewTransition === 'function') {
       try {
         const vt = doc.startViewTransition(commit);
         void vt.finished.finally(() => {
@@ -146,31 +167,51 @@ export function NotesView() {
       return;
     }
 
-    setCategoryListPhase('hidden');
-    const t1 = window.setTimeout(() => {
-      commit();
-      const t2 = window.setTimeout(unlock, CATEGORY_LIST_FADE_MS);
-      categoryListTimersRef.current.push(t2);
-    }, CATEGORY_LIST_SWAP_MS);
-    categoryListTimersRef.current.push(t1);
+    if (useViewTransition) {
+      setCategoryListPhase('hidden');
+      const t1 = window.setTimeout(() => {
+        commit();
+        const t2 = window.setTimeout(unlock, CATEGORY_LIST_FADE_MS);
+        categoryListTimersRef.current.push(t2);
+      }, CATEGORY_LIST_SWAP_MS);
+      categoryListTimersRef.current.push(t1);
+      return;
+    }
+
+    commit();
+    window.setTimeout(unlock, 32);
   }, [categoryFilter]);
+
+  const commitSwipeCategory = useCallback(
+    (next) => applyCategoryFilter(next, { useViewTransition: false }),
+    [applyCategoryFilter],
+  );
+
+  const filteredBySearch = useSearch(notes, inputValue);
+  const filteredNotes = useMemo(
+    () => filterNotesByCategory(filteredBySearch, categoryFilter),
+    [filteredBySearch, categoryFilter],
+  );
+
+  const prevFilteredNotes = useMemo(
+    () => filterNotesByCategory(filteredBySearch, categoryPrevFilter),
+    [filteredBySearch, categoryPrevFilter],
+  );
+
+  const nextFilteredNotes = useMemo(
+    () => filterNotesByCategory(filteredBySearch, categoryNextFilter),
+    [filteredBySearch, categoryNextFilter],
+  );
 
   useCategorySwipeNavigation({
     elementRef: workspaceSwipeRef,
     filterSequence: categorySwipeSequence,
     categoryFilter,
-    onSelectFilter: applyCategoryFilter,
+    onSelectFilter: commitSwipeCategory,
     isInteractionLocked: () => categoryListLockRef.current,
+    interactive: !archiveMode,
+    onPan: archiveMode ? undefined : setCategorySwipePan,
   });
-
-  const filteredBySearch = useSearch(notes, inputValue);
-  const filteredNotes = useMemo(() => {
-    if (!categoryFilter) return filteredBySearch;
-    if (categoryFilter === UNCATEGORIZED_FILTER) {
-      return filteredBySearch.filter(noteHasNoCategory);
-    }
-    return filteredBySearch.filter((n) => n.category === categoryFilter);
-  }, [filteredBySearch, categoryFilter]);
 
   const archivedForView = useMemo(() => {
     return Object.values(archivedNotesMap).filter((e) =>
@@ -205,7 +246,7 @@ export function NotesView() {
     const name = inlineNewCategoryName.trim();
     if (!name) return;
     addCategory(name);
-    applyCategoryFilter(name);
+    applyCategoryFilter(name, { useViewTransition: true });
     setInlineNewCategoryName('');
     setShowInlineAddCategory(false);
   };
@@ -296,6 +337,23 @@ export function NotesView() {
             : categoryFilter
         }`;
 
+  const notesListEmptyText =
+    notes.length === 0
+      ? 'No notes yet. Add one above.'
+      : 'No notes match your search or filter.';
+
+  const renderNoteCards = (list) =>
+    list.map((note) => (
+      <NoteCard
+        key={note.id}
+        note={note}
+        categories={categories}
+        onUpdate={updateNote}
+        onDelete={deleteNote}
+        onAddCategory={addCategory}
+      />
+    ));
+
   useEffect(() => {
     const t = window.setTimeout(() => {
       setCategoryFilter(null);
@@ -303,6 +361,7 @@ export function NotesView() {
       categoryListLockRef.current = false;
       categoryListTimersRef.current.forEach(clearTimeout);
       categoryListTimersRef.current = [];
+      setCategorySwipePan(null);
     }, 0);
     return () => window.clearTimeout(t);
   }, [workspaceSwitchGeneration]);
@@ -335,7 +394,7 @@ export function NotesView() {
       <CategoryChips
         categories={categories}
         categoryFilter={categoryFilter}
-        onCategoryChange={applyCategoryFilter}
+        onCategoryChange={(f) => applyCategoryFilter(f, { useViewTransition: true })}
         hasUncategorizedNotes={hasUncategorizedNotes}
         showInlineAddCategory={showInlineAddCategory}
         setShowInlineAddCategory={setShowInlineAddCategory}
@@ -352,75 +411,133 @@ export function NotesView() {
         data-testid="notes-workspace-swipe-area"
         className="flex min-h-0 flex-1 flex-col touch-pan-y"
       >
-        <div
-          className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
-            categoryListPhase === 'hidden'
-              ? 'opacity-0 translate-y-[3px]'
-              : 'opacity-100 translate-y-0'
-          }`}
-          style={{ viewTransitionName: NOTES_BODY_VIEW_TRANSITION_NAME }}
-        >
         {archiveMode ? (
-          <NoteList
-            archiveMode
-            subtitle={archiveSubtitle}
-            onArchiveClearAll={
-              archivedSorted.length > 0 ? openArchiveClearConfirm : undefined
-            }
-            isEmpty={archivedSorted.length === 0}
-            emptyText="No archived items for this category"
-            listGridHidden={archiveClearListHidden}
-            emptyIntro={archiveEmptyIntro}
-            rootClassName="flex min-h-0 flex-1 flex-col"
+          <div
+            className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
+              categoryListPhase === 'hidden'
+                ? 'opacity-0 translate-y-[3px]'
+                : 'opacity-100 translate-y-0'
+            }`}
+            style={{ viewTransitionName: NOTES_BODY_VIEW_TRANSITION_NAME }}
           >
-            {archivedSorted.map((entry) => (
-              <NoteCard
-                key={`arch:${entry.text}`}
-                note={{
-                  id: `arch:${entry.text}`,
-                  text: entry.text,
-                  category: entry.category ?? null,
-                  createdAt: null,
-                  lastDeletedAt: entry.lastDeletedAt,
-                }}
-                categories={categories}
-                onUpdate={updateNote}
-                onDelete={deleteNote}
-                onAddCategory={addCategory}
-                variant="archived"
-                onRestore={handleRestoreArchived}
-                onArchivedUpdate={updateArchivedNote}
-                onPermanentDeleteArchived={permanentlyDeleteArchived}
-                archiveAnimating={!!restoringKeys[entry.text]}
-                bulkDissolve={!!archiveClearDissolveKeys[entry.text]}
-              />
-            ))}
-          </NoteList>
+            <NoteList
+              archiveMode
+              subtitle={archiveSubtitle}
+              onArchiveClearAll={
+                archivedSorted.length > 0 ? openArchiveClearConfirm : undefined
+              }
+              isEmpty={archivedSorted.length === 0}
+              emptyText="No archived items for this category"
+              listGridHidden={archiveClearListHidden}
+              emptyIntro={archiveEmptyIntro}
+              rootClassName="flex min-h-0 flex-1 flex-col"
+            >
+              {archivedSorted.map((entry) => (
+                <NoteCard
+                  key={`arch:${entry.text}`}
+                  note={{
+                    id: `arch:${entry.text}`,
+                    text: entry.text,
+                    category: entry.category ?? null,
+                    createdAt: null,
+                    lastDeletedAt: entry.lastDeletedAt,
+                  }}
+                  categories={categories}
+                  onUpdate={updateNote}
+                  onDelete={deleteNote}
+                  onAddCategory={addCategory}
+                  variant="archived"
+                  onRestore={handleRestoreArchived}
+                  onArchivedUpdate={updateArchivedNote}
+                  onPermanentDeleteArchived={permanentlyDeleteArchived}
+                  archiveAnimating={!!restoringKeys[entry.text]}
+                  bulkDissolve={!!archiveClearDissolveKeys[entry.text]}
+                />
+              ))}
+            </NoteList>
+          </div>
+        ) : categorySwipePan ? (
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div
+              className="flex h-full min-h-0 will-change-transform"
+              style={{
+                width: '200%',
+                transform: `translateX(${categorySwipePan.tx}px)`,
+              }}
+            >
+              {categorySwipePan.mode === 'next' ? (
+                <>
+                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pr-1">
+                    <NoteList
+                      archiveMode={false}
+                      subtitle={null}
+                      isEmpty={filteredNotes.length === 0}
+                      emptyText={notesListEmptyText}
+                      rootClassName="flex min-h-0 flex-1 flex-col"
+                    >
+                      {renderNoteCards(filteredNotes)}
+                    </NoteList>
+                  </div>
+                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pl-1">
+                    <NoteList
+                      archiveMode={false}
+                      subtitle={null}
+                      isEmpty={nextFilteredNotes.length === 0}
+                      emptyText={notesListEmptyText}
+                      rootClassName="flex min-h-0 flex-1 flex-col"
+                    >
+                      {renderNoteCards(nextFilteredNotes)}
+                    </NoteList>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pr-1">
+                    <NoteList
+                      archiveMode={false}
+                      subtitle={null}
+                      isEmpty={prevFilteredNotes.length === 0}
+                      emptyText={notesListEmptyText}
+                      rootClassName="flex min-h-0 flex-1 flex-col"
+                    >
+                      {renderNoteCards(prevFilteredNotes)}
+                    </NoteList>
+                  </div>
+                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pl-1">
+                    <NoteList
+                      archiveMode={false}
+                      subtitle={null}
+                      isEmpty={filteredNotes.length === 0}
+                      emptyText={notesListEmptyText}
+                      rootClassName="flex min-h-0 flex-1 flex-col"
+                    >
+                      {renderNoteCards(filteredNotes)}
+                    </NoteList>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         ) : (
-          <NoteList
-            archiveMode={false}
-            subtitle={null}
-            isEmpty={filteredNotes.length === 0}
-            emptyText={
-              notes.length === 0
-                ? 'No notes yet. Add one above.'
-                : 'No notes match your search or filter.'
-            }
-            rootClassName="flex min-h-0 flex-1 flex-col"
+          <div
+            className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
+              categoryListPhase === 'hidden'
+                ? 'opacity-0 translate-y-[3px]'
+                : 'opacity-100 translate-y-0'
+            }`}
+            style={{ viewTransitionName: NOTES_BODY_VIEW_TRANSITION_NAME }}
           >
-            {filteredNotes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                categories={categories}
-                onUpdate={updateNote}
-                onDelete={deleteNote}
-                onAddCategory={addCategory}
-              />
-            ))}
-          </NoteList>
+            <NoteList
+              archiveMode={false}
+              subtitle={null}
+              isEmpty={filteredNotes.length === 0}
+              emptyText={notesListEmptyText}
+              rootClassName="flex min-h-0 flex-1 flex-col"
+            >
+              {renderNoteCards(filteredNotes)}
+            </NoteList>
+          </div>
         )}
-        </div>
       </div>
     </div>
 

@@ -38,7 +38,7 @@ export function NoteList({
         </div>
       ) : null}
       <div
-        className={`grid gap-3 transition-opacity duration-150 ease-out ${
+        className={`grid content-start items-start gap-3 transition-opacity duration-150 ease-out ${
           listGridHidden ? 'opacity-0' : 'opacity-100'
         } ${isEmpty ? '' : 'min-h-0 flex-1'}`}
       >
