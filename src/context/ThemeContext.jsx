@@ -1,7 +1,7 @@
 import {
   createContext,
   useContext,
-  useLayoutEffect,
+  useInsertionEffect,
   useMemo,
   useState,
 } from 'react';
@@ -21,16 +21,27 @@ function readStoredTheme() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+/** Keep `<html>`, `theme-color`, and `color-scheme` aligned (see blocking script in `index.html`). */
+function applyThemeToDocument(isDark) {
+  const root = document.documentElement;
+  root.classList.toggle('dark', isDark);
+  root.style.colorScheme = isDark ? 'dark' : 'light';
+  try {
+    localStorage.setItem(STORAGE_KEY, isDark ? 'dark' : 'light');
+  } catch {
+    /* ignore */
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute('content', isDark ? '#0c0a09' : '#fafaf9');
+  }
+}
+
 export function ThemeProvider({ children }) {
   const [isDark, setIsDark] = useState(() => readStoredTheme());
 
-  useLayoutEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-    try {
-      localStorage.setItem(STORAGE_KEY, isDark ? 'dark' : 'light');
-    } catch {
-      /* ignore */
-    }
+  useInsertionEffect(() => {
+    applyThemeToDocument(isDark);
   }, [isDark]);
 
   const value = useMemo(

@@ -2,9 +2,43 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="theme-color" content="#fafaf9" />
+    <style>
+      #ps-boot-splash {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: #fafaf9;
+        color: #292524;
+      }
+      html.dark #ps-boot-splash {
+        background: #0c0a09;
+        color: #e7e5e4;
+      }
+    </style>
+    <script>
+      (function () {
+        var KEY = 'plainsight-theme';
+        try {
+          var stored = localStorage.getItem(KEY);
+          var dark =
+            stored === 'dark' ||
+            (stored !== 'light' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          root.classList.toggle('dark', dark);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#0c0a09' : '#fafaf9');
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#ffffff" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -13,18 +47,7 @@
   </head>
   <body>
     <div id="root">
-      <div
-        id="ps-boot-splash"
-        style="
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: system-ui, -apple-system, Segoe UI, sans-serif;
-          background: #fafaf9;
-          color: #292524;
-        "
-      >
+      <div id="ps-boot-splash">
         <span
           style="letter-spacing: 0.22em; font-weight: 600; font-size: 1.15rem; text-transform: lowercase"
           >plainsight</span>
