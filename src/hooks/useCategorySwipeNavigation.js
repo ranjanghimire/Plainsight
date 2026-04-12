@@ -4,7 +4,7 @@ import { MENU_RIGHT_EDGE_SWIPE_PX } from '../constants/menuEdgeSwipe';
 const SWIPE_THRESHOLD_PX = 48;
 const HORIZONTAL_DOMINANCE_RATIO = 1.2;
 /** Commit when finger moved at least this fraction of the pane width (or SWIPE_THRESHOLD_PX). */
-const COMMIT_WIDTH_RATIO = 0.22;
+const COMMIT_WIDTH_RATIO = 0.18;
 
 /**
  * Horizontal swipe on the main notes workspace: left → next category, right → previous,
@@ -49,6 +49,8 @@ export function useCategorySwipeNavigation({
     /** @type {'next' | 'prev' | null} */
     let panMode = null;
     let rafId = 0;
+    /** Bumps on touchstart / touchend so RAFs from touchmove cannot apply pan after the gesture ended. */
+    let panGestureGen = 0;
 
     const shouldIgnoreTarget = (target) => {
       if (!(target instanceof Element)) return false;
@@ -59,8 +61,10 @@ export function useCategorySwipeNavigation({
 
     const flushPan = (payload) => {
       if (rafId) cancelAnimationFrame(rafId);
+      const genAtSchedule = panGestureGen;
       rafId = requestAnimationFrame(() => {
         rafId = 0;
+        if (genAtSchedule !== panGestureGen) return;
         onPanRef.current?.(payload);
       });
     };
@@ -89,6 +93,7 @@ export function useCategorySwipeNavigation({
         return;
       }
 
+      panGestureGen += 1;
       ignoreGesture = false;
       tracking = true;
       panMode = null;
@@ -135,6 +140,7 @@ export function useCategorySwipeNavigation({
         tracking = false;
         ignoreGesture = false;
         panMode = null;
+        panGestureGen += 1;
         clearPan();
         return;
       }
@@ -144,6 +150,7 @@ export function useCategorySwipeNavigation({
       const dy = t ? t.clientY - startY : 0;
       tracking = false;
       ignoreGesture = false;
+      panGestureGen += 1;
 
       const seq = seqRef.current;
       if (!seq || seq.length < 2) {
@@ -163,10 +170,10 @@ export function useCategorySwipeNavigation({
           if (panMode === 'next') commit = dx <= -threshold;
           else commit = dx >= threshold;
 
-          const horizontal =
-            Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO &&
-            Math.abs(dx) >= threshold * 0.85;
-          if (commit && horizontal) {
+          const mostlyHorizontal =
+            Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO ||
+            Math.abs(dx) >= threshold * 0.55;
+          if (commit && mostlyHorizontal) {
             const nextCat =
               panMode === 'next'
                 ? seq[(idx + 1) % seq.length]
@@ -197,6 +204,7 @@ export function useCategorySwipeNavigation({
       tracking = false;
       ignoreGesture = false;
       panMode = null;
+      panGestureGen += 1;
       clearPan();
     };
 
