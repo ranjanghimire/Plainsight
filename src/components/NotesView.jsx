@@ -55,6 +55,17 @@ function filterNotesByCategory(source, filter) {
   return source.filter((n) => n.category === filter);
 }
 
+/**
+ * Map hook pan (2-up preview) to translateX on a stable 3-up strip [prev | current | next].
+ * Idle centers on `current` at -w; "next" pan moves toward -2w; "prev" toward 0.
+ */
+function categorySwipeStripTranslatePx(pan, w) {
+  const width = Math.max(1, w);
+  if (!pan) return -width;
+  if (pan.mode === 'next') return -width + pan.tx;
+  return pan.tx;
+}
+
 export function NotesView() {
   const {
     data,
@@ -81,6 +92,7 @@ export function NotesView() {
   const workspaceSwipeRef = useRef(null);
   /** Live category swipe pan (non-archive); cleared when gesture ends. */
   const [categorySwipePan, setCategorySwipePan] = useState(null);
+  const [workspaceSwipeWidth, setWorkspaceSwipeWidth] = useState(0);
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
@@ -132,6 +144,18 @@ export function NotesView() {
       archiveClearTimersRef.current.forEach(clearTimeout);
       archiveClearTimersRef.current = [];
     };
+  }, []);
+
+  useEffect(() => {
+    const el = workspaceSwipeRef.current;
+    if (!el) return undefined;
+    setWorkspaceSwipeWidth(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => {
+      setWorkspaceSwipeWidth(el.clientWidth);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   const applyCategoryFilter = useCallback((next, opts = {}) => {
@@ -456,86 +480,59 @@ export function NotesView() {
               ))}
             </NoteList>
           </div>
-        ) : categorySwipePan ? (
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div
-              className="flex h-full min-h-0 will-change-transform"
-              style={{
-                width: '200%',
-                transform: `translateX(${categorySwipePan.tx}px)`,
-              }}
-            >
-              {categorySwipePan.mode === 'next' ? (
-                <>
-                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pr-1">
-                    <NoteList
-                      archiveMode={false}
-                      subtitle={null}
-                      isEmpty={filteredNotes.length === 0}
-                      emptyText={notesListEmptyText}
-                      rootClassName="flex min-h-0 flex-1 flex-col"
-                    >
-                      {renderNoteCards(filteredNotes)}
-                    </NoteList>
-                  </div>
-                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pl-1">
-                    <NoteList
-                      archiveMode={false}
-                      subtitle={null}
-                      isEmpty={nextFilteredNotes.length === 0}
-                      emptyText={notesListEmptyText}
-                      rootClassName="flex min-h-0 flex-1 flex-col"
-                    >
-                      {renderNoteCards(nextFilteredNotes)}
-                    </NoteList>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pr-1">
-                    <NoteList
-                      archiveMode={false}
-                      subtitle={null}
-                      isEmpty={prevFilteredNotes.length === 0}
-                      emptyText={notesListEmptyText}
-                      rootClassName="flex min-h-0 flex-1 flex-col"
-                    >
-                      {renderNoteCards(prevFilteredNotes)}
-                    </NoteList>
-                  </div>
-                  <div className="box-border flex min-h-0 w-1/2 shrink-0 flex-col pl-1">
-                    <NoteList
-                      archiveMode={false}
-                      subtitle={null}
-                      isEmpty={filteredNotes.length === 0}
-                      emptyText={notesListEmptyText}
-                      rootClassName="flex min-h-0 flex-1 flex-col"
-                    >
-                      {renderNoteCards(filteredNotes)}
-                    </NoteList>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
         ) : (
           <div
-            className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
+            className={`relative flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-200 ease-out ${
               categoryListPhase === 'hidden'
                 ? 'opacity-0 translate-y-[3px]'
                 : 'opacity-100 translate-y-0'
             }`}
             style={{ viewTransitionName: NOTES_BODY_VIEW_TRANSITION_NAME }}
           >
-            <NoteList
-              archiveMode={false}
-              subtitle={null}
-              isEmpty={filteredNotes.length === 0}
-              emptyText={notesListEmptyText}
-              rootClassName="flex min-h-0 flex-1 flex-col"
+            <div
+              className="flex h-full min-h-0 will-change-transform"
+              style={{
+                width: '300%',
+                transform: `translateX(${categorySwipeStripTranslatePx(
+                  categorySwipePan,
+                  categorySwipePan?.w ?? workspaceSwipeWidth,
+                )}px)`,
+              }}
             >
-              {renderNoteCards(filteredNotes)}
-            </NoteList>
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pr-1">
+                <NoteList
+                  archiveMode={false}
+                  subtitle={null}
+                  isEmpty={prevFilteredNotes.length === 0}
+                  emptyText={notesListEmptyText}
+                  rootClassName="flex min-h-0 flex-1 flex-col"
+                >
+                  {renderNoteCards(prevFilteredNotes)}
+                </NoteList>
+              </div>
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
+                <NoteList
+                  archiveMode={false}
+                  subtitle={null}
+                  isEmpty={filteredNotes.length === 0}
+                  emptyText={notesListEmptyText}
+                  rootClassName="flex min-h-0 flex-1 flex-col"
+                >
+                  {renderNoteCards(filteredNotes)}
+                </NoteList>
+              </div>
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pl-1">
+                <NoteList
+                  archiveMode={false}
+                  subtitle={null}
+                  isEmpty={nextFilteredNotes.length === 0}
+                  emptyText={notesListEmptyText}
+                  rootClassName="flex min-h-0 flex-1 flex-col"
+                >
+                  {renderNoteCards(nextFilteredNotes)}
+                </NoteList>
+              </div>
+            </div>
           </div>
         )}
       </div>
