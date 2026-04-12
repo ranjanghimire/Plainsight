@@ -1,6 +1,7 @@
 /**
- * Menu optimistic sync restore: while `authReady` is false, avoid flashing "Checking sign-in…"
- * when we have a persisted last-known paid hint or remote-sync flag (see syncEnabled + MenuPanel).
+ * Menu optimistic sync restore: OTP sessions (`hasCustomAuthSession`) never use the
+ * "Checking sign-in…" line — the menu falls through to subscription / unlock copy while
+ * `fetchSessionUser` may still be pending. Hints + persisted remote sync avoid a blank shell.
  */
 
 import React from 'react';
@@ -108,11 +109,17 @@ describe('MenuPanel — optimistic copy while session restore is pending', () =>
     globalThis.__PS_TEST_FLAGS__ = { paidSync: false, sessionUserId: null };
   });
 
-  it('shows Checking sign-in when there is no optimistic hint', async () => {
+  it('does not show Checking sign-in for OTP session while session edge is pending', async () => {
     writeOtpLikeSession();
     renderMenuDrawerOpen();
     await screen.findByTestId('menu-panel');
-    expect(screen.getByText(/checking sign-in/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/checking sign-in/i)).not.toBeInTheDocument();
+    });
+    const followUp =
+      screen.queryByText(/confirming your subscription/i) ||
+      screen.queryByRole('button', { name: /unlock cloud sync/i });
+    expect(followUp).toBeTruthy();
   });
 
   it('does not show Checking when last-known paid hint is stored', async () => {
