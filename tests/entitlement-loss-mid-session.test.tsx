@@ -57,8 +57,16 @@ const paidDescribe = hasPaidEnv ? describe : describe.skip;
 const HOME_ROW_ID = createHydrationTestWorkspaceId();
 const SECOND_VISIBLE_ROW_ID = createHydrationTestWorkspaceId();
 
-async function waitForPaidGatingReady(): Promise<void> {
-  await waitFor(() => expect(getCanUseSupabase()).toBe(true), { timeout: 60_000 });
+/** Single wait so tests stay under Vitest `testTimeout` (sequential 60s + 90s gating/hydration caps exceeded 120s). */
+async function waitForPaidHydrationReady(): Promise<void> {
+  await waitFor(
+    () => {
+      expect(getCanUseSupabase()).toBe(true);
+      const el = document.querySelector('[data-testid="hydration-probe"]');
+      expect(el?.getAttribute('data-hydration-complete')).toBe('true');
+    },
+    { timeout: 120_000 },
+  );
 }
 
 function readEntitlementProbeAttr(name: string): string | null {
@@ -95,8 +103,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       realFullSync(...args),
     );
     renderEntitlementLossHome();
-    await waitForPaidGatingReady();
-    await waitForHydrationCompleteAttr();
+    await waitForPaidHydrationReady();
     const callsAfterHydrate = fullSpy.mock.calls.length;
     await simulateEntitlementLossMidSession();
     expect(readEntitlementProbeAttr('data-can-use-supabase')).toBe('false');
@@ -114,8 +121,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       realFullSync(...args),
     );
     renderEntitlementLossHome();
-    await waitForPaidGatingReady();
-    await waitForHydrationCompleteAttr();
+    await waitForPaidHydrationReady();
     const fsAfter = fsSpy.mock.calls.length;
     await simulateEntitlementLossMidSession();
     expect(readEntitlementProbeAttr('data-hydration-complete')).toBe('true');
@@ -131,8 +137,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       realFullSync(...args),
     );
     renderEntitlementLossHome();
-    await waitForPaidGatingReady();
-    await waitForHydrationCompleteAttr();
+    await waitForPaidHydrationReady();
     const wid = getWorkspaceIdForStorageKey('workspace_home') ?? getOrCreateWorkspaceIdForStorageKey('workspace_home');
     await simulateEntitlementLossMidSession();
     const n0 = fsSpy.mock.calls.length;
@@ -159,8 +164,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
         realPushNotes(...args),
       );
       renderEntitlementLossHome();
-      await waitForPaidGatingReady();
-      await waitForHydrationCompleteAttr();
+      await waitForPaidHydrationReady();
       const wid =
         getWorkspaceIdForStorageKey('workspace_home') ??
         getOrCreateWorkspaceIdForStorageKey('workspace_home');
@@ -182,15 +186,14 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       expect(await countNotesInWorkspace(wid)).toBe(remoteCountBefore);
       pushSpy.mockRestore();
     },
-    120_000,
+    240_000,
   );
 
   it(
     'E. fullSync while not entitled does not merge remote rows into local workspace blob',
     async () => {
       renderEntitlementLossHome();
-      await waitForPaidGatingReady();
-      await waitForHydrationCompleteAttr();
+      await waitForPaidHydrationReady();
       const wid =
         getWorkspaceIdForStorageKey('workspace_home') ??
         getOrCreateWorkspaceIdForStorageKey('workspace_home');
@@ -220,7 +223,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       expect(loadWorkspace('workspace_home')).toEqual(blob);
       expect(screen.getByTestId('note-count-probe').getAttribute('data-note-count')).toBe('1');
     },
-    120_000,
+    240_000,
   );
 
   it('F. after loss, switching visible workspace stays local-only (no new fullSync)', async () => {
@@ -230,8 +233,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       realFullSync(...args),
     );
     renderEntitlementLossHome();
-    await waitForPaidGatingReady();
-    await waitForHydrationCompleteAttr();
+    await waitForPaidHydrationReady();
     await simulateEntitlementLossMidSession();
     const n = fsSpy.mock.calls.length;
     const { visibleWorkspaces } = loadAppState();
@@ -250,8 +252,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       realFullSync(...args),
     );
     const r = renderEntitlementLossHome();
-    await waitForPaidGatingReady();
-    await waitForHydrationCompleteAttr();
+    await waitForPaidHydrationReady();
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('New note'), 'persist-after-reload');
     await user.keyboard('{Enter}');
