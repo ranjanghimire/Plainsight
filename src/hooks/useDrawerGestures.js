@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { MENU_RIGHT_EDGE_SWIPE_PX } from '../constants/menuEdgeSwipe';
 
-const EDGE_PX = 20;
 const THRESHOLD = 30;
 
 /**
@@ -32,7 +32,8 @@ export function useDrawerGestures({ isOpen, onOpen, onClose }) {
       currentXRef.current = t.clientX;
       currentYRef.current = t.clientY;
       isDraggingRef.current = true;
-      isEdgeSwipeRef.current = !isOpenRef.current && t.clientX >= w - EDGE_PX;
+      isEdgeSwipeRef.current =
+        !isOpenRef.current && t.clientX >= w - MENU_RIGHT_EDGE_SWIPE_PX;
     };
 
     const onTouchMove = (e) => {

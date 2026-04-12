@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useArchiveMode } from '../context/ArchiveModeContext';
+import { useCategorySwipeNavigation } from '../hooks/useCategorySwipeNavigation';
 import { useSearch } from '../hooks/useSearch';
 import { NoteCard } from './NoteCard';
 import { SearchCommandBar } from './SearchCommandBar';
@@ -65,6 +66,7 @@ export function NotesView() {
   const [categoryListPhase, setCategoryListPhase] = useState('idle');
   const categoryListLockRef = useRef(false);
   const categoryListTimersRef = useRef([]);
+  const workspaceSwipeRef = useRef(null);
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
@@ -81,6 +83,12 @@ export function NotesView() {
       (e) => e.category == null || e.category === '',
     );
   }, [notes, archivedNotesMap]);
+
+  const categorySwipeSequence = useMemo(() => {
+    const seq = [null, ...categories];
+    if (hasUncategorizedNotes) seq.push(UNCATEGORIZED_FILTER);
+    return seq;
+  }, [categories, hasUncategorizedNotes]);
 
   useEffect(() => {
     if (
@@ -119,6 +127,14 @@ export function NotesView() {
     }, CATEGORY_LIST_SWAP_MS);
     categoryListTimersRef.current.push(t1);
   }, [categoryFilter]);
+
+  useCategorySwipeNavigation({
+    elementRef: workspaceSwipeRef,
+    filterSequence: categorySwipeSequence,
+    categoryFilter,
+    onSelectFilter: applyCategoryFilter,
+    isInteractionLocked: () => categoryListLockRef.current,
+  });
 
   const filteredBySearch = useSearch(notes, inputValue);
   const filteredNotes = useMemo(() => {
@@ -276,7 +292,9 @@ export function NotesView() {
   return (
     <>
     <div
-      className={`space-y-4 origin-top transition-all duration-200 ease-out ${
+      ref={workspaceSwipeRef}
+      data-testid="notes-workspace-swipe-area"
+      className={`touch-pan-y space-y-4 origin-top transition-all duration-200 ease-out ${
         archiveViewTransitioning
           ? 'opacity-0 scale-[0.98] brightness-95'
           : 'opacity-100 scale-100 brightness-100'
