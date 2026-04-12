@@ -20,8 +20,9 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: 'jsdom',
       setupFiles: ['./tests/setup.ts'],
-      testTimeout: 60_000,
-      hookTimeout: 60_000,
+      // Paid + Supabase category tests need headroom (hydration, two pushes, remote polls).
+      testTimeout: 120_000,
+      hookTimeout: 120_000,
       maxConcurrency: 1,
       sequence: { concurrent: false },
       // Paid tests share one Supabase project; parallel files race on clearSupabaseTables / categories.

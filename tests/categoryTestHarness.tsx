@@ -259,18 +259,22 @@ export function renderHomePage(): ReturnType<typeof render> {
 /**
  * Wait until category chips mount.
  * Paid tests pass `expectPaidSync` so we wait for `getCanUseSupabase()` after hydration/OTP wiring.
+ * Uses one wait loop so total time stays within a single Vitest test budget (chips + sync were 45s+60s).
  */
 export async function waitForCategoryRowReady(options?: {
   expectPaidSync?: boolean;
 }): Promise<void> {
+  const timeout = options?.expectPaidSync ? 90_000 : 45_000;
   await waitFor(
     () => {
       expect(document.querySelector('[data-testid="category-chips-row"]')).toBeTruthy();
+      if (options?.expectPaidSync) {
+        expect(getCanUseSupabase()).toBe(true);
+      }
     },
-    { timeout: 45_000 },
+    { timeout },
   );
   if (options?.expectPaidSync) {
-    await waitFor(() => expect(getCanUseSupabase()).toBe(true), { timeout: 60_000 });
     await new Promise((r) => setTimeout(r, 1500));
   }
 }
