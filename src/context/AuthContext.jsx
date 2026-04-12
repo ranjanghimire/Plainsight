@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -10,7 +11,6 @@ import {
   subscribeSyncGating,
   setSyncRemoteActive,
   getSyncRemoteActive,
-  getSyncEntitled,
   hasCustomAuthSession,
   persistLastKnownSyncEntitledForMenu,
 } from '../sync/syncEnabled';
@@ -64,7 +64,6 @@ export function AuthProvider({ children }) {
     () => getSupabaseSessionExists(),
   );
   const [syncRemoteActive, setSyncRemoteActiveUi] = useState(() => getSyncRemoteActive());
-  const [syncEntitled, setSyncEntitledUi] = useState(() => getSyncEntitled());
   const [sendCodeOpen, setSendCodeOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState(() => readInitialAuthEmail());
   /** False until custom-session validation finishes (avoids “Unlock” + “Sign out” before we know the account). */
@@ -74,6 +73,9 @@ export function AuthProvider({ children }) {
     if (isLocalDevSession()) return true;
     return false;
   });
+  /** Session edge lookup timed out / failed — menu shows amber sync dot instead of a toast. */
+  const [authConnectivityDegraded, setAuthConnectivityDegraded] = useState(false);
+  const sessionValidationTicketRef = useRef(0);
 
   useEffect(
     () =>
@@ -81,64 +83,81 @@ export function AuthProvider({ children }) {
         if (!hasCustomAuthSession()) setSyncRemoteActive(false);
         setSessionExistsUi(getSupabaseSessionExists());
         setSyncRemoteActiveUi(getSyncRemoteActive());
-        setSyncEntitledUi(getSyncEntitled());
         setAuthEmail(resolveAuthEmailForSession());
       }),
     [],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { sessionToken, userId } = getLocalSession();
-        if (!sessionToken || !userId) return;
-        if (isLocalDevSession()) {
+  const runRemoteSessionValidation = useCallback(async () => {
+    const ticket = ++sessionValidationTicketRef.current;
+    try {
+      const { sessionToken, userId } = getLocalSession();
+      if (!sessionToken || !userId) return;
+      if (isLocalDevSession()) {
+        if (ticket === sessionValidationTicketRef.current) {
           setAuthEmail('local@plainsight.dev');
-          return;
+          setAuthConnectivityDegraded(false);
         }
-        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        if (!baseUrl || !anonKey) return;
-
-        const result = await fetchSessionUser(sessionToken);
-        if (cancelled) return;
-
-        if (!result.loggedIn) {
-          if (result.staleNetwork) {
-            /** Degraded network: keep local session; RevenueCat + menu optimistic hints catch up later. */
-            return;
-          }
-          persistLastKnownSyncEntitledForMenu(false);
-          clearSession();
-          setSyncRemoteActive(false);
-          clearAuthDisplayEmailStorage();
-          setAuthEmail(null);
-          ensureLocalSession();
-          return;
-        }
-
-        setAuthEmail(result.email);
-        persistAuthDisplayEmail(result.email);
-
-        enqueueOtpSessionProcessing({
-          userId: result.userId,
-          email: result.email,
-          source: 'restore',
-        });
-      } catch (e) {
-        console.error('[Auth] session restore', e);
-      } finally {
-        if (!cancelled) setAuthReady(true);
+        return;
       }
-    })();
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!baseUrl || !anonKey) {
+        if (ticket === sessionValidationTicketRef.current) {
+          setAuthConnectivityDegraded(false);
+        }
+        return;
+      }
 
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+      const result = await fetchSessionUser(sessionToken);
+      if (ticket !== sessionValidationTicketRef.current) return;
+
+      if (!result.loggedIn) {
+        if (result.staleNetwork) {
+          setAuthConnectivityDegraded(true);
+          return;
+        }
+        setAuthConnectivityDegraded(false);
+        persistLastKnownSyncEntitledForMenu(false);
+        clearSession();
+        setSyncRemoteActive(false);
+        clearAuthDisplayEmailStorage();
+        setAuthEmail(null);
+        ensureLocalSession();
+        return;
+      }
+
+      setAuthConnectivityDegraded(false);
+      setAuthEmail(result.email);
+      persistAuthDisplayEmail(result.email);
+
+      enqueueOtpSessionProcessing({
+        userId: result.userId,
+        email: result.email,
+        source: 'restore',
+      });
+    } catch (e) {
+      console.error('[Auth] session restore', e);
+      if (ticket === sessionValidationTicketRef.current) {
+        setAuthConnectivityDegraded(true);
+      }
+    } finally {
+      setAuthReady(true);
+    }
   }, []);
+
+  useEffect(() => {
+    void runRemoteSessionValidation();
+  }, [runRemoteSessionValidation]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      if (!hasCustomAuthSession() || isLocalDevSession()) return;
+      void runRemoteSessionValidation();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [runRemoteSessionValidation]);
 
   const restoreLocalSession = useCallback(() => {
     ensureLocalSession();
@@ -170,6 +189,8 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(() => {
     persistLastKnownSyncEntitledForMenu(null);
+    sessionValidationTicketRef.current += 1;
+    setAuthConnectivityDegraded(false);
     clearSession();
     setSyncRemoteActive(false);
     clearAuthDisplayEmailStorage();
@@ -181,6 +202,7 @@ export function AuthProvider({ children }) {
     syncRemoteActive,
     authEmail,
     authReady,
+    authConnectivityDegraded,
     restoreLocalSession,
     openSendCodeModal,
     verifyCodeLogin: loginWithCode,

@@ -69,9 +69,15 @@ export function SyncEntitlementProvider({ children }) {
   const [isLinkingPurchasesToSession, setIsLinkingPurchasesToSession] = useState(false);
   /** True while check-sync-entitlement + SDK confirmation runs (hide Unlock for paid users until resolved). */
   const [isServerEntitlementCheckPending, setIsServerEntitlementCheckPending] = useState(false);
+  /** Background verify/hydration failed — menu shows amber sync dot instead of a toast. */
+  const [syncMenuConnectivityWarning, setSyncMenuConnectivityWarning] = useState(false);
 
   useEffect(
-    () => subscribeSyncGating(() => setSyncEntitled(getSyncEntitled())),
+    () =>
+      subscribeSyncGating(() => {
+        setSyncEntitled(getSyncEntitled());
+        if (!hasCustomAuthSession()) setSyncMenuConnectivityWarning(false);
+      }),
     [],
   );
 
@@ -135,6 +141,7 @@ export function SyncEntitlementProvider({ children }) {
   const applyCustomerInfo = useCallback((info) => {
     const active = customerInfoHasSyncEntitlement(info);
     setSyncEntitlementActive(active);
+    if (active) setSyncMenuConnectivityWarning(false);
     return active;
   }, []);
 
@@ -306,7 +313,7 @@ export function SyncEntitlementProvider({ children }) {
         setEnableSyncOpen(false);
         showToast('Cloud sync is on');
       } else {
-        showToast('Could not verify sync unlock.');
+        setSyncMenuConnectivityWarning(true);
       }
     } catch (e) {
       if (e?.errorCode === ErrorCode.UserCancelledError) return;
@@ -348,6 +355,7 @@ export function SyncEntitlementProvider({ children }) {
               console.error('[RevenueCat] post sign-in identify', e);
             }
             setSyncRemoteActive(true);
+            setSyncMenuConnectivityWarning(false);
             if (source === 'verify') showToast('Cloud sync is on');
           } else {
             if (remoteEntitled === null) {
@@ -371,6 +379,7 @@ export function SyncEntitlementProvider({ children }) {
                 if (entitled) {
                   setSyncEntitlementActive(true);
                   setSyncRemoteActive(true);
+                  setSyncMenuConnectivityWarning(false);
                 } else if (remoteAfter === false && !sdkEntitled) {
                   setSyncEntitlementActive(false);
                   setSyncRemoteActive(false);
@@ -409,16 +418,17 @@ export function SyncEntitlementProvider({ children }) {
                 if (entitled) {
                   setSyncEntitlementActive(true);
                   setSyncRemoteActive(true);
+                  setSyncMenuConnectivityWarning(false);
                   showToast('Cloud sync is on');
                 } else if (remoteAfter === false && !sdkEntitled) {
                   setSyncEntitlementActive(false);
                   setSyncRemoteActive(false);
                 } else {
-                  showToast('Could not verify sync status right now. Try again in a moment.');
+                  setSyncMenuConnectivityWarning(true);
                 }
               } catch (e) {
                 console.error('[RevenueCat] verify session RevenueCat link', e);
-                showToast('Could not verify sync status right now. Try again in a moment.');
+                setSyncMenuConnectivityWarning(true);
               }
             }
           }
@@ -485,6 +495,7 @@ export function SyncEntitlementProvider({ children }) {
         if (remote === true) {
           setSyncEntitlementActive(true);
           setSyncRemoteActive(true);
+          setSyncMenuConnectivityWarning(false);
           return;
         }
 
@@ -505,6 +516,7 @@ export function SyncEntitlementProvider({ children }) {
         if (sdk) {
           setSyncEntitlementActive(true);
           setSyncRemoteActive(true);
+          setSyncMenuConnectivityWarning(false);
         }
       } finally {
         if (!cancelled) setIsServerEntitlementCheckPending(false);
@@ -551,6 +563,7 @@ export function SyncEntitlementProvider({ children }) {
     isLinkingPurchasesToSession,
     isSubscriptionStatusPending:
       isLinkingPurchasesToSession || isServerEntitlementCheckPending,
+    syncMenuConnectivityWarning,
   };
 
   return (

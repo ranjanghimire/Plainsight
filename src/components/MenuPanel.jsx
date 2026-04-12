@@ -96,14 +96,17 @@ export function MenuPanel({ open, onClose }) {
     createVisibleWorkspace,
     renameVisibleWorkspace,
     deleteVisibleWorkspace,
+    syncHydrationConnectivityWarning,
   } = useWorkspace();
   const {
     beginUpgradeFlow,
     showToast,
     revenueCatReady,
     isSubscriptionStatusPending,
+    syncMenuConnectivityWarning,
   } = useSyncEntitlement();
-  const { openSendCodeModal, signOut, authEmail, authReady } = useAuth();
+  const { openSendCodeModal, signOut, authEmail, authReady, authConnectivityDegraded } =
+    useAuth();
   const [syncEntitled, setSyncEntitled] = useState(() => getSyncEntitled());
   const [syncRemoteActive, setSyncRemoteActive] = useState(() => getSyncRemoteActive());
   const [customAuthSession, setCustomAuthSession] = useState(() => hasCustomAuthSession());
@@ -129,10 +132,18 @@ export function MenuPanel({ open, onClose }) {
   const wsMenu = useItemContextMenu();
 
   const menuSyncRestoreHint = getOptimisticLastKnownSyncEntitledForMenu();
-  const showAuthCheckingLine = !authReady && menuSyncRestoreHint === null;
+  /** Omit “Checking sign-in…” when tokens exist — session edge may be slow; menu uses amber sync dot instead. */
+  const showAuthCheckingLine =
+    !authReady && menuSyncRestoreHint === null && !customAuthSession;
   /** Signed-out shell only; if tokens exist we fall through to subscription / sync rows. */
   const optimisticFreeMenuWhileRestoring =
     !authReady && menuSyncRestoreHint === false && !customAuthSession;
+
+  const syncStatusDotDegraded =
+    authConnectivityDegraded ||
+    syncHydrationConnectivityWarning ||
+    syncMenuConnectivityWarning ||
+    isSubscriptionStatusPending;
 
   useEffect(() => {
     if (!open) wsMenu.closeMenu();
@@ -301,10 +312,19 @@ export function MenuPanel({ open, onClose }) {
               </button>
             ) : (
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2"
+                  title={
+                    syncStatusDotDegraded
+                      ? 'Sync or sign-in may be delayed — still reconnecting.'
+                      : undefined
+                  }
+                >
                   <span
                     className="inline-block h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: '#4CAF50' }}
+                    style={{
+                      backgroundColor: syncStatusDotDegraded ? '#f59e0b' : '#4CAF50',
+                    }}
                     aria-hidden
                   />
                   <p className="text-sm font-medium text-stone-800 dark:text-stone-200">

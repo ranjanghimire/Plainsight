@@ -189,7 +189,8 @@ export function WorkspaceProvider({ children }) {
   /** Local / entitled-only: true. When canUseSupabase, false until fullSync notifies. */
   const [canUseSupabase, setCanUseSupabase] = useState(() => getCanUseSupabase());
   const [hydrationComplete, setHydrationComplete] = useState(() => !getCanUseSupabase());
-  const [hydrationSyncToast, setHydrationSyncToast] = useState(false);
+  const [syncHydrationConnectivityWarning, setSyncHydrationConnectivityWarning] =
+    useState(false);
   const hydrationRetryTimerRef = useRef(null);
   const workspaceKey = activeStorageKey;
 
@@ -282,7 +283,7 @@ export function WorkspaceProvider({ children }) {
       }
       queueMicrotask(() => {
         setHydrationComplete(true);
-        setHydrationSyncToast(false);
+        setSyncHydrationConnectivityWarning(false);
       });
       return undefined;
     }
@@ -291,11 +292,11 @@ export function WorkspaceProvider({ children }) {
       queueMicrotask(() => {
         setHydrationComplete(true);
         if (payload.ok) {
-          setHydrationSyncToast(false);
+          setSyncHydrationConnectivityWarning(false);
           return;
         }
         if (!getCanUseSupabase()) return;
-        setHydrationSyncToast(true);
+        setSyncHydrationConnectivityWarning(true);
         if (hydrationRetryTimerRef.current != null) {
           window.clearTimeout(hydrationRetryTimerRef.current);
         }
@@ -987,6 +988,7 @@ export function WorkspaceProvider({ children }) {
     workspaceKey,
     activeStorageKey,
     hydrationComplete,
+    syncHydrationConnectivityWarning,
     data,
     visibleWorkspaces,
     workspaceSwitchGeneration,
@@ -1019,15 +1021,6 @@ export function WorkspaceProvider({ children }) {
   return (
     <WorkspaceContext.Provider value={value}>
       {children}
-      {hydrationSyncToast ? (
-        <div
-          className="fixed bottom-6 left-1/2 z-[120] max-w-[min(90vw,22rem)] -translate-x-1/2 rounded-lg bg-stone-900/90 px-4 py-2 text-center text-sm text-stone-100 shadow-lg dark:bg-stone-100/95 dark:text-stone-900"
-          role="status"
-          aria-live="polite"
-        >
-          Could not sync. Retrying soon.
-        </div>
-      ) : null}
     </WorkspaceContext.Provider>
   );
 }
