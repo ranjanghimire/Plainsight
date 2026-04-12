@@ -22,6 +22,13 @@ const ARCHIVE_CLEAR_STAGGER_MS = 60;
 const ARCHIVE_CLEAR_CARD_FADE_MS = 180;
 const ARCHIVE_CLEAR_CONTAINER_FADE_MS = 150;
 
+/** Category swipe settle: midpoint / threshold / flick (matches hook horizontal ratio). */
+const CATEGORY_SWIPE_H_AXIS = 1.2;
+const CATEGORY_SWIPE_COMMIT_RATIO = 0.18;
+const CATEGORY_SWIPE_MIDPOINT = 0.5;
+const CATEGORY_SWIPE_FLICK_VX = 0.28;
+const CATEGORY_SWIPE_MAX_SETTLE_MS = 520;
+
 function noteHasNoCategory(n) {
   return n.category == null || n.category === '';
 }
@@ -92,7 +99,11 @@ export function NotesView() {
   const workspaceSwipeRef = useRef(null);
   /** Live category swipe pan (non-archive); cleared when gesture ends. */
   const [categorySwipePan, setCategorySwipePan] = useState(null);
+  const [swipeStripTransition, setSwipeStripTransition] = useState(null);
   const [workspaceSwipeWidth, setWorkspaceSwipeWidth] = useState(0);
+  const categorySwipeSettlingRef = useRef(false);
+  const categorySwipeSettleTimerRef = useRef(0);
+  const settleFinishRef = useRef(null);
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
@@ -227,14 +238,142 @@ export function NotesView() {
     [filteredBySearch, categoryNextFilter],
   );
 
+  const handleCategorySwipePan = useCallback((p) => {
+    if (!p) {
+      if (categorySwipeSettleTimerRef.current) {
+        clearTimeout(categorySwipeSettleTimerRef.current);
+        categorySwipeSettleTimerRef.current = 0;
+      }
+      categorySwipeSettlingRef.current = false;
+      settleFinishRef.current = null;
+      setSwipeStripTransition(null);
+      setCategorySwipePan(null);
+      return;
+    }
+    setSwipeStripTransition(null);
+    setCategorySwipePan(p);
+  }, []);
+
+  const handleCategoryPanRelease = useCallback(
+    (release) => {
+      const { mode, tx, w, vx, dx, dy } = release;
+      const width = Math.max(1, w);
+
+      const mostlyHorizontal =
+        Math.abs(dx) > Math.abs(dy) * CATEGORY_SWIPE_H_AXIS ||
+        Math.abs(dx) >= 36;
+
+      const thresholdPx = Math.max(48, width * CATEGORY_SWIPE_COMMIT_RATIO);
+
+      let commit = false;
+      if (mostlyHorizontal) {
+        if (mode === 'next') {
+          const prog = -tx / width;
+          commit =
+            prog >= CATEGORY_SWIPE_MIDPOINT ||
+            -tx >= thresholdPx ||
+            vx < -CATEGORY_SWIPE_FLICK_VX;
+        } else {
+          const prog = (tx + width) / width;
+          commit =
+            prog >= CATEGORY_SWIPE_MIDPOINT ||
+            tx + width >= thresholdPx ||
+            vx > CATEGORY_SWIPE_FLICK_VX;
+        }
+      }
+
+      const restTx = mode === 'next' ? 0 : -width;
+      const committedTx = mode === 'next' ? -width : 0;
+      const toTx = commit ? committedTx : restTx;
+
+      const travelRatio = Math.abs(toTx - tx) / width;
+      const base = commit ? 280 : 230;
+      const extra = commit ? 240 : 200;
+      const durationMs = Math.max(
+        200,
+        Math.min(
+          CATEGORY_SWIPE_MAX_SETTLE_MS,
+          Math.round(base + extra * travelRatio),
+        ),
+      );
+
+      const seq = categorySwipeSequence;
+      let idx = seq.findIndex((f) => Object.is(f, categoryFilter));
+      if (idx < 0) idx = 0;
+
+      if (categorySwipeSettleTimerRef.current) {
+        clearTimeout(categorySwipeSettleTimerRef.current);
+        categorySwipeSettleTimerRef.current = 0;
+      }
+
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (categorySwipeSettleTimerRef.current) {
+          clearTimeout(categorySwipeSettleTimerRef.current);
+          categorySwipeSettleTimerRef.current = 0;
+        }
+        settleFinishRef.current = null;
+        categorySwipeSettlingRef.current = false;
+        setSwipeStripTransition(null);
+        setCategorySwipePan(null);
+        if (commit) {
+          const cat =
+            mode === 'next'
+              ? seq[(idx + 1) % seq.length]
+              : seq[(idx - 1 + seq.length) % seq.length];
+          commitSwipeCategory(cat);
+        }
+      };
+      settleFinishRef.current = finish;
+
+      categorySwipeSettlingRef.current = true;
+      setSwipeStripTransition(null);
+      setCategorySwipePan({ mode, tx, w: width });
+
+      const ease = commit
+        ? 'cubic-bezier(0.22, 1, 0.32, 1)'
+        : 'cubic-bezier(0.36, 0.85, 0.32, 1)';
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setCategorySwipePan({ mode, tx: toTx, w: width });
+          setSwipeStripTransition(`transform ${durationMs}ms ${ease}`);
+          categorySwipeSettleTimerRef.current = window.setTimeout(
+            finish,
+            durationMs + 60,
+          );
+        });
+      });
+    },
+    [categoryFilter, categorySwipeSequence, commitSwipeCategory],
+  );
+
+  const onCategorySwipeStripTransitionEnd = useCallback((e) => {
+    if (e.propertyName !== 'transform') return;
+    settleFinishRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (categorySwipeSettleTimerRef.current) {
+        clearTimeout(categorySwipeSettleTimerRef.current);
+        categorySwipeSettleTimerRef.current = 0;
+      }
+    };
+  }, []);
+
   useCategorySwipeNavigation({
     elementRef: workspaceSwipeRef,
     filterSequence: categorySwipeSequence,
     categoryFilter,
     onSelectFilter: commitSwipeCategory,
-    isInteractionLocked: () => categoryListLockRef.current,
+    isInteractionLocked: () =>
+      categoryListLockRef.current || categorySwipeSettlingRef.current,
     interactive: !archiveMode,
-    onPan: archiveMode ? undefined : setCategorySwipePan,
+    onPan: archiveMode ? undefined : handleCategorySwipePan,
+    onPanRelease: archiveMode ? undefined : handleCategoryPanRelease,
   });
 
   const archivedForView = useMemo(() => {
@@ -385,6 +524,13 @@ export function NotesView() {
       categoryListLockRef.current = false;
       categoryListTimersRef.current.forEach(clearTimeout);
       categoryListTimersRef.current = [];
+      if (categorySwipeSettleTimerRef.current) {
+        clearTimeout(categorySwipeSettleTimerRef.current);
+        categorySwipeSettleTimerRef.current = 0;
+      }
+      categorySwipeSettlingRef.current = false;
+      settleFinishRef.current = null;
+      setSwipeStripTransition(null);
       setCategorySwipePan(null);
     }, 0);
     return () => window.clearTimeout(t);
@@ -491,12 +637,14 @@ export function NotesView() {
           >
             <div
               className="flex h-full min-h-0 will-change-transform"
+              onTransitionEnd={onCategorySwipeStripTransitionEnd}
               style={{
                 width: '300%',
                 transform: `translateX(${categorySwipeStripTranslatePx(
                   categorySwipePan,
                   categorySwipePan?.w ?? workspaceSwipeWidth,
                 )}px)`,
+                transition: swipeStripTransition ?? undefined,
               }}
             >
               <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pr-1">

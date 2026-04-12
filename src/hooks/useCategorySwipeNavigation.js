@@ -3,8 +3,6 @@ import { MENU_RIGHT_EDGE_SWIPE_PX } from '../constants/menuEdgeSwipe';
 
 const SWIPE_THRESHOLD_PX = 48;
 const HORIZONTAL_DOMINANCE_RATIO = 1.2;
-/** Commit when finger moved at least this fraction of the pane width (or SWIPE_THRESHOLD_PX). */
-const COMMIT_WIDTH_RATIO = 0.18;
 
 /**
  * Horizontal swipe on the main notes workspace: left → next category, right → previous,
@@ -13,6 +11,9 @@ const COMMIT_WIDTH_RATIO = 0.18;
  *
  * When `interactive` is true (non-archive notes mode), `onPan` receives live `{ mode, tx, w }`
  * so the UI can show adjacent categories while the finger moves; otherwise only `onSelectFilter` fires on touchend.
+ *
+ * When `onPanRelease` is set (interactive), the host runs midpoint / settle animation and category commit;
+ * `onSelectFilter` is not called from this hook on touchend for that path.
  */
 export function useCategorySwipeNavigation({
   elementRef,
@@ -22,6 +23,8 @@ export function useCategorySwipeNavigation({
   isInteractionLocked,
   /** Live pan callback; pass `null` to clear. */
   onPan,
+  /** Finger lifted after a horizontal pan; host animates settle and may commit the category. */
+  onPanRelease,
   interactive = false,
 }) {
   const seqRef = useRef(filterSequence);
@@ -29,6 +32,7 @@ export function useCategorySwipeNavigation({
   const onSelectRef = useRef(onSelectFilter);
   const lockedRef = useRef(isInteractionLocked);
   const onPanRef = useRef(onPan);
+  const onPanReleaseRef = useRef(onPanRelease);
   const interactiveRef = useRef(interactive);
 
   seqRef.current = filterSequence;
@@ -36,6 +40,7 @@ export function useCategorySwipeNavigation({
   onSelectRef.current = onSelectFilter;
   lockedRef.current = isInteractionLocked;
   onPanRef.current = onPan;
+  onPanReleaseRef.current = onPanRelease;
   interactiveRef.current = interactive;
 
   useEffect(() => {
@@ -53,6 +58,10 @@ export function useCategorySwipeNavigation({
     let rafId = 0;
     /** Bumps on touchstart / touchend so RAFs from touchmove cannot apply pan after the gesture ended. */
     let panGestureGen = 0;
+    /** Last move sample for release velocity (px / ms). */
+    let velSampleX = 0;
+    let velSampleT = 0;
+    let velSampleValid = false;
 
     const docMoveOpts = { capture: true, passive: false };
     const docEndOpts = { capture: true, passive: true };
@@ -109,6 +118,7 @@ export function useCategorySwipeNavigation({
       ignoreGesture = false;
       tracking = true;
       panMode = null;
+      velSampleValid = false;
       startX = t.clientX;
       startY = t.clientY;
       if (interactiveRef.current) clearPan();
@@ -138,9 +148,15 @@ export function useCategorySwipeNavigation({
         if (panMode === 'next') {
           const tx = Math.max(Math.min(dx, 0), -w);
           flushPan({ mode: 'next', tx, w });
+          velSampleX = t.clientX;
+          velSampleT = e.timeStamp || performance.now();
+          velSampleValid = true;
         } else if (panMode === 'prev') {
           const tx = Math.max(Math.min(-w + dx, 0), -w);
           flushPan({ mode: 'prev', tx, w });
+          velSampleX = t.clientX;
+          velSampleT = e.timeStamp || performance.now();
+          velSampleValid = true;
         }
         if (panMode && Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO && Math.abs(dx) > 12) {
           e.preventDefault();
@@ -186,24 +202,48 @@ export function useCategorySwipeNavigation({
       if (interactiveRef.current) {
         if (panMode) {
           const w = (elementRef.current?.clientWidth ?? el.clientWidth) || 1;
-          const threshold = Math.max(SWIPE_THRESHOLD_PX, w * COMMIT_WIDTH_RATIO);
-          let commit = false;
-          if (panMode === 'next') commit = dx <= -threshold;
-          else commit = dx >= threshold;
-
-          const mostlyHorizontal =
-            Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO ||
-            Math.abs(dx) >= threshold * 0.55;
-          if (commit && mostlyHorizontal) {
-            const nextCat =
-              panMode === 'next'
-                ? seq[(idx + 1) % seq.length]
-                : seq[(idx - 1 + seq.length) % seq.length];
-            onSelectRef.current(nextCat);
+          const mode = panMode;
+          const finalTx =
+            mode === 'next'
+              ? Math.max(Math.min(dx, 0), -w)
+              : Math.max(Math.min(-w + dx, 0), -w);
+          const endT = e.timeStamp || performance.now();
+          let vx = 0;
+          if (velSampleValid) {
+            const dt = Math.max(16, endT - velSampleT);
+            vx = (t.clientX - velSampleX) / dt;
           }
+          if (onPanReleaseRef.current) {
+            onPanReleaseRef.current({
+              mode,
+              tx: finalTx,
+              w,
+              vx,
+              dx,
+              dy,
+            });
+          } else {
+            const threshold = Math.max(SWIPE_THRESHOLD_PX, w * 0.18);
+            let commit = false;
+            if (mode === 'next') commit = dx <= -threshold;
+            else commit = dx >= threshold;
+            const mostlyHorizontal =
+              Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO ||
+              Math.abs(dx) >= threshold * 0.55;
+            if (commit && mostlyHorizontal) {
+              const nextCat =
+                mode === 'next'
+                  ? seq[(idx + 1) % seq.length]
+                  : seq[(idx - 1 + seq.length) % seq.length];
+              onSelectRef.current(nextCat);
+            }
+            clearPan();
+          }
+        } else {
+          clearPan();
         }
         panMode = null;
-        clearPan();
+        velSampleValid = false;
         return;
       }
 
