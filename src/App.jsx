@@ -13,7 +13,7 @@ function TagsRouteTransitionShell({ children }) {
   const { tagsViewTransitioning } = useTagsNav();
   return (
     <div
-      className={`origin-top transition-all duration-200 ease-out ${
+      className={`flex min-h-0 flex-1 flex-col origin-top transition-all duration-200 ease-out ${
         tagsViewTransitioning
           ? 'opacity-0 scale-[0.98] brightness-95'
           : 'opacity-100 scale-100 brightness-100'
@@ -106,7 +106,7 @@ function WorkspaceContentShell({ children }) {
 
   return (
     <div
-      className={`transition-all ease-out ${workspaceTransitionEaseClass} ${transitionClass}`}
+      className={`flex min-h-0 flex-1 flex-col transition-all ease-out ${workspaceTransitionEaseClass} ${transitionClass}`}
     >
       {children}
     </div>
@@ -202,7 +202,7 @@ export function AppRoutes() {
   });
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col">
       <BackNavigationLock drawerOpen={settingsOpen} closeDrawer={closeDrawer} />
       <RedirectWorkspaceOnLoad />
       <AppHeader onOpenSettings={openDrawer} />
@@ -218,7 +218,7 @@ export function AppRoutes() {
           </Routes>
         </TagsRouteTransitionShell>
       </WorkspaceContentShell>
-    </>
+    </div>
   );
 }
 
@@ -300,19 +300,21 @@ function BackNavigationLock({ drawerOpen, closeDrawer }) {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <SyncEntitlementProvider>
-          <WorkspaceProvider>
-            <BrowserRouter>
-              <ArchiveModeProvider>
-                <TagsNavProvider>
-                  <AppRoutes />
-                </TagsNavProvider>
-              </ArchiveModeProvider>
-            </BrowserRouter>
-          </WorkspaceProvider>
-        </SyncEntitlementProvider>
-      </AuthProvider>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AuthProvider>
+          <SyncEntitlementProvider>
+            <WorkspaceProvider>
+              <BrowserRouter>
+                <ArchiveModeProvider>
+                  <TagsNavProvider>
+                    <AppRoutes />
+                  </TagsNavProvider>
+                </ArchiveModeProvider>
+              </BrowserRouter>
+            </WorkspaceProvider>
+          </SyncEntitlementProvider>
+        </AuthProvider>
+      </div>
     </ThemeProvider>
   );
 }

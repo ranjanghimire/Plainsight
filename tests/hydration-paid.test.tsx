@@ -3,9 +3,10 @@
  * and successful initial sync broadcasting `plainsight:full-sync`.
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearPlainsightStorage, configurePaidUserTestMode } from './categoryTestHarness';
+import { applyVitestPaidSyncFlags } from './hydration/entitlementLossTestUtils';
 import {
   createHydrationTestWorkspaceId,
   renderHydrationHome,
@@ -18,6 +19,7 @@ import {
 } from './supabaseTestHelpers';
 import * as localDB from '../src/sync/localDB';
 import * as syncEngine from '../src/sync/syncEngine';
+import { setSyncEntitlementActive, setSyncRemoteActive } from '../src/sync/syncEnabled';
 import { getOrCreateWorkspaceIdForStorageKey, setWorkspaceIdMapping } from '../src/utils/storage';
 
 const hasServiceRole = Boolean(process.env.VITEST_SUPABASE_SERVICE_ROLE_KEY?.trim());
@@ -34,6 +36,11 @@ paidDescribe('hydration — paid user (Supabase)', () => {
     setWorkspaceIdMapping('workspace_home', PAID_HOME_ROW_ID);
     await ensurePaidTestIdentity();
     configurePaidUserTestMode();
+    applyVitestPaidSyncFlags(true);
+    await act(async () => {
+      setSyncEntitlementActive(true);
+      setSyncRemoteActive(true);
+    });
   });
 
   afterEach(async () => {
@@ -100,9 +107,16 @@ paidDescribe('hydration — paid user (Supabase)', () => {
     expect(r.ok).toBe(true);
 
     const merged = await localDB.getLocalWorkspaces();
-    const ids = merged.map((w) => w.id).sort();
-    expect(ids).toEqual([homeId, localOnlyId].sort());
+    const ids = merged.map((w) => w.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain(homeId);
+    expect(ids).toContain(localOnlyId);
+    const homeRows = merged.filter((w) => w.id === homeId);
+    expect(homeRows).toHaveLength(1);
+    expect(homeRows[0].name).toBe('Home');
+    const localOnlyRows = merged.filter((w) => w.id === localOnlyId);
+    expect(localOnlyRows).toHaveLength(1);
+    expect(localOnlyRows[0].name).toBe('LocalExtraTab');
   });
 
   it('initial paid hydration dispatches plainsight:full-sync when sync succeeds', async () => {

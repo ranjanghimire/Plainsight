@@ -7,12 +7,15 @@ export function NoteList({
   children,
   listGridHidden = false,
   emptyIntro = false,
+  /** Extra classes on the root (e.g. flex-1 so swipe/touch fills space below category chips). */
+  rootClassName = '',
 }) {
   return (
     <div
       className={`
         rounded-lg transition-opacity duration-200 ease-out
         ${archiveMode ? 'bg-neutral-50 dark:bg-neutral-900 px-3 py-4 -mx-1' : ''}
+        ${rootClassName}
       `}
     >
       {archiveMode && subtitle ? (
@@ -37,18 +40,20 @@ export function NoteList({
       <div
         className={`grid gap-3 transition-opacity duration-150 ease-out ${
           listGridHidden ? 'opacity-0' : 'opacity-100'
-        }`}
+        } ${isEmpty ? '' : 'min-h-0 flex-1'}`}
       >
         {children}
       </div>
       {isEmpty ? (
-        <p
-          className={`text-neutral-500 dark:text-neutral-500 text-sm py-4 text-center transition-opacity duration-200 ease-out ${
-            emptyIntro ? 'opacity-0' : 'opacity-100'
-          }`}
-        >
-          {emptyText}
-        </p>
+        <div className="flex min-h-[min(18rem,55dvh)] flex-1 flex-col items-center justify-center py-6">
+          <p
+            className={`text-neutral-500 dark:text-neutral-500 text-sm text-center transition-opacity duration-200 ease-out ${
+              emptyIntro ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            {emptyText}
+          </p>
+        </div>
       ) : null}
     </div>
   );

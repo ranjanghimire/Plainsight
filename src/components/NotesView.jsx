@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useArchiveMode } from '../context/ArchiveModeContext';
 import { useCategorySwipeNavigation } from '../hooks/useCategorySwipeNavigation';
@@ -13,6 +14,9 @@ import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 /** Fade out → swap filter → fade in; lock blocks overlapping chip taps. */
 const CATEGORY_LIST_SWAP_MS = 150;
 const CATEGORY_LIST_FADE_MS = 200;
+
+/** View Transitions API: single named snapshot for the notes body under category chips. */
+const NOTES_BODY_VIEW_TRANSITION_NAME = 'plainsight-notes-body';
 
 const ARCHIVE_CLEAR_STAGGER_MS = 60;
 const ARCHIVE_CLEAR_CARD_FADE_MS = 180;
@@ -114,15 +118,38 @@ export function NotesView() {
     if (next === categoryFilter) return;
     if (categoryListLockRef.current) return;
     categoryListLockRef.current = true;
-    setCategoryListPhase('hidden');
     categoryListTimersRef.current.forEach(clearTimeout);
     categoryListTimersRef.current = [];
+
+    const unlock = () => {
+      categoryListLockRef.current = false;
+    };
+
+    const commit = () => {
+      flushSync(() => {
+        setCategoryFilter(next);
+        setCategoryListPhase('idle');
+      });
+    };
+
+    const doc = typeof document !== 'undefined' ? document : null;
+    if (doc && typeof doc.startViewTransition === 'function') {
+      try {
+        const vt = doc.startViewTransition(commit);
+        void vt.finished.finally(() => {
+          window.setTimeout(unlock, 32);
+        });
+      } catch {
+        commit();
+        window.setTimeout(unlock, CATEGORY_LIST_FADE_MS);
+      }
+      return;
+    }
+
+    setCategoryListPhase('hidden');
     const t1 = window.setTimeout(() => {
-      setCategoryFilter(next);
-      setCategoryListPhase('idle');
-      const t2 = window.setTimeout(() => {
-        categoryListLockRef.current = false;
-      }, CATEGORY_LIST_FADE_MS);
+      commit();
+      const t2 = window.setTimeout(unlock, CATEGORY_LIST_FADE_MS);
       categoryListTimersRef.current.push(t2);
     }, CATEGORY_LIST_SWAP_MS);
     categoryListTimersRef.current.push(t1);
@@ -292,9 +319,7 @@ export function NotesView() {
   return (
     <>
     <div
-      ref={workspaceSwipeRef}
-      data-testid="notes-workspace-swipe-area"
-      className={`touch-pan-y space-y-4 origin-top transition-all duration-200 ease-out ${
+      className={`flex min-h-0 flex-1 flex-col gap-4 origin-top transition-all duration-200 ease-out ${
         archiveViewTransitioning
           ? 'opacity-0 scale-[0.98] brightness-95'
           : 'opacity-100 scale-100 brightness-100'
@@ -323,12 +348,18 @@ export function NotesView() {
       />
 
       <div
-        className={`transition-all duration-200 ease-out ${
-          categoryListPhase === 'hidden'
-            ? 'opacity-0 translate-y-[3px]'
-            : 'opacity-100 translate-y-0'
-        }`}
+        ref={workspaceSwipeRef}
+        data-testid="notes-workspace-swipe-area"
+        className="flex min-h-0 flex-1 flex-col touch-pan-y"
       >
+        <div
+          className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
+            categoryListPhase === 'hidden'
+              ? 'opacity-0 translate-y-[3px]'
+              : 'opacity-100 translate-y-0'
+          }`}
+          style={{ viewTransitionName: NOTES_BODY_VIEW_TRANSITION_NAME }}
+        >
         {archiveMode ? (
           <NoteList
             archiveMode
@@ -340,6 +371,7 @@ export function NotesView() {
             emptyText="No archived items for this category"
             listGridHidden={archiveClearListHidden}
             emptyIntro={archiveEmptyIntro}
+            rootClassName="flex min-h-0 flex-1 flex-col"
           >
             {archivedSorted.map((entry) => (
               <NoteCard
@@ -374,6 +406,7 @@ export function NotesView() {
                 ? 'No notes yet. Add one above.'
                 : 'No notes match your search or filter.'
             }
+            rootClassName="flex min-h-0 flex-1 flex-col"
           >
             {filteredNotes.map((note) => (
               <NoteCard
@@ -387,6 +420,7 @@ export function NotesView() {
             ))}
           </NoteList>
         )}
+        </div>
       </div>
     </div>
 

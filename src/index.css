@@ -37,9 +37,20 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   max-width: 42rem;
   margin: 0 auto;
   padding: 1.5rem 1rem;
   box-sizing: border-box;
+}
+
+/* Category body: smoother cross-fade when the browser supports View Transitions. */
+@supports (view-transition-name: none) {
+  ::view-transition-old(plainsight-notes-body),
+  ::view-transition-new(plainsight-notes-body) {
+    animation-duration: 0.38s;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
 }
