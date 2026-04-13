@@ -123,7 +123,9 @@ export function NoteCard({
     ? 'rounded-lg border border-neutral-200 bg-neutral-100 text-neutral-600 px-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
     : 'rounded-lg border border-stone-200 bg-white px-3 shadow-sm dark:border-stone-600 dark:bg-stone-800';
   const shellPad = showMetaRow ? 'py-4' : 'py-2';
-  const shellTransition = 'transition-all duration-200 ease-out';
+  /** Avoid `transition-all` so layout reflows (e.g. after category swipe) do not animate card width. */
+  const shellTransition =
+    'transition-[padding-top,padding-bottom,opacity,transform,box-shadow,border-color,background-color] duration-200 ease-out';
 
   const bodyTextClass = isArchived
     ? 'text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation'
@@ -137,10 +139,10 @@ export function NoteCard({
   const outerWrapClass = bulkDissolve
     ? 'transition-opacity duration-[180ms] ease-out opacity-0 pointer-events-none'
     : isDeleting && isArchived
-      ? 'transition-all duration-[170ms] ease-out opacity-0 scale-95 pointer-events-none'
+      ? 'transition-[opacity,transform] duration-[170ms] ease-out opacity-0 scale-95 pointer-events-none'
       : isDeleting && !isArchived
-        ? 'transition-all duration-200 ease-out opacity-0 translate-y-[4px] max-h-0 overflow-hidden pointer-events-none'
-        : 'transition-all duration-200 ease-out opacity-100 translate-y-0 max-h-[999px] overflow-visible scale-100';
+        ? 'transition-[opacity,transform,max-height] duration-200 ease-out opacity-0 translate-y-[4px] max-h-0 overflow-hidden pointer-events-none'
+        : 'transition-[opacity,transform,max-height] duration-200 ease-out opacity-100 translate-y-0 max-h-[999px] overflow-visible scale-100';
 
   const handleDeleteActive = () => {
     if (isDeleting || bulkDissolve) return;

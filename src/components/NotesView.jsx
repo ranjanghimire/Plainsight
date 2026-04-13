@@ -682,7 +682,7 @@ export function NotesView() {
                 transition: swipeStripTransition ?? undefined,
               }}
             >
-              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pr-1">
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
                 <NoteList
                   archiveMode
                   subtitle={archiveSubtitleForChipFilter(categoryPrevFilter)}
@@ -716,7 +716,7 @@ export function NotesView() {
                   {renderArchivedCards(archivedSorted)}
                 </NoteList>
               </div>
-              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pl-1">
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
                 <NoteList
                   archiveMode
                   subtitle={archiveSubtitleForChipFilter(categoryNextFilter)}
@@ -755,7 +755,7 @@ export function NotesView() {
                 transition: swipeStripTransition ?? undefined,
               }}
             >
-              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pr-1">
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
                 <NoteList
                   archiveMode={false}
                   subtitle={null}
@@ -777,7 +777,7 @@ export function NotesView() {
                   {renderNoteCards(filteredNotes)}
                 </NoteList>
               </div>
-              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pl-1">
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
                 <NoteList
                   archiveMode={false}
                   subtitle={null}
