@@ -52,21 +52,25 @@ function dispatchTouchOn(
   });
 }
 
-/** Finger moves left (negative dx) → next category. */
+/** Finger moves left past midpoint (>50% width) → next category. */
 function swipeNextCategoryOn(el: Element) {
-  const y = 340;
-  const startX = 360;
-  const endX = 260;
+  const rect = el.getBoundingClientRect();
+  const w = rect.width > 0 ? rect.width : VIEWPORT_W;
+  const y = Math.min(rect.top + rect.height * 0.45, 520);
+  const startX = rect.left + w * 0.5;
+  const endX = startX - w * 0.56;
   dispatchTouchOn(el, 'touchstart', [{ clientX: startX, clientY: y }], [{ clientX: startX, clientY: y }]);
   dispatchTouchOn(el, 'touchmove', [{ clientX: endX, clientY: y }], [{ clientX: endX, clientY: y }]);
   dispatchTouchOn(el, 'touchend', [], [{ clientX: endX, clientY: y }]);
 }
 
-/** Finger moves right (positive dx) → previous category. */
+/** Finger moves right past midpoint → previous category. */
 function swipePrevCategoryOn(el: Element) {
-  const y = 340;
-  const startX = 360;
-  const endX = 460;
+  const rect = el.getBoundingClientRect();
+  const w = rect.width > 0 ? rect.width : VIEWPORT_W;
+  const y = Math.min(rect.top + rect.height * 0.45, 520);
+  const startX = rect.left + w * 0.5;
+  const endX = startX + w * 0.56;
   dispatchTouchOn(el, 'touchstart', [{ clientX: startX, clientY: y }], [{ clientX: startX, clientY: y }]);
   dispatchTouchOn(el, 'touchmove', [{ clientX: endX, clientY: y }], [{ clientX: endX, clientY: y }]);
   dispatchTouchOn(el, 'touchend', [], [{ clientX: endX, clientY: y }]);
@@ -193,7 +197,7 @@ describe('category swipe navigation', () => {
       expectChipLooksSelected('category-chip--swipecata');
     });
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, 200));
     });
 
     swipePrevCategoryOn(area);

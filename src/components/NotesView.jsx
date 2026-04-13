@@ -22,10 +22,11 @@ const ARCHIVE_CLEAR_STAGGER_MS = 60;
 const ARCHIVE_CLEAR_CARD_FADE_MS = 180;
 const ARCHIVE_CLEAR_CONTAINER_FADE_MS = 150;
 
-/** Category swipe settle: midpoint / threshold / flick (matches hook horizontal ratio). */
+/** Category swipe: midpoint gate + optional flick (matches hook horizontal ratio). */
 const CATEGORY_SWIPE_H_AXIS = 1.2;
-const CATEGORY_SWIPE_COMMIT_RATIO = 0.18;
 const CATEGORY_SWIPE_MIDPOINT = 0.5;
+/** Flick can commit below midpoint only if progress is at least this (avoids tiny accidental commits). */
+const CATEGORY_SWIPE_FLICK_MIN_PROGRESS = 0.12;
 const CATEGORY_SWIPE_FLICK_VX = 0.28;
 const CATEGORY_SWIPE_MAX_SETTLE_MS = 520;
 
@@ -263,32 +264,46 @@ export function NotesView() {
         Math.abs(dx) > Math.abs(dy) * CATEGORY_SWIPE_H_AXIS ||
         Math.abs(dx) >= 36;
 
-      const thresholdPx = Math.max(48, width * CATEGORY_SWIPE_COMMIT_RATIO);
-
       let commit = false;
       if (mostlyHorizontal) {
         if (mode === 'next') {
           const prog = -tx / width;
-          commit =
-            prog >= CATEGORY_SWIPE_MIDPOINT ||
-            -tx >= thresholdPx ||
-            vx < -CATEGORY_SWIPE_FLICK_VX;
+          const flickNext = vx < -CATEGORY_SWIPE_FLICK_VX && prog >= CATEGORY_SWIPE_FLICK_MIN_PROGRESS;
+          commit = prog >= CATEGORY_SWIPE_MIDPOINT || flickNext;
         } else {
           const prog = (tx + width) / width;
-          commit =
-            prog >= CATEGORY_SWIPE_MIDPOINT ||
-            tx + width >= thresholdPx ||
-            vx > CATEGORY_SWIPE_FLICK_VX;
+          const flickPrev = vx > CATEGORY_SWIPE_FLICK_VX && prog >= CATEGORY_SWIPE_FLICK_MIN_PROGRESS;
+          commit = prog >= CATEGORY_SWIPE_MIDPOINT || flickPrev;
         }
       }
 
+      const seq = categorySwipeSequence;
+      let idx = seq.findIndex((f) => Object.is(f, categoryFilter));
+      if (idx < 0) idx = 0;
+
+      if (commit) {
+        const cat =
+          mode === 'next'
+            ? seq[(idx + 1) % seq.length]
+            : seq[(idx - 1 + seq.length) % seq.length];
+        if (categorySwipeSettleTimerRef.current) {
+          clearTimeout(categorySwipeSettleTimerRef.current);
+          categorySwipeSettleTimerRef.current = 0;
+        }
+        settleFinishRef.current = null;
+        categorySwipeSettlingRef.current = false;
+        commitSwipeCategory(cat);
+        setSwipeStripTransition(null);
+        setCategorySwipePan(null);
+        return;
+      }
+
       const restTx = mode === 'next' ? 0 : -width;
-      const committedTx = mode === 'next' ? -width : 0;
-      const toTx = commit ? committedTx : restTx;
+      const toTx = restTx;
 
       const travelRatio = Math.abs(toTx - tx) / width;
-      const base = commit ? 280 : 230;
-      const extra = commit ? 240 : 200;
+      const base = 230;
+      const extra = 200;
       const durationMs = Math.max(
         200,
         Math.min(
@@ -296,10 +311,6 @@ export function NotesView() {
           Math.round(base + extra * travelRatio),
         ),
       );
-
-      const seq = categorySwipeSequence;
-      let idx = seq.findIndex((f) => Object.is(f, categoryFilter));
-      if (idx < 0) idx = 0;
 
       if (categorySwipeSettleTimerRef.current) {
         clearTimeout(categorySwipeSettleTimerRef.current);
@@ -318,13 +329,6 @@ export function NotesView() {
         categorySwipeSettlingRef.current = false;
         setSwipeStripTransition(null);
         setCategorySwipePan(null);
-        if (commit) {
-          const cat =
-            mode === 'next'
-              ? seq[(idx + 1) % seq.length]
-              : seq[(idx - 1 + seq.length) % seq.length];
-          commitSwipeCategory(cat);
-        }
       };
       settleFinishRef.current = finish;
 
@@ -332,9 +336,7 @@ export function NotesView() {
       setSwipeStripTransition(null);
       setCategorySwipePan({ mode, tx, w: width });
 
-      const ease = commit
-        ? 'cubic-bezier(0.22, 1, 0.32, 1)'
-        : 'cubic-bezier(0.36, 0.85, 0.32, 1)';
+      const ease = 'cubic-bezier(0.36, 0.85, 0.32, 1)';
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
