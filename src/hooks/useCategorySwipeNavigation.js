@@ -9,8 +9,8 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.2;
  * in the same order as {@link CategoryChips} (All, named categories, Undefined when shown).
  * Touches that begin in the right menu-edge strip are ignored so {@link useDrawerGestures} keeps working.
  *
- * When `interactive` is true (non-archive notes mode), `onPan` receives live `{ mode, tx, w }`
- * so the UI can show adjacent categories while the finger moves; otherwise only `onSelectFilter` fires on touchend.
+ * When `interactive` is true, `onPan` receives live `{ mode, tx, w }` so the host can show adjacent
+ * categories while the finger moves; otherwise only `onSelectFilter` fires on touchend.
  *
  * When `onPanRelease` is set (interactive), the host runs midpoint / settle animation and category commit;
  * `onSelectFilter` is not called from this hook on touchend for that path.

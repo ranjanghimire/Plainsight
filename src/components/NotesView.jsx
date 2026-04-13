@@ -61,6 +61,17 @@ function archivedEntryMatchesCategory(entry, categoryFilter) {
   return entry.category === categoryFilter;
 }
 
+function archivedListSortedForCategoryAndSearch(archivedNotesMap, categoryFilterKey, inputValue) {
+  const list = Object.values(archivedNotesMap).filter((e) =>
+    archivedEntryMatchesCategory(e, categoryFilterKey),
+  );
+  const q = String(inputValue || '').trim().toLowerCase();
+  const searched = !q
+    ? list
+    : list.filter((e) => (e.text || '').toLowerCase().includes(q));
+  return [...searched].sort((a, b) => b.lastDeletedAt - a.lastDeletedAt);
+}
+
 function resolveRestoreCategory(categoryFilter, categories, entryCategory) {
   if (categoryFilter === UNCATEGORIZED_FILTER) return null;
   if (
@@ -117,7 +128,7 @@ export function NotesView() {
   const categoryListLockRef = useRef(false);
   const categoryListTimersRef = useRef([]);
   const workspaceSwipeRef = useRef(null);
-  /** Live category swipe pan (non-archive); cleared when gesture ends. */
+  /** Live category swipe pan (notes + archive); cleared when gesture ends. */
   const [categorySwipePan, setCategorySwipePan] = useState(null);
   const [swipeStripTransition, setSwipeStripTransition] = useState(null);
   const [workspaceSwipeWidth, setWorkspaceSwipeWidth] = useState(0);
@@ -403,31 +414,39 @@ export function NotesView() {
     onSelectFilter: commitSwipeCategory,
     isInteractionLocked: () =>
       categoryListLockRef.current || categorySwipeSettlingRef.current,
-    interactive: !archiveMode,
-    onPan: archiveMode ? undefined : handleCategorySwipePan,
-    onPanRelease: archiveMode ? undefined : handleCategoryPanRelease,
+    interactive: true,
+    onPan: handleCategorySwipePan,
+    onPanRelease: handleCategoryPanRelease,
   });
-
-  const archivedForView = useMemo(() => {
-    return Object.values(archivedNotesMap).filter((e) =>
-      archivedEntryMatchesCategory(e, categoryFilter),
-    );
-  }, [archivedNotesMap, categoryFilter]);
-
-  const archivedBySearch = useMemo(() => {
-    if (!inputValue.trim()) return archivedForView;
-    const q = inputValue.trim().toLowerCase();
-    return archivedForView.filter((e) =>
-      (e.text || '').toLowerCase().includes(q),
-    );
-  }, [archivedForView, inputValue]);
 
   const archivedSorted = useMemo(
     () =>
-      [...archivedBySearch].sort(
-        (a, b) => b.lastDeletedAt - a.lastDeletedAt,
+      archivedListSortedForCategoryAndSearch(
+        archivedNotesMap,
+        categoryFilter,
+        inputValue,
       ),
-    [archivedBySearch],
+    [archivedNotesMap, categoryFilter, inputValue],
+  );
+
+  const prevArchivedSorted = useMemo(
+    () =>
+      archivedListSortedForCategoryAndSearch(
+        archivedNotesMap,
+        categoryPrevFilter,
+        inputValue,
+      ),
+    [archivedNotesMap, categoryPrevFilter, inputValue],
+  );
+
+  const nextArchivedSorted = useMemo(
+    () =>
+      archivedListSortedForCategoryAndSearch(
+        archivedNotesMap,
+        categoryNextFilter,
+        inputValue,
+      ),
+    [archivedNotesMap, categoryNextFilter, inputValue],
   );
 
   const handleCreateNote = (text) => {
@@ -549,6 +568,30 @@ export function NotesView() {
       />
     ));
 
+  const renderArchivedCards = (list) =>
+    list.map((entry) => (
+      <NoteCard
+        key={`arch:${entry.text}`}
+        note={{
+          id: `arch:${entry.text}`,
+          text: entry.text,
+          category: entry.category ?? null,
+          createdAt: null,
+          lastDeletedAt: entry.lastDeletedAt,
+        }}
+        categories={categories}
+        onUpdate={updateNote}
+        onDelete={deleteNote}
+        onAddCategory={addCategory}
+        variant="archived"
+        onRestore={handleRestoreArchived}
+        onArchivedUpdate={updateArchivedNote}
+        onPermanentDeleteArchived={permanentlyDeleteArchived}
+        archiveAnimating={!!restoringKeys[entry.text]}
+        bulkDissolve={!!archiveClearDissolveKeys[entry.text]}
+      />
+    ));
+
   useEffect(() => {
     const t = window.setTimeout(() => {
       setCategoryFilter(null);
@@ -619,48 +662,64 @@ export function NotesView() {
       >
         {archiveMode ? (
           <div
-            className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
+            className={`relative flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-200 ease-out ${
               categoryListPhase === 'hidden'
                 ? 'opacity-0 translate-y-[3px]'
                 : 'opacity-100 translate-y-0'
             }`}
             style={{ viewTransitionName: NOTES_BODY_VIEW_TRANSITION_NAME }}
           >
-            <NoteList
-              archiveMode
-              subtitle={archiveSubtitle}
-              onArchiveClearAll={
-                archivedSorted.length > 0 ? openArchiveClearConfirm : undefined
-              }
-              isEmpty={archivedSorted.length === 0}
-              emptyText="No archived items for this category"
-              listGridHidden={archiveClearListHidden}
-              emptyIntro={archiveEmptyIntro}
-              rootClassName="flex min-h-0 flex-1 flex-col"
+            <div
+              className="flex h-full min-h-0 will-change-transform"
+              onTransitionEnd={onCategorySwipeStripTransitionEnd}
+              style={{
+                width: '300%',
+                transform: `translateX(${categorySwipeStripTranslatePx(
+                  categorySwipePan,
+                  categorySwipePan?.w ?? workspaceSwipeWidth,
+                )}px)`,
+                transition: swipeStripTransition ?? undefined,
+              }}
             >
-              {archivedSorted.map((entry) => (
-                <NoteCard
-                  key={`arch:${entry.text}`}
-                  note={{
-                    id: `arch:${entry.text}`,
-                    text: entry.text,
-                    category: entry.category ?? null,
-                    createdAt: null,
-                    lastDeletedAt: entry.lastDeletedAt,
-                  }}
-                  categories={categories}
-                  onUpdate={updateNote}
-                  onDelete={deleteNote}
-                  onAddCategory={addCategory}
-                  variant="archived"
-                  onRestore={handleRestoreArchived}
-                  onArchivedUpdate={updateArchivedNote}
-                  onPermanentDeleteArchived={permanentlyDeleteArchived}
-                  archiveAnimating={!!restoringKeys[entry.text]}
-                  bulkDissolve={!!archiveClearDissolveKeys[entry.text]}
-                />
-              ))}
-            </NoteList>
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pr-1">
+                <NoteList
+                  archiveMode
+                  subtitle={null}
+                  isEmpty={prevArchivedSorted.length === 0}
+                  emptyText="No archived items for this category"
+                  rootClassName="flex min-h-0 flex-1 flex-col"
+                >
+                  {renderArchivedCards(prevArchivedSorted)}
+                </NoteList>
+              </div>
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
+                <NoteList
+                  archiveMode
+                  subtitle={archiveSubtitle}
+                  onArchiveClearAll={
+                    archivedSorted.length > 0 ? openArchiveClearConfirm : undefined
+                  }
+                  isEmpty={archivedSorted.length === 0}
+                  emptyText="No archived items for this category"
+                  listGridHidden={archiveClearListHidden}
+                  emptyIntro={archiveEmptyIntro}
+                  rootClassName="flex min-h-0 flex-1 flex-col"
+                >
+                  {renderArchivedCards(archivedSorted)}
+                </NoteList>
+              </div>
+              <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pl-1">
+                <NoteList
+                  archiveMode
+                  subtitle={null}
+                  isEmpty={nextArchivedSorted.length === 0}
+                  emptyText="No archived items for this category"
+                  rootClassName="flex min-h-0 flex-1 flex-col"
+                >
+                  {renderArchivedCards(nextArchivedSorted)}
+                </NoteList>
+              </div>
+            </div>
           </div>
         ) : (
           <div
