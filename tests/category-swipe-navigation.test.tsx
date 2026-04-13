@@ -197,7 +197,7 @@ describe('category swipe navigation', () => {
       expectChipLooksSelected('category-chip--swipecata');
     });
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 520));
     });
 
     swipePrevCategoryOn(area);

@@ -58,10 +58,10 @@ export function useCategorySwipeNavigation({
     let rafId = 0;
     /** Bumps on touchstart / touchend so RAFs from touchmove cannot apply pan after the gesture ended. */
     let panGestureGen = 0;
-    /** Last move sample for release velocity (px / ms). */
-    let velSampleX = 0;
-    let velSampleT = 0;
-    let velSampleValid = false;
+    /** Recent {x,t} during pan for release velocity (px/ms over ~last 100ms). */
+    let velHist = [];
+    const VEL_WINDOW_MS = 100;
+    const VEL_HIST_MAX = 14;
 
     const docMoveOpts = { capture: true, passive: false };
     const docEndOpts = { capture: true, passive: true };
@@ -118,7 +118,7 @@ export function useCategorySwipeNavigation({
       ignoreGesture = false;
       tracking = true;
       panMode = null;
-      velSampleValid = false;
+      velHist = [];
       startX = t.clientX;
       startY = t.clientY;
       if (interactiveRef.current) clearPan();
@@ -148,15 +148,21 @@ export function useCategorySwipeNavigation({
         if (panMode === 'next') {
           const tx = Math.max(Math.min(dx, 0), -w);
           flushPan({ mode: 'next', tx, w });
-          velSampleX = t.clientX;
-          velSampleT = e.timeStamp || performance.now();
-          velSampleValid = true;
+          const now = e.timeStamp || performance.now();
+          velHist.push({ x: t.clientX, t: now });
+          while (velHist.length > 0 && now - velHist[0].t > VEL_WINDOW_MS) {
+            velHist.shift();
+          }
+          if (velHist.length > VEL_HIST_MAX) velHist.shift();
         } else if (panMode === 'prev') {
           const tx = Math.max(Math.min(-w + dx, 0), -w);
           flushPan({ mode: 'prev', tx, w });
-          velSampleX = t.clientX;
-          velSampleT = e.timeStamp || performance.now();
-          velSampleValid = true;
+          const now = e.timeStamp || performance.now();
+          velHist.push({ x: t.clientX, t: now });
+          while (velHist.length > 0 && now - velHist[0].t > VEL_WINDOW_MS) {
+            velHist.shift();
+          }
+          if (velHist.length > VEL_HIST_MAX) velHist.shift();
         }
         if (panMode && Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO && Math.abs(dx) > 12) {
           e.preventDefault();
@@ -209,9 +215,11 @@ export function useCategorySwipeNavigation({
               : Math.max(Math.min(-w + dx, 0), -w);
           const endT = e.timeStamp || performance.now();
           let vx = 0;
-          if (velSampleValid) {
-            const dt = Math.max(16, endT - velSampleT);
-            vx = (t.clientX - velSampleX) / dt;
+          if (velHist.length >= 2) {
+            const a = velHist[0];
+            const b = velHist[velHist.length - 1];
+            const dt = Math.max(8, b.t - a.t);
+            vx = (b.x - a.x) / dt;
           }
           if (onPanReleaseRef.current) {
             onPanReleaseRef.current({
@@ -243,7 +251,7 @@ export function useCategorySwipeNavigation({
           clearPan();
         }
         panMode = null;
-        velSampleValid = false;
+        velHist = [];
         return;
       }
 
@@ -268,6 +276,7 @@ export function useCategorySwipeNavigation({
       tracking = false;
       ignoreGesture = false;
       panMode = null;
+      velHist = [];
       panGestureGen += 1;
       activeTouchId = -1;
       removeDocumentTracking();

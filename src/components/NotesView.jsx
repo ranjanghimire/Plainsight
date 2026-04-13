@@ -22,13 +22,32 @@ const ARCHIVE_CLEAR_STAGGER_MS = 60;
 const ARCHIVE_CLEAR_CARD_FADE_MS = 180;
 const ARCHIVE_CLEAR_CONTAINER_FADE_MS = 150;
 
-/** Category swipe: midpoint gate + optional flick (matches hook horizontal ratio). */
+/** Category swipe (matches hook horizontal ratio). */
 const CATEGORY_SWIPE_H_AXIS = 1.2;
 const CATEGORY_SWIPE_MIDPOINT = 0.5;
-/** Flick can commit below midpoint only if progress is at least this (avoids tiny accidental commits). */
-const CATEGORY_SWIPE_FLICK_MIN_PROGRESS = 0.12;
-const CATEGORY_SWIPE_FLICK_VX = 0.28;
+/** Slow drag needs ~50%; strong horizontal velocity lowers required progress (vx px/ms, next = negative). */
+const CATEGORY_SWIPE_VEL_BASE = 0.07;
+const CATEGORY_SWIPE_VEL_COEFF = 0.78;
+const CATEGORY_SWIPE_MIN_COMMIT_PROGRESS = 0.065;
 const CATEGORY_SWIPE_MAX_SETTLE_MS = 520;
+
+/** Required drag progress (0–1) to commit “next”; lower when flicking left (vx negative). */
+function categorySwipeRequiredProgressNext(vx) {
+  const towardNext = Math.max(0, -vx - CATEGORY_SWIPE_VEL_BASE);
+  return Math.max(
+    CATEGORY_SWIPE_MIN_COMMIT_PROGRESS,
+    CATEGORY_SWIPE_MIDPOINT - CATEGORY_SWIPE_VEL_COEFF * towardNext,
+  );
+}
+
+/** Required progress to commit “prev”; lower when flicking right (vx positive). */
+function categorySwipeRequiredProgressPrev(vx) {
+  const towardPrev = Math.max(0, vx - CATEGORY_SWIPE_VEL_BASE);
+  return Math.max(
+    CATEGORY_SWIPE_MIN_COMMIT_PROGRESS,
+    CATEGORY_SWIPE_MIDPOINT - CATEGORY_SWIPE_VEL_COEFF * towardPrev,
+  );
+}
 
 function noteHasNoCategory(n) {
   return n.category == null || n.category === '';
@@ -268,12 +287,10 @@ export function NotesView() {
       if (mostlyHorizontal) {
         if (mode === 'next') {
           const prog = -tx / width;
-          const flickNext = vx < -CATEGORY_SWIPE_FLICK_VX && prog >= CATEGORY_SWIPE_FLICK_MIN_PROGRESS;
-          commit = prog >= CATEGORY_SWIPE_MIDPOINT || flickNext;
+          commit = prog >= categorySwipeRequiredProgressNext(vx);
         } else {
           const prog = (tx + width) / width;
-          const flickPrev = vx > CATEGORY_SWIPE_FLICK_VX && prog >= CATEGORY_SWIPE_FLICK_MIN_PROGRESS;
-          commit = prog >= CATEGORY_SWIPE_MIDPOINT || flickPrev;
+          commit = prog >= categorySwipeRequiredProgressPrev(vx);
         }
       }
 
@@ -281,36 +298,29 @@ export function NotesView() {
       let idx = seq.findIndex((f) => Object.is(f, categoryFilter));
       if (idx < 0) idx = 0;
 
-      if (commit) {
-        const cat =
-          mode === 'next'
-            ? seq[(idx + 1) % seq.length]
-            : seq[(idx - 1 + seq.length) % seq.length];
-        if (categorySwipeSettleTimerRef.current) {
-          clearTimeout(categorySwipeSettleTimerRef.current);
-          categorySwipeSettleTimerRef.current = 0;
-        }
-        settleFinishRef.current = null;
-        categorySwipeSettlingRef.current = false;
-        commitSwipeCategory(cat);
-        setSwipeStripTransition(null);
-        setCategorySwipePan(null);
-        return;
-      }
-
       const restTx = mode === 'next' ? 0 : -width;
-      const toTx = restTx;
+      const committedTx = mode === 'next' ? -width : 0;
+      const toTx = commit ? committedTx : restTx;
 
       const travelRatio = Math.abs(toTx - tx) / width;
-      const base = 230;
-      const extra = 200;
+      const speed = Math.abs(vx);
       const durationMs = Math.max(
-        200,
+        210,
         Math.min(
           CATEGORY_SWIPE_MAX_SETTLE_MS,
-          Math.round(base + extra * travelRatio),
+          Math.round(
+            (commit ? 300 : 255) +
+              200 * travelRatio -
+              Math.min(speed, 0.95) * (commit ? 140 : 115),
+          ),
         ),
       );
+
+      const commitTarget = commit
+        ? mode === 'next'
+          ? seq[(idx + 1) % seq.length]
+          : seq[(idx - 1 + seq.length) % seq.length]
+        : undefined;
 
       if (categorySwipeSettleTimerRef.current) {
         clearTimeout(categorySwipeSettleTimerRef.current);
@@ -329,6 +339,9 @@ export function NotesView() {
         categorySwipeSettlingRef.current = false;
         setSwipeStripTransition(null);
         setCategorySwipePan(null);
+        if (commit) {
+          commitSwipeCategory(commitTarget);
+        }
       };
       settleFinishRef.current = finish;
 
@@ -336,7 +349,9 @@ export function NotesView() {
       setSwipeStripTransition(null);
       setCategorySwipePan({ mode, tx, w: width });
 
-      const ease = 'cubic-bezier(0.36, 0.85, 0.32, 1)';
+      const ease = commit
+        ? 'cubic-bezier(0.22, 1, 0.36, 1)'
+        : 'cubic-bezier(0.34, 0.9, 0.32, 1)';
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -344,7 +359,7 @@ export function NotesView() {
           setSwipeStripTransition(`transform ${durationMs}ms ${ease}`);
           categorySwipeSettleTimerRef.current = window.setTimeout(
             finish,
-            durationMs + 60,
+            durationMs + 70,
           );
         });
       });
