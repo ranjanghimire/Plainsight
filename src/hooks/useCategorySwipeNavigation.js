@@ -138,12 +138,20 @@ export function useCategorySwipeNavigation({
 
       if (interactiveRef.current) {
         const w = (elementRef.current?.clientWidth ?? el.clientWidth) || 1;
+        const si = seqRef.current;
+        let li = si?.length
+          ? si.findIndex((f) => Object.is(f, filterRef.current))
+          : -1;
+        if (li < 0) li = 0;
+        const atFirst = li === 0;
+        const atLast = si && li === si.length - 1;
         if (
           !panMode &&
           Math.abs(dx) > 14 &&
           Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO
         ) {
-          panMode = dx < 0 ? 'next' : 'prev';
+          if (dx < 0 && !atLast) panMode = 'next';
+          else if (dx > 0 && !atFirst) panMode = 'prev';
         }
         if (panMode === 'next') {
           const tx = Math.max(Math.min(dx, 0), -w);
@@ -204,6 +212,8 @@ export function useCategorySwipeNavigation({
 
       let idx = seq.findIndex((f) => Object.is(f, filterRef.current));
       if (idx < 0) idx = 0;
+      const atFirst = idx === 0;
+      const atLast = idx === seq.length - 1;
 
       if (interactiveRef.current) {
         if (panMode) {
@@ -239,11 +249,8 @@ export function useCategorySwipeNavigation({
               Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO ||
               Math.abs(dx) >= threshold * 0.55;
             if (commit && mostlyHorizontal) {
-              const nextCat =
-                mode === 'next'
-                  ? seq[(idx + 1) % seq.length]
-                  : seq[(idx - 1 + seq.length) % seq.length];
-              onSelectRef.current(nextCat);
+              if (mode === 'next' && !atLast) onSelectRef.current(seq[idx + 1]);
+              else if (mode === 'prev' && !atFirst) onSelectRef.current(seq[idx - 1]);
             }
             clearPan();
           }
@@ -263,9 +270,9 @@ export function useCategorySwipeNavigation({
       if (!horizontal) return;
 
       if (dx < 0) {
-        onSelectRef.current(seq[(idx + 1) % seq.length]);
-      } else {
-        onSelectRef.current(seq[(idx - 1 + seq.length) % seq.length]);
+        if (!atLast) onSelectRef.current(seq[idx + 1]);
+      } else if (!atFirst) {
+        onSelectRef.current(seq[idx - 1]);
       }
     }
 

@@ -152,9 +152,10 @@ export function NotesView() {
     const seq = categorySwipeSequence;
     let i = seq.findIndex((f) => Object.is(f, categoryFilter));
     if (i < 0) i = 0;
+    const cur = seq[i];
     return {
-      categoryPrevFilter: seq[(i - 1 + seq.length) % seq.length],
-      categoryNextFilter: seq[(i + 1) % seq.length],
+      categoryPrevFilter: i > 0 ? seq[i - 1] : cur,
+      categoryNextFilter: i < seq.length - 1 ? seq[i + 1] : cur,
     };
   }, [categorySwipeSequence, categoryFilter]);
 
@@ -285,24 +286,29 @@ export function NotesView() {
         Math.abs(dx) > Math.abs(dy) * CATEGORY_SWIPE_H_AXIS ||
         Math.abs(dx) >= 36;
 
-      let commit = false;
+      let gestureCommit = false;
       if (mostlyHorizontal) {
         if (mode === 'next') {
           const prog = -tx / width;
-          commit = prog >= categorySwipeRequiredProgressNext(vx);
+          gestureCommit = prog >= categorySwipeRequiredProgressNext(vx);
         } else {
           const prog = (tx + width) / width;
-          commit = prog >= categorySwipeRequiredProgressPrev(vx);
+          gestureCommit = prog >= categorySwipeRequiredProgressPrev(vx);
         }
       }
 
       const seq = categorySwipeSequence;
       let idx = seq.findIndex((f) => Object.is(f, categoryFilter));
       if (idx < 0) idx = 0;
+      const canGoNext = idx < seq.length - 1;
+      const canGoPrev = idx > 0;
+      const canNavigate =
+        (mode === 'next' && canGoNext) || (mode === 'prev' && canGoPrev);
+      const shouldCommit = gestureCommit && canNavigate;
 
       const restTx = mode === 'next' ? 0 : -width;
       const committedTx = mode === 'next' ? -width : 0;
-      const toTx = commit ? committedTx : restTx;
+      const toTx = shouldCommit ? committedTx : restTx;
 
       const travelRatio = Math.abs(toTx - tx) / width;
       const speed = Math.abs(vx);
@@ -311,20 +317,20 @@ export function NotesView() {
         Math.min(
           CATEGORY_SWIPE_MAX_SETTLE_MS,
           Math.round(
-            (commit ? 300 : 255) +
+            (shouldCommit ? 300 : 255) +
               200 * travelRatio -
-              Math.min(speed, 0.95) * (commit ? 140 : 115),
+              Math.min(speed, 0.95) * (shouldCommit ? 140 : 115),
           ),
         ),
       );
 
-      const commitTarget = commit
+      const commitTarget = shouldCommit
         ? mode === 'next'
-          ? seq[(idx + 1) % seq.length]
-          : seq[(idx - 1 + seq.length) % seq.length]
+          ? seq[idx + 1]
+          : seq[idx - 1]
         : undefined;
 
-      if (commit) {
+      if (shouldCommit) {
         setSwipeChipSync({ active: true, filter: commitTarget, ms: durationMs });
       } else {
         setSwipeChipSync({ active: false });
@@ -347,7 +353,7 @@ export function NotesView() {
         categorySwipeSettlingRef.current = false;
         setSwipeStripTransition(null);
         setCategorySwipePan(null);
-        if (commit) {
+        if (shouldCommit) {
           commitSwipeCategory(commitTarget);
         }
         setSwipeChipSync({ active: false });
@@ -358,7 +364,7 @@ export function NotesView() {
       setSwipeStripTransition(null);
       setCategorySwipePan({ mode, tx, w: width });
 
-      const ease = commit
+      const ease = shouldCommit
         ? 'cubic-bezier(0.22, 1, 0.36, 1)'
         : 'cubic-bezier(0.34, 0.9, 0.32, 1)';
 
