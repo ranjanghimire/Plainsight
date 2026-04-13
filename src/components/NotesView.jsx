@@ -72,6 +72,16 @@ function archivedListSortedForCategoryAndSearch(archivedNotesMap, categoryFilter
   return [...searched].sort((a, b) => b.lastDeletedAt - a.lastDeletedAt);
 }
 
+/** Subtitle line for archive header row (matches chip filter). */
+function archiveSubtitleForChipFilter(categoryFilter) {
+  if (categoryFilter == null) {
+    return 'Archived items (All categories)';
+  }
+  return `Archived items for ${
+    categoryFilter === UNCATEGORIZED_FILTER ? 'Undefined' : categoryFilter
+  }`;
+}
+
 function resolveRestoreCategory(categoryFilter, categories, entryCategory) {
   if (categoryFilter === UNCATEGORIZED_FILTER) return null;
   if (
@@ -471,11 +481,11 @@ export function NotesView() {
   const [archiveEmptyIntro, setArchiveEmptyIntro] = useState(false);
   const archiveClearTimersRef = useRef([]);
 
-  const openArchiveClearConfirm = useCallback(() => {
-    const keys = archivedSorted.map((e) => e.text);
+  const openArchiveClearConfirmFromList = useCallback((list) => {
+    const keys = list.map((e) => e.text);
     if (keys.length === 0) return;
     setArchiveClearKeys(keys);
-  }, [archivedSorted]);
+  }, []);
 
   const confirmArchiveClear = useCallback(() => {
     const keys = archiveClearKeys?.length ? [...archiveClearKeys] : [];
@@ -541,15 +551,6 @@ export function NotesView() {
       restoreArchivedNote,
     ],
   );
-
-  const archiveSubtitle =
-    categoryFilter == null
-      ? 'Archived items (All categories)'
-      : `Archived items for ${
-          categoryFilter === UNCATEGORIZED_FILTER
-            ? 'Undefined'
-            : categoryFilter
-        }`;
 
   const notesListEmptyText =
     notes.length === 0
@@ -684,7 +685,12 @@ export function NotesView() {
               <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pr-1">
                 <NoteList
                   archiveMode
-                  subtitle={null}
+                  subtitle={archiveSubtitleForChipFilter(categoryPrevFilter)}
+                  onArchiveClearAll={
+                    prevArchivedSorted.length > 0
+                      ? () => openArchiveClearConfirmFromList(prevArchivedSorted)
+                      : undefined
+                  }
                   isEmpty={prevArchivedSorted.length === 0}
                   emptyText="No archived items for this category"
                   rootClassName="flex min-h-0 flex-1 flex-col"
@@ -695,9 +701,11 @@ export function NotesView() {
               <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col px-1">
                 <NoteList
                   archiveMode
-                  subtitle={archiveSubtitle}
+                  subtitle={archiveSubtitleForChipFilter(categoryFilter)}
                   onArchiveClearAll={
-                    archivedSorted.length > 0 ? openArchiveClearConfirm : undefined
+                    archivedSorted.length > 0
+                      ? () => openArchiveClearConfirmFromList(archivedSorted)
+                      : undefined
                   }
                   isEmpty={archivedSorted.length === 0}
                   emptyText="No archived items for this category"
@@ -711,7 +719,12 @@ export function NotesView() {
               <div className="box-border flex min-h-0 w-1/3 shrink-0 flex-col pl-1">
                 <NoteList
                   archiveMode
-                  subtitle={null}
+                  subtitle={archiveSubtitleForChipFilter(categoryNextFilter)}
+                  onArchiveClearAll={
+                    nextArchivedSorted.length > 0
+                      ? () => openArchiveClearConfirmFromList(nextArchivedSorted)
+                      : undefined
+                  }
                   isEmpty={nextArchivedSorted.length === 0}
                   emptyText="No archived items for this category"
                   rootClassName="flex min-h-0 flex-1 flex-col"
