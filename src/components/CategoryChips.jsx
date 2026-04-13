@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { UNCATEGORIZED_FILTER } from '../constants/categoryFilters';
 import {
   useItemContextMenu,
@@ -65,10 +65,41 @@ export function CategoryChips({
   const [categoryEditKey, setCategoryEditKey] = useState(null);
   const [categoryEditDraft, setCategoryEditDraft] = useState('');
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState(null);
+  const inlineAddAnchorRef = useRef(null);
 
   useEffect(() => {
     catMenu.closeMenu();
   }, [workspaceSwitchGeneration, catMenu.closeMenu]);
+
+  /** Inline add sits at the end of a horizontal scroller; bring input + actions into view when opened. */
+  useLayoutEffect(() => {
+    if (!showInlineAddCategory) return undefined;
+    const revealInlineAdd = () => {
+      const el = inlineAddAnchorRef.current;
+      if (!el) return;
+      if (typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'end',
+        });
+        return;
+      }
+      let node = el.parentElement;
+      while (node && node !== document.body) {
+        if (node.scrollWidth > node.clientWidth + 1) {
+          node.scrollLeft = node.scrollWidth - node.clientWidth;
+          break;
+        }
+        node = node.parentElement;
+      }
+    };
+    revealInlineAdd();
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(revealInlineAdd);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [showInlineAddCategory]);
 
   const cancelCategoryEdit = () => {
     setCategoryEditKey(null);
@@ -96,7 +127,7 @@ export function CategoryChips({
         <div
           data-testid="category-chips-row"
           className="flex flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain py-0.5 pl-0.5 pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(120,113,108,0.35)_transparent] dark:[scrollbar-color:rgba(168,162,158,0.3)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/45 dark:[&::-webkit-scrollbar-thumb]:bg-stone-500/40"
-          style={{ WebkitOverflowScrolling: 'touch' }}
+          style={{ WebkitOverflowScrolling: 'touch', scrollPaddingInlineEnd: '0.5rem' }}
         >
           <button
             type="button"
@@ -164,7 +195,10 @@ export function CategoryChips({
             </button>
           )}
           {showInlineAddCategory ? (
-            <span className="inline-flex shrink-0 items-center gap-1">
+            <span
+              ref={inlineAddAnchorRef}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-200/90 bg-white/95 px-1.5 py-1 shadow-sm ring-1 ring-stone-200/40 dark:border-stone-600 dark:bg-stone-900/95 dark:ring-stone-700/50"
+            >
               <input
                 type="text"
                 data-testid="category-inline-name-input"
@@ -178,14 +212,14 @@ export function CategoryChips({
                   }
                 }}
                 placeholder="New category"
-                className="w-28 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
+                className="min-w-[7.5rem] max-w-[40vw] flex-1 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 sm:max-w-none sm:flex-none sm:w-32"
                 autoFocus
               />
               <button
                 type="button"
                 data-testid="category-inline-submit"
                 onClick={handleInlineAddCategory}
-                className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
+                className="shrink-0 px-2.5 py-1.5 text-sm font-medium rounded-md bg-stone-200 text-stone-800 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-100 dark:hover:bg-stone-500"
               >
                 Add
               </button>
@@ -195,7 +229,7 @@ export function CategoryChips({
                   setInlineNewCategoryName('');
                   setShowInlineAddCategory(false);
                 }}
-                className="px-2 py-1 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
+                className="shrink-0 px-2.5 py-1.5 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
               >
                 Cancel
               </button>
