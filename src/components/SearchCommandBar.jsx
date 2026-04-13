@@ -1,7 +1,9 @@
 import { useCallback, useRef, useLayoutEffect, useMemo, useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getMasterKey, setMasterKey, clearMasterKey } from '../utils/storage';
+import { LiveTextScanner } from '../plugins/liveTextScanner.js';
 
 const TEXTAREA_MAX_PX = 160;
 const TAG_LEADING_ICON = '#';
@@ -53,6 +55,26 @@ function SendNoteIcon({ className = 'w-5 h-5' }) {
   );
 }
 
+/** Stroke icon aligned with `SendNoteIcon` (SF Symbol `camera.viewfinder`–style). */
+function CameraViewfinderIcon({ className = 'w-5 h-5' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 7.5A2.5 2.5 0 016.5 5h11A2.5 2.5 0 0120 7.5v9a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 16.5v-9z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 10.25a2.75 2.75 0 105.5 0 2.75 2.75 0 00-5.5 0zM2 5.5L2 2.5M5.5 2L2.5 2M22 5.5L22 2.5M18.5 2L21.5 2M2 18.5L2 21.5M5.5 22L2.5 22M22 18.5L22 21.5M18.5 22L21.5 22"
+      />
+    </svg>
+  );
+}
+
 export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = false }) {
   const navigate = useNavigate();
   const { switchWorkspace, currentWorkspace, canOpenOrCreateHiddenWorkspace } =
@@ -62,6 +84,24 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
   /** True while focus is anywhere inside the bar (textarea, tags, or send). */
   const [barFocused, setBarFocused] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
+  const [liveTextScanAvailable, setLiveTextScanAvailable] = useState(false);
+  const [liveTextScanMessage, setLiveTextScanMessage] = useState('');
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== 'ios') return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await LiveTextScanner.getHardwareSupport();
+        if (!cancelled) setLiveTextScanAvailable(Boolean(r.hardware));
+      } catch {
+        if (!cancelled) setLiveTextScanAvailable(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (searchOnly) {
@@ -188,6 +228,30 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
 
   const canSubmit = !searchOnly && Boolean(value.trim());
 
+  const handleLiveTextScan = useCallback(async () => {
+    setLiveTextScanMessage('');
+    try {
+      const r = await LiveTextScanner.scanText();
+      if (r.error === 'denied') {
+        setLiveTextScanMessage(
+          'Camera is off for Plainsight. Turn it on in Settings → Privacy → Camera to scan text.',
+        );
+        return;
+      }
+      if (r.error === 'unsupported' || r.error === 'busy') return;
+      const piece = r.text != null ? String(r.text).trim() : '';
+      if (piece) {
+        const base = String(value || '').trimEnd();
+        onChange?.(base ? `${base} ${piece}` : piece);
+      }
+    } catch {
+      setLiveTextScanMessage('Could not open the text scanner.');
+    }
+  }, [value, onChange]);
+
+  const iconButtonClass =
+    'shrink-0 p-2 rounded-lg text-stone-600 bg-stone-100 hover:bg-stone-200 dark:text-stone-200 dark:bg-stone-700 dark:hover:bg-stone-600';
+
   return (
     <div
       ref={rootRef}
@@ -202,20 +266,32 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onFocus={() => setLiveTextScanMessage('')}
           aria-label={searchOnly ? 'Search archive' : 'New note'}
         />
+        {liveTextScanAvailable && !searchOnly && (
+          <button type="button" onClick={handleLiveTextScan} className={iconButtonClass} aria-label="Scan text with camera">
+            <CameraViewfinderIcon />
+          </button>
+        )}
         {!searchOnly && (
           <button
             type="button"
             onClick={submitEntry}
             disabled={!canSubmit}
-            className="shrink-0 mr-2 p-2 rounded-lg text-stone-600 bg-stone-100 hover:bg-stone-200 disabled:opacity-40 disabled:pointer-events-none dark:text-stone-200 dark:bg-stone-700 dark:hover:bg-stone-600"
+            className={`${iconButtonClass} mr-2 disabled:opacity-40 disabled:pointer-events-none`}
             aria-label="Add note"
           >
             <SendNoteIcon />
           </button>
         )}
       </div>
+
+      {liveTextScanMessage ? (
+        <p className="px-4 pb-2 text-xs text-amber-800 dark:text-amber-200/90" role="status">
+          {liveTextScanMessage}
+        </p>
+      ) : null}
 
       {showTagRow && (
         <div className="border-t border-stone-200 dark:border-stone-600 px-4 py-2 flex items-center gap-0 text-stone-500 dark:text-stone-400">

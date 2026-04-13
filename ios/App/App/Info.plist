@@ -47,6 +47,8 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Plainsight uses the camera to scan text from your surroundings and insert it into your notes.</string>
 	<!-- Standard HTTPS only (Supabase, etc.); set true if you add custom crypto beyond Apple/OS APIs. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
