@@ -124,6 +124,7 @@ export function NotesView() {
   const categorySwipeSettlingRef = useRef(false);
   const categorySwipeSettleTimerRef = useRef(0);
   const settleFinishRef = useRef(null);
+  const [swipeChipSync, setSwipeChipSync] = useState({ active: false });
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
@@ -268,6 +269,7 @@ export function NotesView() {
       settleFinishRef.current = null;
       setSwipeStripTransition(null);
       setCategorySwipePan(null);
+      setSwipeChipSync({ active: false });
       return;
     }
     setSwipeStripTransition(null);
@@ -322,6 +324,12 @@ export function NotesView() {
           : seq[(idx - 1 + seq.length) % seq.length]
         : undefined;
 
+      if (commit) {
+        setSwipeChipSync({ active: true, filter: commitTarget, ms: durationMs });
+      } else {
+        setSwipeChipSync({ active: false });
+      }
+
       if (categorySwipeSettleTimerRef.current) {
         clearTimeout(categorySwipeSettleTimerRef.current);
         categorySwipeSettleTimerRef.current = 0;
@@ -342,6 +350,7 @@ export function NotesView() {
         if (commit) {
           commitSwipeCategory(commitTarget);
         }
+        setSwipeChipSync({ active: false });
       };
       settleFinishRef.current = finish;
 
@@ -549,6 +558,7 @@ export function NotesView() {
       settleFinishRef.current = null;
       setSwipeStripTransition(null);
       setCategorySwipePan(null);
+      setSwipeChipSync({ active: false });
     }, 0);
     return () => window.clearTimeout(t);
   }, [workspaceSwitchGeneration]);
@@ -581,6 +591,9 @@ export function NotesView() {
       <CategoryChips
         categories={categories}
         categoryFilter={categoryFilter}
+        chipHighlightActive={swipeChipSync.active}
+        chipHighlightFilter={swipeChipSync.active ? swipeChipSync.filter : undefined}
+        chipHighlightTransitionMs={swipeChipSync.active ? swipeChipSync.ms : undefined}
         onCategoryChange={(f) => applyCategoryFilter(f, { useViewTransition: true })}
         hasUncategorizedNotes={hasUncategorizedNotes}
         showInlineAddCategory={showInlineAddCategory}

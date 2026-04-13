@@ -8,11 +8,11 @@ import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
 
 /** One look for all unselected chips; selected state stays obvious. */
-function chipTone(selected) {
+function chipTone(selected, motionClass) {
   if (selected) {
-    return 'bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200';
+    return `${motionClass}bg-stone-300 text-stone-800 dark:bg-stone-600 dark:text-stone-200`;
   }
-  return 'bg-stone-100 text-stone-700 hover:bg-stone-200/95 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600';
+  return `${motionClass}bg-stone-100 text-stone-700 hover:bg-stone-200/95 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600`;
 }
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
@@ -30,6 +30,12 @@ export function categoryChipTestIdSlug(name) {
 export function CategoryChips({
   categories,
   categoryFilter,
+  /** When true, chip selection reflects `chipHighlightFilter` (e.g. swipe settle in sync with notes strip). */
+  chipHighlightActive = false,
+  /** Filter value to show selected when `chipHighlightActive` (including `null` for All). */
+  chipHighlightFilter,
+  /** Selection background transition duration (ms), matched to notes strip settle. */
+  chipHighlightTransitionMs,
   onCategoryChange,
   hasUncategorizedNotes,
   showInlineAddCategory,
@@ -42,6 +48,20 @@ export function CategoryChips({
   workspaceSwitchGeneration,
 }) {
   const catMenu = useItemContextMenu();
+  const chipSel = chipHighlightActive ? chipHighlightFilter : categoryFilter;
+  const chipMs =
+    chipHighlightActive && chipHighlightTransitionMs != null && chipHighlightTransitionMs > 0
+      ? Math.round(chipHighlightTransitionMs)
+      : null;
+  const chipMotionStyle =
+    chipMs != null
+      ? {
+          transitionProperty: 'background-color, color',
+          transitionDuration: `${chipMs}ms`,
+          transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        }
+      : undefined;
+  const chipMotionClass = chipMs != null ? 'will-change-[background-color,color] ' : '';
   const [categoryEditKey, setCategoryEditKey] = useState(null);
   const [categoryEditDraft, setCategoryEditDraft] = useState('');
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState(null);
@@ -82,7 +102,8 @@ export function CategoryChips({
             type="button"
             data-testid="category-chip--all"
             onClick={() => onCategoryChange(null)}
-            className={`${CHIP_PAD} ${chipTone(categoryFilter === null)}`}
+            style={chipMotionStyle}
+            className={`${CHIP_PAD} ${chipTone(chipSel === null, chipMotionClass)}`}
           >
             All
           </button>
@@ -124,7 +145,8 @@ export function CategoryChips({
                   { kind: 'category', name: cat },
                   () => onCategoryChange(cat),
                 )}
-                className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipTone(categoryFilter === cat)}`}
+                style={chipMotionStyle}
+                className={`${CHIP_PAD} ${CONTEXT_MENU_TRIGGER_CLASS} ${chipTone(chipSel === cat, chipMotionClass)}`}
               >
                 {cat}
               </button>
@@ -135,7 +157,8 @@ export function CategoryChips({
               type="button"
               data-testid="category-chip--undefined-filter"
               onClick={() => onCategoryChange(UNCATEGORIZED_FILTER)}
-              className={`${CHIP_PAD} ${chipTone(categoryFilter === UNCATEGORIZED_FILTER)}`}
+              style={chipMotionStyle}
+              className={`${CHIP_PAD} ${chipTone(Object.is(chipSel, UNCATEGORIZED_FILTER), chipMotionClass)}`}
             >
               Undefined
             </button>
