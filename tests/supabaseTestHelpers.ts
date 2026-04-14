@@ -140,6 +140,26 @@ export async function ensureRemoteWorkspaceRow(options: {
   if (error) throw error;
 }
 
+/**
+ * Service-role: delete every workspace (and FK children) for `owner_id` except listed ids.
+ * Use for deterministic paid tests when the shared Vitest user has stray rows (e.g. duplicate "Home"
+ * names that change `bindMergedWorkspacesToStorageKeys` ordering).
+ */
+export async function deleteRemoteWorkspacesForOwnerExcept(
+  ownerId: string,
+  keepWorkspaceIds: string[],
+): Promise<void> {
+  const sb = getSupabaseServiceClient();
+  const { data, error } = await sb.from('workspaces').select('id').eq('owner_id', ownerId);
+  if (error) throw error;
+  const keep = new Set((keepWorkspaceIds || []).filter(Boolean));
+  for (const row of data || []) {
+    const id = typeof row?.id === 'string' ? row.id : '';
+    if (!id || keep.has(id)) continue;
+    await deleteRemoteWorkspaceCascadeViaService(id);
+  }
+}
+
 export async function countNotesInWorkspace(workspaceId: string): Promise<number> {
   const sb = getSupabaseServiceClient();
   const { count, error } = await sb
