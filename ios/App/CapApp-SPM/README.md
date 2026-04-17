@@ -30,3 +30,14 @@ That runs automatically after **`npm install`** (`postinstall`) and after **`npm
 3. Open **`ios/App/App.xcodeproj`** so the local package reference `CapApp-SPM` resolves next to the project (sibling folder `ios/App/CapApp-SPM/`).
 
 `npm run cap:ios` runs `scripts/ios-spm-preflight.mjs` before opening Xcode.
+
+### Xcode “lstat … capacitor.config.json / config.xml / public”
+
+The App target expects **`ios/App/App/capacitor.config.json`**, **`config.xml`**, and **`ios/App/App/public/`** (built web assets). Those are produced by **`npx cap copy ios`** (included in **`npm run cap:sync`**).
+
+For machines that only pull git and open Xcode, **commit those paths** after a local build:
+
+```bash
+npm run ios:assets
+# then git add ios/App/App/public ios/App/App/capacitor.config.json ios/App/App/config.xml
+```
