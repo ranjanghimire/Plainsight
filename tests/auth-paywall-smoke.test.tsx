@@ -72,17 +72,16 @@ describe('EnableSyncModal', () => {
     expect(onUnlock).not.toHaveBeenCalled();
   });
 
-  it('invokes onUnlockSync with billing mount when Pay is pressed', async () => {
+  it('invokes onUnlockSync when Unlock Sync is pressed', async () => {
     const user = userEvent.setup();
     const onUnlock = vi.fn().mockResolvedValue(undefined);
     render(
       <EnableSyncModal open onClose={() => {}} onUnlockSync={onUnlock} unlockDisabled={false} />,
     );
-    const pay = screen.getByRole('button', { name: /Pay/i });
-    await user.click(pay);
+    const unlock = screen.getByRole('button', { name: /Unlock Sync/i });
+    await user.click(unlock);
     await waitFor(() => expect(onUnlock).toHaveBeenCalledTimes(1));
-    const arg = onUnlock.mock.calls[0][0];
-    expect(arg).toBeInstanceOf(HTMLElement);
+    expect(onUnlock.mock.calls[0]?.length ?? 0).toBe(0);
   });
 
   it('does not invoke purchase when unlockDisabled', async () => {
@@ -91,9 +90,9 @@ describe('EnableSyncModal', () => {
     render(
       <EnableSyncModal open onClose={() => {}} onUnlockSync={onUnlock} unlockDisabled />,
     );
-    const pay = screen.getByRole('button', { name: /Pay/i });
-    expect(pay).toBeDisabled();
-    await user.click(pay);
+    const unlock = screen.getByRole('button', { name: /Unlock Sync/i });
+    expect(unlock).toBeDisabled();
+    await user.click(unlock);
     expect(onUnlock).not.toHaveBeenCalled();
   });
 });

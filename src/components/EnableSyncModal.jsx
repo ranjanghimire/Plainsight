@@ -1,5 +1,46 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId } from 'react';
 import { LIFETIME_SYNC_PRICE_DISPLAY } from '../constants/pricing';
+
+/** Premium abstract mark: gradient orbit + three nodes (connected continuity, not a cloud). */
+function PremiumSyncMark({ className }) {
+  const rawId = useId();
+  const gid = `sync-mark-${rawId.replace(/:/g, '')}`;
+
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 48 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id={`${gid}-stroke`} x1="8" y1="10" x2="40" y2="38" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#93c5fd" />
+          <stop offset="0.5" stopColor="#6366f1" />
+          <stop offset="1" stopColor="#c4b5fd" />
+        </linearGradient>
+        <linearGradient id={`${gid}-fill`} x1="16" y1="12" x2="32" y2="36" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#f0f9ff" />
+          <stop offset="1" stopColor="#c7d2fe" />
+        </linearGradient>
+      </defs>
+      <circle cx="24" cy="24" r="19" stroke={`url(#${gid}-stroke)`} strokeOpacity="0.2" strokeWidth="1" />
+      <ellipse
+        cx="24"
+        cy="24"
+        rx="13"
+        ry="8.5"
+        stroke={`url(#${gid}-stroke)`}
+        strokeWidth="1.25"
+        transform="rotate(-18 24 24)"
+      />
+      <circle cx="24" cy="14" r="2.4" fill={`url(#${gid}-fill)`} />
+      <circle cx="15" cy="31" r="2" fill={`url(#${gid}-fill)`} />
+      <circle cx="33" cy="31" r="2" fill={`url(#${gid}-fill)`} />
+    </svg>
+  );
+}
 
 export function EnableSyncModal({
   open,
@@ -9,8 +50,6 @@ export function EnableSyncModal({
   unlocking = false,
   subtitle,
 }) {
-  const billingRootRef = useRef(null);
-
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -20,22 +59,20 @@ export function EnableSyncModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, unlocking]);
 
-  useEffect(() => {
-    if (!open && billingRootRef.current) {
-      billingRootRef.current.innerHTML = '';
-    }
-  }, [open]);
-
   if (!open) return null;
 
   const handleUnlock = async () => {
     if (unlockDisabled || unlocking) return;
-    await onUnlockSync(billingRootRef.current);
+    await onUnlockSync();
   };
+
+  const subline =
+    subtitle?.trim() ||
+    `One-time payment of ${LIFETIME_SYNC_PRICE_DISPLAY}`;
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-6"
       role="presentation"
     >
       <button
@@ -51,52 +88,59 @@ export function EnableSyncModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="enable-sync-title"
-        className="relative z-10 flex max-h-[min(90vh,40rem)] w-full max-w-md flex-col rounded-xl border border-stone-200 bg-white shadow-xl dark:border-stone-600 dark:bg-stone-800"
+        className="relative z-10 w-full max-w-[20rem] shrink-0 rounded-2xl border border-white/10 bg-[#1C1C1E] shadow-2xl shadow-black/50"
         onClick={(ev) => ev.stopPropagation()}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="px-5 pb-6 pt-7">
+          <div className="mb-4 flex justify-center">
+            <PremiumSyncMark className="h-12 w-12" />
+          </div>
+
           <h2
             id="enable-sync-title"
-            className="text-lg font-medium text-stone-900 dark:text-stone-100"
+            className="text-center text-[1.0625rem] font-semibold leading-snug tracking-tight text-white"
           >
-            Cloud sync
+            Sync across devices
           </h2>
-          <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">
-            {subtitle?.trim() ||
-              `Lifetime membership ${LIFETIME_SYNC_PRICE_DISPLAY} (one-time). Sync notes across devices and keep a cloud backup.`}
-          </p>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-stone-600 dark:text-stone-300">
-            <li>Sync across your devices</li>
-            <li>Cloud backup for your workspaces and notes</li>
-            <li>Changes update while you work</li>
+          <p className="mt-1.5 text-center text-sm font-medium text-stone-400">{subline}</p>
+
+          <div className="my-5 h-px w-full bg-white/[0.08]" aria-hidden />
+
+          <ul className="space-y-2 text-[0.8125rem] leading-relaxed text-stone-100">
+            <li className="flex gap-2.5">
+              <span className="mt-[0.35em] h-1 w-1 shrink-0 rounded-full bg-white" aria-hidden />
+              <span>Sync across your devices</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-[0.35em] h-1 w-1 shrink-0 rounded-full bg-white" aria-hidden />
+              <span>Cloud backup for your workspaces and notes</span>
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-[0.35em] h-1 w-1 shrink-0 rounded-full bg-white" aria-hidden />
+              <span>Changes update while you work</span>
+            </li>
           </ul>
 
-          <p className="mt-4 text-xs text-stone-500 dark:text-stone-400">
-            Payment details open below when you choose Pay — everything stays on this screen.
-          </p>
-          <div
-            ref={billingRootRef}
-            className="mt-3 min-h-[4rem] w-full rounded-lg border border-dashed border-stone-200 bg-stone-50/80 dark:border-stone-600 dark:bg-stone-900/40"
-          />
-        </div>
-
-        <div className="flex shrink-0 flex-col gap-2 border-t border-stone-200 p-4 dark:border-stone-600 sm:flex-row-reverse sm:justify-end">
-          <button
-            type="button"
-            onClick={handleUnlock}
-            disabled={unlockDisabled || unlocking}
-            className="px-3 py-2 text-sm font-medium rounded-lg bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50 disabled:pointer-events-none dark:bg-stone-200 dark:text-stone-900 dark:hover:bg-white"
-          >
-            {unlocking ? 'Processing…' : `Pay ${LIFETIME_SYNC_PRICE_DISPLAY}`}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={unlocking}
-            className="px-3 py-2 text-sm rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-700"
-          >
-            Not now
-          </button>
+          <div className="mt-6 flex flex-col items-stretch gap-2.5">
+            <button
+              type="button"
+              onClick={handleUnlock}
+              disabled={unlockDisabled || unlocking}
+              className="w-full rounded-full bg-white py-3 text-center text-[0.9375rem] font-semibold text-black transition hover:bg-stone-100 disabled:pointer-events-none disabled:opacity-45"
+            >
+              {unlocking
+                ? 'Processing…'
+                : `Unlock Sync for ${LIFETIME_SYNC_PRICE_DISPLAY}`}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={unlocking}
+              className="py-1.5 text-center text-sm font-medium text-stone-500 transition hover:text-stone-400 disabled:opacity-45"
+            >
+              Not now
+            </button>
+          </div>
         </div>
       </div>
     </div>

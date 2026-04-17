@@ -280,15 +280,11 @@ export function SyncEntitlementProvider({ children }) {
       showToast('Sync package is not available yet.');
       return;
     }
-    if (!(billingMountEl instanceof HTMLElement)) {
-      showToast('Unable to start checkout.');
-      return;
-    }
     setUnlocking(true);
     try {
       const result = await purchases.purchase({
         rcPackage: pkg,
-        htmlTarget: billingMountEl,
+        ...(billingMountEl instanceof HTMLElement ? { htmlTarget: billingMountEl } : {}),
         customerEmail: readAuthDisplayEmail() ?? undefined,
         skipSuccessPage: true,
       });
