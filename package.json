@@ -11,7 +11,7 @@
     "build": "vite build",
     "build:cap": "vite build --base ./",
     "cap:sync": "npm run build:cap && npx cap sync",
-    "cap:ios": "npm run cap:sync && npx cap open ios",
+    "cap:ios": "npm run cap:sync && node scripts/ios-spm-preflight.mjs && npx cap open ios",
     "lint": "eslint .",
     "preview": "vite preview"
   },
