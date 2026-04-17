@@ -4,13 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "postinstall": "patch-package",
+    "postinstall": "patch-package && node scripts/vendor-ios-spm-plugins.mjs",
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "vite build",
     "build:cap": "vite build --base ./",
-    "cap:sync": "npm run build:cap && npx cap sync",
+    "cap:sync": "npm run build:cap && npx cap sync && node scripts/vendor-ios-spm-plugins.mjs",
     "cap:ios": "npm run cap:sync && node scripts/ios-spm-preflight.mjs && npx cap open ios",
     "lint": "eslint .",
     "preview": "vite preview"
