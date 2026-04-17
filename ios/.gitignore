@@ -1,13 +1,13 @@
 App/build
 App/Pods
 App/output
-App/App/public
 DerivedData
 xcuserdata
 
 # Cordova plugins for Capacitor
 capacitor-cordova-ios-plugins
 
-# Generated Config files
-App/App/capacitor.config.json
-App/App/config.xml
+# NOTE: `App/App/public`, `App/App/capacitor.config.json`, and `App/App/config.xml` are
+# intentionally NOT ignored so they can be committed. That lets Xcode builds work on
+# machines that never run `npx cap copy ios` (e.g. rented VMs without npm). Refresh
+# them locally with: `npm run ios:assets` from the repo root, then commit.
