@@ -1,0 +1,176 @@
+diff --git a/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift b/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift
+index 542a978..9d17a8f 100644
+--- a/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift
++++ b/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBar.swift
+@@ -1,4 +1,6 @@
+ import Foundation
++import UIKit
++import WebKit
+ import Capacitor
+ 
+ public class StatusBar {
+@@ -82,7 +84,7 @@ public class StatusBar {
+                 resizeWebView()
+                 if !isOverlayingWebview {
+                     resizeStatusBarBackgroundView()
+-                    bridge.webView?.superview?.addSubview(backgroundView!)
++                    bridgeWebView()?.superview?.addSubview(backgroundView!)
+                 }
+                 backgroundView?.isHidden = false
+             }
+@@ -106,7 +108,7 @@ public class StatusBar {
+             overlays: isOverlayingWebview,
+             visible: bridge.statusBarVisible,
+             style: style,
+-            color: UIColor.capacitor.hex(fromColor: backgroundColor),
++            color: StatusBarHexColor.hexString(from: backgroundColor),
+             height: getStatusBarFrame().size.height
+         )
+     }
+@@ -118,19 +120,34 @@ public class StatusBar {
+             backgroundView?.removeFromSuperview()
+         } else {
+             initializeBackgroundViewIfNeeded()
+-            bridge.webView?.superview?.addSubview(backgroundView!)
++            bridgeWebView()?.superview?.addSubview(backgroundView!)
+         }
+         resizeWebView()
+     }
+ 
++    /// `webView` is omitted from `any CAPBridgeProtocol` in some Capacitor 8 SwiftPM builds (Xcode 16); read via KVC.
++    private func bridgeWebView() -> WKWebView? {
++        guard let obj = bridge as? NSObject else { return nil }
++        return obj.value(forKey: "webView") as? WKWebView
++    }
++
++    /// Host view for layout; uses KVC when `CAPBridgeProtocol.viewController` is not visible to the compiler (Capacitor 8 SPM + Xcode 16).
++    private func bridgeHostView() -> UIView? {
++        guard let obj = bridge as? NSObject else { return nil }
++        if let view = (obj.value(forKey: "viewController") as? UIViewController)?.view {
++            return view
++        }
++        return bridgeWebView()?.window?.rootViewController?.view ?? bridgeWebView()?.superview
++    }
++
+     private func resizeWebView() {
+-        let bounds: CGRect? = bridge.viewController?.view.window?.windowScene?.keyWindow?.bounds
++        let bounds: CGRect? = bridgeHostView()?.window?.windowScene?.keyWindow?.bounds
+ 
+         guard
+-            let webView = bridge.webView,
++            let webView = bridgeWebView(),
+             let bounds = bounds
+         else { return }
+-        bridge.viewController?.view.frame = bounds
++        bridgeHostView()?.frame = bounds
+         webView.frame = bounds
+         let statusBarHeight = getStatusBarFrame().size.height
+         var webViewFrame = webView.frame
+@@ -154,7 +171,7 @@ public class StatusBar {
+     }
+ 
+     private func getStatusBarFrame() -> CGRect {
+-        return bridge.viewController?.view.window?.windowScene?.statusBarManager?.statusBarFrame ?? .zero
++        bridgeHostView()?.window?.windowScene?.statusBarManager?.statusBarFrame ?? .zero
+     }
+ 
+     private func initializeBackgroundViewIfNeeded() {
+diff --git a/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarHexColor.swift b/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarHexColor.swift
+new file mode 100644
+index 0000000..7814b71
+--- /dev/null
++++ b/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarHexColor.swift
+@@ -0,0 +1,54 @@
++import UIKit
++
++/// Local hex helpers so Status Bar does not depend on `PluginConfig.getString` / `UIColor.capacitor.color(fromHex:)`,
++/// which are unavailable in some Capacitor 8 SwiftPM xcframework builds (Xcode 16).
++enum StatusBarHexColor {
++    static func uiColor(fromHex hex: String) -> UIColor? {
++        let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
++        guard !cleaned.isEmpty else { return nil }
++
++        var value: UInt64 = 0
++        let scanner = Scanner(string: cleaned)
++        guard scanner.scanHexInt64(&value), scanner.isAtEnd else { return nil }
++
++        let r: CGFloat
++        let g: CGFloat
++        let b: CGFloat
++        let a: CGFloat
++
++        switch cleaned.count {
++        case 6:
++            r = CGFloat((value & 0xFF0000) >> 16) / 255
++            g = CGFloat((value & 0x00FF00) >> 8) / 255
++            b = CGFloat(value & 0x0000FF) / 255
++            a = 1
++        case 8:
++            // Same channel order as Capacitor's `UIColor.capacitor.color(fromHex:)` (RRGGBBAA).
++            r = CGFloat((value & 0xFF00_0000) >> 24) / 255
++            g = CGFloat((value & 0x00FF0000) >> 16) / 255
++            b = CGFloat((value & 0x0000FF00) >> 8) / 255
++            a = CGFloat(value & 0x000000FF) / 255
++        default:
++            return nil
++        }
++
++        return UIColor(red: r, green: g, blue: b, alpha: a)
++    }
++
++    static func hexString(from color: UIColor) -> String {
++        let c = color.resolvedColor(with: .current)
++        var r: CGFloat = 0
++        var g: CGFloat = 0
++        var b: CGFloat = 0
++        var unusedAlpha: CGFloat = 0
++        guard c.getRed(&r, green: &g, blue: &b, alpha: &unusedAlpha) else {
++            return "#000000"
++        }
++        return String(
++            format: "#%02X%02X%02X",
++            Int((r * 255).rounded()),
++            Int((g * 255).rounded()),
++            Int((b * 255).rounded())
++        )
++    }
++}
+diff --git a/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift b/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift
+index 1cadf1d..4387c3e 100644
+--- a/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift
++++ b/node_modules/@capacitor/status-bar/ios/Sources/StatusBarPlugin/StatusBarPlugin.swift
+@@ -1,4 +1,5 @@
+ import Foundation
++import UIKit
+ import Capacitor
+ 
+ /**
+@@ -28,12 +29,15 @@ public class StatusBarPlugin: CAPPlugin, CAPBridgedPlugin {
+ 
+     private func statusBarConfig() -> StatusBarConfig {
+         var config = StatusBarConfig()
+-        config.overlaysWebView = getConfig().getBoolean("overlaysWebView", config.overlaysWebView)
+-        if let colorConfig = getConfig().getString("backgroundColor"), let color = UIColor.capacitor.color(fromHex: colorConfig) {
++        let json = getConfig().getConfigJSON()
++        if let b = json["overlaysWebView"] as? Bool {
++            config.overlaysWebView = b
++        }
++        if let s = json["backgroundColor"] as? String, let color = StatusBarHexColor.uiColor(fromHex: s) {
+             config.backgroundColor = color
+         }
+-        if let configStyle = getConfig().getString("style") {
+-            config.style = style(fromString: configStyle)
++        if let s = json["style"] as? String {
++            config.style = style(fromString: s)
+         }
+         return config
+     }
+@@ -62,7 +66,7 @@ public class StatusBarPlugin: CAPPlugin, CAPBridgedPlugin {
+     @objc func setBackgroundColor(_ call: CAPPluginCall) {
+         guard
+             let hexString = call.options["color"] as? String,
+-            let color = UIColor.capacitor.color(fromHex: hexString)
++            let color = StatusBarHexColor.uiColor(fromHex: hexString)
+         else { return }
+         DispatchQueue.main.async { [weak self] in
+             self?.statusBar?.setBackgroundColor(color)
