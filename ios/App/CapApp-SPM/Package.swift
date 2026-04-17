@@ -11,9 +11,7 @@ let package = Package(
             targets: ["CapApp-SPM"])
     ],
     dependencies: [
-        // 8.3.1+ fixes SwiftPM builds on Xcode 16 where 8.3.0 xcframework hid APIs behind $NonescapableTypes
-        // (bridge.viewController, call.reject, PluginConfig.getString, color(fromHex:), etc.).
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.1"),
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.0"),
         .package(name: "CapacitorSplashScreen", path: "../../../node_modules/@capacitor/splash-screen"),
         .package(name: "CapacitorStatusBar", path: "../../../node_modules/@capacitor/status-bar")
     ],
