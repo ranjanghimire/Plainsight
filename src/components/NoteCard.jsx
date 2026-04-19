@@ -1,15 +1,29 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTagsNav } from '../context/TagsNavContext';
 import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
-import { composeNoteWithTags, parseNoteBodyAndTags } from '../utils/noteTags';
+import {
+  composeNoteWithTags,
+  parseNoteBodyAndTags,
+  trimTrailingBlankLines,
+} from '../utils/noteTags';
 import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
 import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js';
 import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPopover.jsx';
 
 const ACTIVE_DELETE_MS = 180;
 const ARCHIVE_DELETE_MS = 170;
+
+/** Keep the caret line inside the textarea viewport (esp. after Enter on the last line). */
+function scrollNoteTextareaCaretIntoView(ta) {
+  if (!ta) return;
+  try {
+    ta.scrollTop = Math.max(0, ta.scrollHeight - ta.clientHeight);
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Bold changes glyph metrics; keep shared indent / `- ` prefix in normal weight so
@@ -165,7 +179,7 @@ export function NoteCard({
   const location = useLocation();
   const { openTagsPage } = useTagsNav();
   const parsed = useMemo(() => parseNoteBodyAndTags(note.text), [note.text]);
-  const [editBody, setEditBody] = useState(() => parsed.body);
+  const [editBody, setEditBody] = useState(() => trimTrailingBlankLines(parsed.body));
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
@@ -199,7 +213,7 @@ export function NoteCard({
 
   useEffect(() => {
     if (!isEditing) {
-      setEditBody(parsed.body);
+      setEditBody(trimTrailingBlankLines(parsed.body));
     }
   }, [parsed.body, isEditing]);
 
@@ -213,6 +227,33 @@ export function NoteCard({
   useEffect(() => {
     if (isEditing) setBoldMode(Boolean(note.boldFirstLine));
   }, [isEditing, note.id, note.boldFirstLine, setBoldMode]);
+
+  /** After opening the editor, keep caret in view (textarea scroll + page scroll; mobile / tall min-height). */
+  useLayoutEffect(() => {
+    if (!isEditing) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      try {
+        ta.focus({ preventScroll: true });
+        const len = ta.value.length;
+        ta.setSelectionRange(len, len);
+        scrollNoteTextareaCaretIntoView(ta);
+        ta.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      } catch {
+        /* ignore */
+      }
+    };
+    const id0 = requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id0);
+    };
+  }, [isEditing]);
 
   const commitText = useCallback(() => {
     const { tags } = parseNoteBodyAndTags(note.text);
@@ -256,6 +297,7 @@ export function NoteCard({
       clearTimeout(toggleEditTimerRef.current);
       toggleEditTimerRef.current = null;
       if (isArchived) archivedEditKeyRef.current = note.text;
+      setEditBody(trimTrailingBlankLines(parsed.body));
       setIsEditing(true);
       return;
     }
@@ -317,7 +359,7 @@ export function NoteCard({
     }, ARCHIVE_DELETE_MS);
   };
 
-  const displayBody = parsed.body;
+  const displayBody = trimTrailingBlankLines(parsed.body);
   const displayBoldFirst = Boolean(note.boldFirstLine);
 
   return (
@@ -337,11 +379,16 @@ export function NoteCard({
             onFocus={() => setTextareaFocused(true)}
             onKeyDown={(e) => {
               handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
+              if (e.key === 'Enter' && !e.shiftKey) {
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => scrollNoteTextareaCaretIntoView(textareaRef.current));
+                });
+              }
             }}
             className={
               isArchived
-                ? 'w-full min-h-[80px] px-2 py-1.5 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600'
-                : 'w-full min-h-[80px] px-2 py-1.5 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200'
+                ? 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600 caret-neutral-900 dark:caret-neutral-100'
+                : 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200 caret-stone-900 dark:caret-stone-100'
             }
             autoFocus
           />

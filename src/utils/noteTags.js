@@ -3,6 +3,21 @@
  * If the first line is not a pure hashtag line, the full string is treated as body (no tags).
  */
 
+/**
+ * Remove trailing lines that are empty or whitespace-only, and trailing spaces on the last
+ * kept line (avoids tall cards from Enter-spam with no text).
+ */
+export function trimTrailingBlankLines(body) {
+  if (typeof body !== 'string' || !body) return '';
+  const lines = body.split(/\n/);
+  while (lines.length > 0 && lines[lines.length - 1].replace(/\r/g, '').trim() === '') {
+    lines.pop();
+  }
+  if (lines.length === 0) return '';
+  lines[lines.length - 1] = lines[lines.length - 1].replace(/[\t \u00a0]+$/u, '');
+  return lines.join('\n');
+}
+
 export function parseNoteBodyAndTags(raw) {
   if (typeof raw !== 'string' || !raw) return { tags: [], body: '' };
   const lines = raw.split(/\r?\n/);
@@ -64,7 +79,7 @@ export function renameTagInNoteText(raw, oldSlug, newSlug) {
 }
 
 export function composeNoteWithTags(tags, body) {
-  const b = typeof body === 'string' ? body : '';
+  const b = trimTrailingBlankLines(typeof body === 'string' ? body : '');
   const list = Array.isArray(tags)
     ? [
         ...new Set(
@@ -82,6 +97,5 @@ export function composeNoteWithTags(tags, body) {
     : [];
   if (list.length === 0) return b;
   const line = list.map((t) => `#${t}`).join(' ');
-  const trimmedBody = b.replace(/\s+$/u, '');
-  return trimmedBody ? `${line}\n${trimmedBody}` : line;
+  return b ? `${line}\n${b}` : line;
 }
