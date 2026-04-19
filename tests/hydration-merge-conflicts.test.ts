@@ -214,4 +214,17 @@ describe('numbered visible workspace prune (canonical Home vs Home (2))', () => 
     const ids = findRedundantNumberedVisibleWorkspaceIds([vis(dupId, 'Home (2)')]);
     expect(ids).toHaveLength(0);
   });
+
+  it('when both Home duplicates already exist on the server, prune the stray bare Home, not the preferred id', () => {
+    const strayId = createHydrationTestWorkspaceId();
+    const preferredId = createHydrationTestWorkspaceId();
+    const ids = findRedundantNumberedVisibleWorkspaceIds(
+      [vis(strayId, 'Home'), vis(preferredId, 'Home (2)')],
+      {
+        preferredHomeWorkspaceId: preferredId,
+        remoteWorkspaceIdSet: new Set([strayId, preferredId]),
+      },
+    );
+    expect(ids).toEqual([strayId]);
+  });
 });

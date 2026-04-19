@@ -5,7 +5,11 @@
 
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearPlainsightStorage, configurePaidUserTestMode } from './categoryTestHarness';
+import {
+  clearPlainsightStorage,
+  configurePaidUserTestMode,
+  seedFreshHomeWorkspace,
+} from './categoryTestHarness';
 import { applyVitestPaidSyncFlags } from './hydration/entitlementLossTestUtils';
 import {
   createHydrationTestWorkspaceId,
@@ -39,6 +43,16 @@ const PAID_HOME_ROW_ID = createHydrationTestWorkspaceId();
 const PAID_LOCAL_EXTRA_ROW_ID = createHydrationTestWorkspaceId();
 /** Second visible tab (e.g. “Food Items”) for note isolation regression. */
 const PAID_FOOD_VISIBLE_ROW_ID = createHydrationTestWorkspaceId();
+/**
+ * Simulates a fresh install UUID for `workspace_home` that does not match the server’s Home row
+ * yet (existing user, new device) — must not produce a visible `Home (2)` tab after sync.
+ */
+const STALE_CLEAN_DEVICE_HOME_ID = createHydrationTestWorkspaceId();
+
+/** Matches disambiguated junk labels: `Home (2)`, `Home(2)`, `Home (2) (2)`, etc. */
+function visibleListHasNumberedHomeAlias(namesJoined: string): boolean {
+  return /\bHome\s*\(\d+/.test(namesJoined);
+}
 
 paidDescribe('hydration — paid user (Supabase)', () => {
   const userId = process.env.VITEST_SUPABASE_USER_ID?.trim() || '';
@@ -61,6 +75,7 @@ paidDescribe('hydration — paid user (Supabase)', () => {
       await deleteRemoteWorkspaceCascadeViaService(PAID_HOME_ROW_ID);
       await deleteRemoteWorkspaceCascadeViaService(PAID_LOCAL_EXTRA_ROW_ID);
       await deleteRemoteWorkspaceCascadeViaService(PAID_FOOD_VISIBLE_ROW_ID);
+      await deleteRemoteWorkspaceCascadeViaService(STALE_CLEAN_DEVICE_HOME_ID);
     }
   });
 
@@ -83,6 +98,71 @@ paidDescribe('hydration — paid user (Supabase)', () => {
     const probe = screen.getByTestId('hydration-probe');
     expect(probe.getAttribute('data-visible-names')).toContain('Home');
     expect(probe.getAttribute('data-active-key')).toBe('workspace_home');
+  });
+
+  /**
+   * Regression: existing paid user opens app on a clean device — local `workspace_home` maps to a
+   * fresh UUID while Supabase still has the account’s real Home row. Merge + name disambiguation
+   * used to surface `Home (2)` briefly (or until a later fullSync). UI must never show numbered
+   * Home aliases; local workspace rows must not keep those names after sync.
+   */
+  it('clean device + existing remote Home: no Home (2) / Home (2)(2) visible during or after sync wait', async () => {
+    clearPlainsightStorage();
+    seedFreshHomeWorkspace();
+    await ensurePaidTestIdentity();
+    configurePaidUserTestMode();
+    await act(async () => {
+      setSyncEntitlementActive(true);
+      setSyncRemoteActive(true);
+    });
+
+    const remoteHomeId = PAID_HOME_ROW_ID;
+    setWorkspaceIdMapping('workspace_home', STALE_CLEAN_DEVICE_HOME_ID);
+    const now = new Date().toISOString();
+    await localDB.saveLocalWorkspaces([
+      {
+        id: STALE_CLEAN_DEVICE_HOME_ID,
+        owner_id: userId,
+        name: 'Home',
+        kind: 'visible',
+        created_at: now,
+        updated_at: now,
+      },
+    ]);
+
+    await ensureRemoteWorkspaceRow({
+      workspaceId: remoteHomeId,
+      ownerId: userId,
+      name: 'Home',
+      kind: 'visible',
+    });
+
+    renderHydrationHome();
+
+    await waitFor(
+      () => {
+        const el = screen.getByTestId('hydration-probe');
+        const names = el.getAttribute('data-visible-names') ?? '';
+        expect(visibleListHasNumberedHomeAlias(names)).toBe(false);
+        expect(el.getAttribute('data-hydration-complete')).toBe('true');
+      },
+      { timeout: 90_000, interval: 120 },
+    );
+
+    const settleMs = 5_000;
+    const stepMs = 250;
+    for (let waited = 0; waited < settleMs; waited += stepMs) {
+      const names = screen.getByTestId('hydration-probe').getAttribute('data-visible-names') ?? '';
+      expect(visibleListHasNumberedHomeAlias(names)).toBe(false);
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+
+    const rows = await localDB.getLocalWorkspaces();
+    for (const w of rows) {
+      const n = (w.name || '').trim();
+      expect(n).not.toMatch(/^Home\s*\(\d+/i);
+      expect(n).not.toMatch(/^Home\s*\(\d+\)\s*\(\d+/i);
+    }
   });
 
   it('local + remote merge: union by id, no duplicates', async () => {

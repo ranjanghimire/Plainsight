@@ -56,6 +56,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   bindMergedWorkspacesToStorageKeys,
   deleteWorkspace as deleteWorkspaceUiBlob,
+  getOrCreateWorkspaceIdForStorageKey,
   getStorageKeyForWorkspaceId,
   isUuid,
   loadAppState,
@@ -365,7 +366,21 @@ export async function deleteWorkspaceRemote(
 /** Matches `disambiguateWorkspaceNamesForPush`: "Name (2)" or "Name(2)". */
 const NUMBERED_VISIBLE_NAME = /^(.+?)\s*\((\d+)\)\s*$/;
 
-export function findRedundantNumberedVisibleWorkspaceIds(workspaces: Workspace[]): string[] {
+export type NumberedVisiblePruneOpts = {
+  /**
+   * When two duplicate "Home" rows both already exist on the server, disambiguation order is
+   * arbitrary; keep this id (typically `workspace_home`'s mapped UUID) even if it was suffixed
+   * to "Home (2)".
+   */
+  preferredHomeWorkspaceId?: string | null;
+  /** IDs from the latest remote `workspaces` SELECT used with `preferredHomeWorkspaceId`. */
+  remoteWorkspaceIdSet?: ReadonlySet<string> | null;
+};
+
+export function findRedundantNumberedVisibleWorkspaceIds(
+  workspaces: Workspace[],
+  opts?: NumberedVisiblePruneOpts | null,
+): string[] {
   const visible = workspaces.filter(
     (w) =>
       w?.id &&
@@ -396,6 +411,23 @@ export function findRedundantNumberedVisibleWorkspaceIds(workspaces: Workspace[]
       removeIds.push(w.id);
     }
   }
+
+  const pref = (opts?.preferredHomeWorkspaceId || '').trim();
+  const remoteSet = opts?.remoteWorkspaceIdSet;
+  if (pref && remoteSet && remoteSet.size > 0 && removeIds.includes(pref)) {
+    const bareCompetitor = workspaces.find(
+      (w) =>
+        w?.id &&
+        w.kind === 'visible' &&
+        (w.name || '').trim().toLowerCase() === 'home' &&
+        w.id !== pref,
+    );
+    if (bareCompetitor && remoteSet.has(pref) && remoteSet.has(bareCompetitor.id)) {
+      const idx = removeIds.indexOf(pref);
+      removeIds[idx] = bareCompetitor.id;
+    }
+  }
+
   return removeIds;
 }
 
@@ -417,8 +449,9 @@ async function purgeWorkspaceClientSide(workspaceId: string): Promise<void> {
  */
 async function pruneRedundantNumberedVisibleWorkspaces(
   workspaces: Workspace[],
+  opts?: NumberedVisiblePruneOpts | null,
 ): Promise<Workspace[]> {
-  const removeIds = findRedundantNumberedVisibleWorkspaceIds(workspaces);
+  const removeIds = findRedundantNumberedVisibleWorkspaceIds(workspaces, opts);
   if (removeIds.length === 0) return workspaces;
   const succeeded = new Set<string>();
   for (const id of removeIds) {
@@ -760,6 +793,25 @@ export async function fullSync(
       ? prepareWorkspacesForRemote(mergedAfterNumberedPrune, ownerId)
       : mergedAfterNumberedPrune;
     const remoteIds = new Set(remoteFinal.map((w) => w.id));
+    // `disambiguateWorkspaceNamesForPush` runs inside prepare and suffixes duplicate labels
+    // ("Home" + "Home (2)"). Pre-prepare prune only sees duplicate bare names, so it must run
+    // again here or the menu briefly shows "Home (2)" until a later fullSync.
+    if (ownerId) {
+      mergedWorkspacesWithOwner = await pruneRedundantNumberedVisibleWorkspaces(
+        mergedWorkspacesWithOwner,
+        {
+          preferredHomeWorkspaceId: getOrCreateWorkspaceIdForStorageKey('workspace_home'),
+          remoteWorkspaceIdSet: remoteIds,
+        },
+      );
+      const homeBoundId = getOrCreateWorkspaceIdForStorageKey('workspace_home');
+      mergedWorkspacesWithOwner = mergedWorkspacesWithOwner.map((w) => {
+        if (!w || w.id !== homeBoundId || w.kind !== 'visible') return w;
+        const nm = (w.name || '').trim();
+        if (/^home\s*\(\d+\)$/i.test(nm)) return { ...w, name: 'Home' };
+        return w;
+      });
+    }
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
     await saveLocalWorkspaces(mergedWorkspacesWithOwner);
