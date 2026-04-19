@@ -48,6 +48,55 @@ export function normalizeTagSlug(input) {
     .replace(/[^a-z0-9_]/g, '');
 }
 
+/** Raw tag draft field: strip leading `#` and collapse duplicate `#` (composer / SearchCommandBar). */
+export function normalizeTagDraftInput(raw) {
+  let v = String(raw ?? '');
+  v = v.replace(/^#+/, '');
+  v = v.replace(/\s+#+/g, ' #');
+  return v;
+}
+
+/**
+ * Draft after the UI `#` prefix: segments separated by ` # ` (Space inserts ` #` between tags).
+ * Used by SearchCommandBar and NoteCard edit tag row.
+ */
+export function tagDraftToHashtagLine(draft) {
+  let t = String(draft || '').trim();
+  if (!t) return '';
+  t = t.replace(/^#+/, '');
+  t = t.replace(/\s+#+/g, ' #');
+  t = t.replace(/\s+#\s*$/, '');
+  if (!t) return '';
+  const segments = t
+    .split(/\s+#\s*/)
+    .map((s) => s.trim().replace(/^#+/, '').replace(/\s+/g, '_'))
+    .filter(Boolean);
+  if (segments.length === 0) return '';
+  return segments.map((s) => `#${s}`).join(' ');
+}
+
+export function parseTagsFromDraft(draft) {
+  const line = tagDraftToHashtagLine(draft);
+  if (!line) return [];
+  const out = [];
+  const seen = new Set();
+  const re = /#([a-z0-9_]+)/gi;
+  let m;
+  while ((m = re.exec(line)) != null) {
+    const t = String(m[1] || '').toLowerCase();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Inverse of multi-tag draft: `a #b` for tags `['a','b']`. */
+export function tagsToTagDraft(tags) {
+  if (!Array.isArray(tags) || tags.length === 0) return '';
+  return tags.filter(Boolean).join(' #');
+}
+
 /** Remove one tag from the hashtag line; leaves body and non–tag-line notes unchanged. */
 export function removeTagFromNoteText(raw, tagSlug) {
   const target = normalizeTagSlug(tagSlug);

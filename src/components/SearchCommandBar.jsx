@@ -7,41 +7,10 @@ import { LiveTextScanner } from '../plugins/liveTextScanner.js';
 import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
 import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js';
 import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPopover.jsx';
+import { normalizeTagDraftInput, parseTagsFromDraft } from '../utils/noteTags';
 
 const TEXTAREA_MAX_PX = 160;
 const TAG_LEADING_ICON = '#';
-
-/** Draft uses the left UI "#" for the first tag only; further tags use " #name" in the input. */
-function tagDraftToHashtagLine(draft) {
-  let t = String(draft || '').trim();
-  if (!t) return '';
-  t = t.replace(/^#+/, '');
-  t = t.replace(/\s+#+/g, ' #');
-  t = t.replace(/\s+#\s*$/, '');
-  if (!t) return '';
-  const segments = t
-    .split(/\s+#\s*/)
-    .map((s) => s.trim().replace(/^#+/, '').replace(/\s+/g, '_'))
-    .filter(Boolean);
-  if (segments.length === 0) return '';
-  return segments.map((s) => `#${s}`).join(' ');
-}
-
-function parseTagsFromDraft(draft) {
-  const line = tagDraftToHashtagLine(draft);
-  if (!line) return [];
-  const out = [];
-  const seen = new Set();
-  const re = /#([a-z0-9_]+)/gi;
-  let m;
-  while ((m = re.exec(line)) != null) {
-    const t = String(m[1] || '').toLowerCase();
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
-  }
-  return out;
-}
 
 function SendNoteIcon({ className = 'w-5 h-5' }) {
   return (
@@ -345,12 +314,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
             <input
               type="text"
               value={tagDraft}
-              onChange={(e) => {
-                let v = e.target.value;
-                v = v.replace(/^#+/, '');
-                v = v.replace(/\s+#+/g, ' #');
-                setTagDraft(v);
-              }}
+              onChange={(e) => setTagDraft(normalizeTagDraftInput(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

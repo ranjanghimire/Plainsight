@@ -5,7 +5,10 @@ import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
 import {
   composeNoteWithTags,
+  normalizeTagDraftInput,
   parseNoteBodyAndTags,
+  parseTagsFromDraft,
+  tagsToTagDraft,
   trimTrailingBlankLines,
 } from '../utils/noteTags';
 import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
@@ -180,6 +183,7 @@ export function NoteCard({
   const { openTagsPage } = useTagsNav();
   const parsed = useMemo(() => parseNoteBodyAndTags(note.text), [note.text]);
   const [editBody, setEditBody] = useState(() => trimTrailingBlankLines(parsed.body));
+  const [tagDraft, setTagDraft] = useState(() => tagsToTagDraft(parsed.tags));
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
@@ -214,8 +218,9 @@ export function NoteCard({
   useEffect(() => {
     if (!isEditing) {
       setEditBody(trimTrailingBlankLines(parsed.body));
+      setTagDraft(tagsToTagDraft(parsed.tags));
     }
-  }, [parsed.body, isEditing]);
+  }, [parsed.body, parsed.tags, isEditing]);
 
   useEffect(() => {
     return () => {
@@ -256,7 +261,7 @@ export function NoteCard({
   }, [isEditing]);
 
   const commitText = useCallback(() => {
-    const { tags } = parseNoteBodyAndTags(note.text);
+    const tags = parseTagsFromDraft(tagDraft);
     const full = composeNoteWithTags(tags, editBody);
     if (isArchived) {
       if (full !== note.text) {
@@ -272,18 +277,43 @@ export function NoteCard({
     if (Object.keys(updates).length > 0) onUpdate(note.id, updates);
     setIsEditing(false);
     resetFormatModes();
-  }, [boldMode, editBody, isArchived, note.boldFirstLine, note.id, note.text, onArchivedUpdate, onUpdate, resetFormatModes]);
+  }, [
+    boldMode,
+    editBody,
+    isArchived,
+    note.boldFirstLine,
+    note.id,
+    note.text,
+    onArchivedUpdate,
+    onUpdate,
+    resetFormatModes,
+    tagDraft,
+  ]);
 
   commitFnRef.current = commitText;
 
-  const handleTextareaBlur = useCallback(
+  const commitIfFocusLeftCard = useCallback(
     (e) => {
-      requestAnimationFrame(() => setTextareaFocused(false));
       const rt = typeof e.relatedTarget === 'string' ? null : e.relatedTarget;
       if (rt instanceof Node && cardShellRef.current?.contains(rt)) return;
       commitText();
     },
     [commitText],
+  );
+
+  const handleTextareaBlur = useCallback(
+    (e) => {
+      requestAnimationFrame(() => setTextareaFocused(false));
+      commitIfFocusLeftCard(e);
+    },
+    [commitIfFocusLeftCard],
+  );
+
+  const handleTagRowInputBlur = useCallback(
+    (e) => {
+      commitIfFocusLeftCard(e);
+    },
+    [commitIfFocusLeftCard],
   );
 
   const setEditBodyFromFormat = useCallback((next) => {
@@ -298,6 +328,7 @@ export function NoteCard({
       toggleEditTimerRef.current = null;
       if (isArchived) archivedEditKeyRef.current = note.text;
       setEditBody(trimTrailingBlankLines(parsed.body));
+      setTagDraft(tagsToTagDraft(parsed.tags));
       setIsEditing(true);
       return;
     }
@@ -369,29 +400,96 @@ export function NoteCard({
         className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
       >
         {isEditing ? (
-          <textarea
-            ref={textareaRef}
-            value={editBody}
-            onChange={(e) => {
-              setEditBody(e.target.value);
-            }}
-            onBlur={handleTextareaBlur}
-            onFocus={() => setTextareaFocused(true)}
-            onKeyDown={(e) => {
-              handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
-              if (e.key === 'Enter' && !e.shiftKey) {
-                requestAnimationFrame(() => {
-                  requestAnimationFrame(() => scrollNoteTextareaCaretIntoView(textareaRef.current));
-                });
+          <div className="flex min-w-0 flex-col">
+            <textarea
+              ref={textareaRef}
+              value={editBody}
+              onChange={(e) => {
+                setEditBody(e.target.value);
+              }}
+              onBlur={handleTextareaBlur}
+              onFocus={() => setTextareaFocused(true)}
+              onKeyDown={(e) => {
+                handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => scrollNoteTextareaCaretIntoView(textareaRef.current));
+                  });
+                }
+              }}
+              className={
+                isArchived
+                  ? 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600 caret-neutral-900 dark:caret-neutral-100'
+                  : 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200 caret-stone-900 dark:caret-stone-100'
               }
-            }}
-            className={
-              isArchived
-                ? 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600 caret-neutral-900 dark:caret-neutral-100'
-                : 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200 caret-stone-900 dark:caret-stone-100'
-            }
-            autoFocus
-          />
+              autoFocus
+            />
+            <div
+              className={
+                isArchived
+                  ? 'mt-2 flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-neutral-200 px-2 pt-2 text-neutral-500 dark:border-neutral-600 dark:text-neutral-400'
+                  : 'mt-2 flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-stone-200 px-2 pt-2 text-stone-500 dark:border-stone-600 dark:text-stone-400'
+              }
+            >
+              <div className="flex min-h-0 min-w-0 flex-1 items-center gap-0 overflow-hidden">
+                <span className="shrink-0 select-none pr-0 text-sm leading-none" aria-hidden>
+                  #
+                </span>
+                <input
+                  type="text"
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(normalizeTagDraftInput(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      textareaRef.current?.focus();
+                      return;
+                    }
+                    if (e.key !== ' ' && e.key !== 'Spacebar') return;
+                    e.preventDefault();
+                    const input = e.currentTarget;
+                    const start = input.selectionStart ?? tagDraft.length;
+                    const end = input.selectionEnd ?? tagDraft.length;
+                    const before = tagDraft.slice(0, start);
+                    const after = tagDraft.slice(end);
+                    if (/\s#\s*$/.test(before)) return;
+                    const insert = ' #';
+                    const next = `${before}${insert}${after}`;
+                    setTagDraft(next);
+                    const newPos = start + insert.length;
+                    requestAnimationFrame(() => {
+                      try {
+                        input.setSelectionRange(newPos, newPos);
+                      } catch {
+                        /* ignore */
+                      }
+                    });
+                  }}
+                  onBlur={handleTagRowInputBlur}
+                  placeholder="tag"
+                  className={
+                    isArchived
+                      ? 'min-w-0 flex-1 bg-transparent pl-0 text-sm text-neutral-700 placeholder-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder-neutral-500'
+                      : 'min-w-0 flex-1 bg-transparent pl-0 text-sm text-stone-700 placeholder-stone-400 focus:outline-none dark:text-stone-200 dark:placeholder-stone-500'
+                  }
+                  aria-label="Tags"
+                />
+              </div>
+              <NoteFormatPopover
+                expanded={popoverExpanded}
+                onOpen={openPopover}
+                onClose={closePopover}
+                boldMode={boldMode}
+                onBoldChange={setBoldMode}
+                bulletsMode={bulletsMode}
+                onBulletsChange={setBulletsMode}
+                textareaRef={textareaRef}
+                value={editBody}
+                setValue={setEditBodyFromFormat}
+                toggleBullets={toggleBullets}
+              />
+            </div>
+          </div>
         ) : (
           <div
             role="button"
@@ -472,24 +570,20 @@ export function NoteCard({
               )}
             </div>
 
-            {parsed.tags.length > 0 || isEditing ? (
+            {parsed.tags.length > 0 && !isEditing ? (
               <div
-                className={`flex min-w-0 items-stretch gap-1 pt-2 transition-opacity duration-150 ease-out ${
+                className={`flex min-w-0 items-center gap-1 pt-2 transition-opacity duration-150 ease-out ${
                   showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                 }`}
               >
-                {parsed.tags.length > 0 ? (
-                  <TagRowIcon
-                    className={
-                      isArchived
-                        ? 'w-3.5 h-3.5 shrink-0 self-start text-neutral-400 dark:text-neutral-500 mt-0.5'
-                        : 'w-3.5 h-3.5 shrink-0 self-start text-stone-400 dark:text-stone-500 mt-0.5'
-                    }
-                  />
-                ) : isEditing ? (
-                  <span className="w-3.5 shrink-0 self-start" aria-hidden />
-                ) : null}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-center gap-1 self-center">
+                <TagRowIcon
+                  className={
+                    isArchived
+                      ? 'w-3.5 h-3.5 shrink-0 text-neutral-400 dark:text-neutral-500'
+                      : 'w-3.5 h-3.5 shrink-0 text-stone-400 dark:text-stone-500'
+                  }
+                />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-center gap-1">
                   {parsed.tags.map((t) => (
                     <button
                       key={t}
@@ -516,21 +610,6 @@ export function NoteCard({
                     </button>
                   ))}
                 </div>
-                {isEditing ? (
-                  <NoteFormatPopover
-                    expanded={popoverExpanded}
-                    onOpen={openPopover}
-                    onClose={closePopover}
-                    boldMode={boldMode}
-                    onBoldChange={setBoldMode}
-                    bulletsMode={bulletsMode}
-                    onBulletsChange={setBulletsMode}
-                    textareaRef={textareaRef}
-                    value={editBody}
-                    setValue={setEditBodyFromFormat}
-                    toggleBullets={toggleBullets}
-                  />
-                ) : null}
               </div>
             ) : null}
           </div>
