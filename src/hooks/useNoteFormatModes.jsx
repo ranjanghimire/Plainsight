@@ -73,11 +73,23 @@ export function useNoteFormatModes({ searchMode = false, onSubmit, onCommit } = 
     const indent = bulletIndentRef.current;
     const start = textarea.selectionStart ?? value.length;
     const end = textarea.selectionEnd ?? value.length;
-    const ins =
-      value.length === 0 && start === 0 ? `${indent}- ` : `\n${indent}- `;
-    const next = replaceRange(value, start, end, ins);
+    const { lineStart, lineEnd, line } = lineBoundsAt(value, start);
+    const lineIsEmpty = line.replace(/\r/g, '').trim() === '';
+
+    let next;
+    let pos;
+    // On a blank line, start the list on this line (no extra leading \n). After non-empty text,
+    // still open a new line before the first bullet.
+    if (start === end && lineIsEmpty) {
+      const ins = `${indent}- `;
+      next = replaceRange(value, lineStart, lineEnd, ins);
+      pos = lineStart + ins.length;
+    } else {
+      const ins = `\n${indent}- `;
+      next = replaceRange(value, start, end, ins);
+      pos = start + ins.length;
+    }
     setValue(next);
-    const pos = start + ins.length;
     requestAnimationFrame(() => {
       try {
         textarea.focus();

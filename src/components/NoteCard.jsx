@@ -102,17 +102,24 @@ function renderBoldLeadVisual(lead) {
 const DISPLAY_LINE_BLOCK =
   'block w-full whitespace-pre-wrap break-words font-normal text-left';
 
+/** Extra space under a bold first line before line 2+ (semibold reads cramped without it). */
+const BOLD_FIRST_LINE_AFTER_GAP = 'mb-1.5';
+
 function renderNoteDisplayBody(displayBody, boldFirst) {
   const lines = displayBody
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .split('\n')
     .map(normalizeBulletDisplayLine);
+  const boldFirstHasMoreLines = Boolean(boldFirst && lines.length > 1);
   return lines.map((line, i) => {
     if (boldFirst && i === 0) {
       const { lead, bold } = splitFirstLineForBoldDisplay(line);
       return (
-        <span key={i} className={DISPLAY_LINE_BLOCK}>
+        <span
+          key={i}
+          className={boldFirstHasMoreLines ? `${DISPLAY_LINE_BLOCK} ${BOLD_FIRST_LINE_AFTER_GAP}` : DISPLAY_LINE_BLOCK}
+        >
           {renderBoldLeadVisual(lead)}
           {bold ? <span className="font-semibold">{bold}</span> : null}
         </span>
@@ -530,7 +537,7 @@ export function NoteCard({
                     : onUpdate(note.id, { category: cat })
                 }
                 onAddNew={onAddCategory}
-                triggerLabel="+Add category"
+                triggerLabel="+ Category"
               />
               {isArchived && deletedAtIso ? (
                 <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">

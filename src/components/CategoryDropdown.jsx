@@ -8,7 +8,7 @@ export function CategoryDropdown({
   currentCategory,
   onSelect,
   onAddNew,
-  triggerLabel = '+Add category',
+  triggerLabel = '+ Category',
   className = '',
 }) {
   const [open, setOpen] = useState(false);
