@@ -192,7 +192,12 @@ export function WorkspaceProvider({ children }) {
   const [syncHydrationConnectivityWarning, setSyncHydrationConnectivityWarning] =
     useState(false);
   const hydrationRetryTimerRef = useRef(null);
+  const hydrationWarningRef = useRef(false);
   const workspaceKey = activeStorageKey;
+
+  useEffect(() => {
+    hydrationWarningRef.current = syncHydrationConnectivityWarning;
+  }, [syncHydrationConnectivityWarning]);
 
   useEffect(
     () => subscribeSyncGating(() => setCanUseSupabase(getCanUseSupabase())),
@@ -314,6 +319,18 @@ export function WorkspaceProvider({ children }) {
         hydrationRetryTimerRef.current = null;
       }
     };
+  }, [canUseSupabase]);
+
+  /** PWA / mobile: retry hydration when returning to the app if the last full sync failed (amber dot). */
+  useEffect(() => {
+    if (!canUseSupabase) return undefined;
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!hydrationWarningRef.current) return;
+      void runInitialHydration();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, [canUseSupabase]);
 
   useEffect(() => {

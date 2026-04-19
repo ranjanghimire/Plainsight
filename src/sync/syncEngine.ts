@@ -365,7 +365,7 @@ export async function deleteWorkspaceRemote(
 /** Matches `disambiguateWorkspaceNamesForPush`: "Name (2)" or "Name(2)". */
 const NUMBERED_VISIBLE_NAME = /^(.+?)\s*\((\d+)\)\s*$/;
 
-function findRedundantNumberedVisibleWorkspaceIds(workspaces: Workspace[]): string[] {
+export function findRedundantNumberedVisibleWorkspaceIds(workspaces: Workspace[]): string[] {
   const visible = workspaces.filter(
     (w) =>
       w?.id &&
@@ -373,6 +373,11 @@ function findRedundantNumberedVisibleWorkspaceIds(workspaces: Workspace[]): stri
       (w.name || '').trim().toLowerCase() !== 'home',
   );
   const canonicalNamesLower = new Set<string>();
+  /** Canonical tab uses name "Home" but is excluded from `visible` above — still suppresses "Home (2)". */
+  const hasCanonicalHome = workspaces.some(
+    (w) => w?.id && w.kind === 'visible' && (w.name || '').trim().toLowerCase() === 'home',
+  );
+  if (hasCanonicalHome) canonicalNamesLower.add('home');
   for (const w of visible) {
     const nm = (w.name || '').trim();
     if (!nm) continue;

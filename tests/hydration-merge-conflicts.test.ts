@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { findRedundantNumberedVisibleWorkspaceIds } from '../src/sync/syncEngine';
 import {
   mergeArchivedNotes,
   mergeCategories,
@@ -181,5 +182,36 @@ describe('hydration merge — workspace pins (mergeWorkspacePins)', () => {
     const remote: WorkspacePin[] = [];
     const { merged } = mergeWorkspacePins(local, remote);
     expect(merged.map((p) => p.position)).toEqual([0, 10]);
+  });
+});
+
+describe('numbered visible workspace prune (canonical Home vs Home (2))', () => {
+  const vis = (id: string, name: string): Workspace => ({
+    id,
+    owner_id: 'o',
+    name,
+    kind: 'visible',
+    created_at: '2020-01-01T00:00:00.000Z',
+    updated_at: '2020-01-01T00:00:00.000Z',
+  });
+
+  it('flags Home (2) redundant when a visible workspace named Home exists', () => {
+    const homeId = createHydrationTestWorkspaceId();
+    const dupId = createHydrationTestWorkspaceId();
+    const secondId = createHydrationTestWorkspaceId();
+    const ids = findRedundantNumberedVisibleWorkspaceIds([
+      vis(homeId, 'Home'),
+      vis(dupId, 'Home (2)'),
+      vis(secondId, 'Second'),
+    ]);
+    expect(ids).toContain(dupId);
+    expect(ids).not.toContain(homeId);
+    expect(ids).not.toContain(secondId);
+  });
+
+  it('does not flag Home (2) when no canonical Home row', () => {
+    const dupId = createHydrationTestWorkspaceId();
+    const ids = findRedundantNumberedVisibleWorkspaceIds([vis(dupId, 'Home (2)')]);
+    expect(ids).toHaveLength(0);
   });
 });
