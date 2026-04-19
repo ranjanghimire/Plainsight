@@ -459,11 +459,11 @@ export function NotesView() {
     [archivedNotesMap, categoryNextFilter, inputValue],
   );
 
-  const handleCreateNote = (text) => {
+  const handleCreateNote = (text, opts) => {
     if (!text?.trim()) return;
     const cat =
       categoryFilter === UNCATEGORIZED_FILTER ? null : categoryFilter;
-    addNote(text.trim(), cat);
+    addNote(text.trim(), cat, { boldFirstLine: Boolean(opts?.boldFirstLine) });
   };
 
   const handleInlineAddCategory = () => {

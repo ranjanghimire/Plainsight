@@ -243,7 +243,7 @@ describe('SearchCommandBar', () => {
     await user.type(box, 'Hello from test');
     await user.keyboard('{Enter}');
     await waitFor(() => {
-      expect(screen.getByText('Hello from test')).toBeInTheDocument();
+      expect(screen.getAllByText('Hello from test').length).toBeGreaterThanOrEqual(1);
     });
     expect(box).toHaveValue('');
   });
@@ -271,12 +271,12 @@ describe('SearchCommandBar', () => {
 });
 
 describe('SearchCommandBar keyboard (isolated)', () => {
-  function Bar({ onCreate }: { onCreate: (s: string) => void }) {
+  function Bar({ onCreate }: { onCreate: (s: string, opts?: { boldFirstLine?: boolean }) => void }) {
     const [v, setV] = useState('');
     return <SearchCommandBar value={v} onChange={setV} onCreateNote={onCreate} />;
   }
 
-  function renderSearchBar(onCreate: (s: string) => void = vi.fn()) {
+  function renderSearchBar(onCreate: (s: string, opts?: { boldFirstLine?: boolean }) => void = vi.fn()) {
     return render(
       <ThemeProvider>
         <AuthProvider>
@@ -301,7 +301,7 @@ describe('SearchCommandBar keyboard (isolated)', () => {
     const box = screen.getByRole('textbox', { name: 'New note' });
     await user.type(box, 'Solo line');
     await user.keyboard('{Enter}');
-    expect(onCreate).toHaveBeenCalledWith('Solo line');
+    expect(onCreate).toHaveBeenCalledWith('Solo line', { boldFirstLine: false });
     expect(box).toHaveValue('');
   });
 

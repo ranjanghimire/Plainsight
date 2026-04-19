@@ -1,12 +1,113 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTagsNav } from '../context/TagsNavContext';
 import { CategoryDropdown } from './CategoryDropdown';
 import { formatNoteDate } from '../utils/formatDate';
 import { composeNoteWithTags, parseNoteBodyAndTags } from '../utils/noteTags';
+import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
+import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js';
+import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPopover.jsx';
 
 const ACTIVE_DELETE_MS = 180;
 const ARCHIVE_DELETE_MS = 170;
+
+/**
+ * Bold changes glyph metrics; keep shared indent / `- ` prefix in normal weight so
+ * later bullet lines align with the first line in display mode.
+ */
+function splitFirstLineForBoldDisplay(firstLine) {
+  const bulletLead = firstLine.match(/^(\s*-\s*)/);
+  if (bulletLead) {
+    return { lead: bulletLead[1], bold: firstLine.slice(bulletLead[1].length) };
+  }
+  const spaceLead = firstLine.match(/^(\s*)/);
+  const lead = spaceLead ? spaceLead[1] : '';
+  return { lead, bold: firstLine.slice(lead.length) };
+}
+
+/** Matches composer `DEFAULT_BULLET_INDENT` in useNoteFormatModes.jsx */
+const BULLET_DISPLAY_INDENT = '  ';
+
+/**
+ * First bullet line is often stored as "- item" (hyphen at text column 0) while Enter inserts "  - " on
+ * the next line — normalize for display so columns line up with existing notes.
+ */
+function normalizeBulletDisplayLine(line) {
+  const t = line.replace(/\r/g, '');
+  if (/^\s+-\s/.test(t)) return t;
+  if (/^-\s/.test(t)) return `${BULLET_DISPLAY_INDENT}${t}`;
+  return t;
+}
+
+/** Filled disc shown in read-only note body; editor still uses `-`. */
+function BulletGlyph({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+      <circle cx="6" cy="6" r="1.85" />
+    </svg>
+  );
+}
+
+/** Small, muted; `align-middle` centers with text cap-height without heavy translate hacks. */
+const BULLET_GLYPH_CLASS =
+  'inline-block shrink-0 align-middle h-[0.58em] w-[0.58em] text-stone-400 opacity-75 dark:text-stone-500';
+
+/** Replace stored `- ` bullet marker with a disc for display only. */
+function renderDisplayLineVisual(line) {
+  if (line.length === 0) return '\u00a0';
+  const m = line.match(/^(\s*)-\s*(.*)$/);
+  if (!m) return line;
+  const [, indent, rest] = m;
+  return (
+    <>
+      {indent}
+      <BulletGlyph className={BULLET_GLYPH_CLASS} />
+      {rest ? <> {rest}</> : null}
+    </>
+  );
+}
+
+function renderBoldLeadVisual(lead) {
+  if (!lead) return null;
+  const m = lead.match(/^(\s*)-\s*$/);
+  if (m) {
+    return (
+      <>
+        <span className="font-normal">{m[1]}</span>
+        <BulletGlyph className={BULLET_GLYPH_CLASS} />
+      </>
+    );
+  }
+  return <span className="font-normal">{lead}</span>;
+}
+
+/** One block per source line so soft-wrap cannot borrow the next line’s horizontal origin (fixes bullet column drift). */
+const DISPLAY_LINE_BLOCK =
+  'block w-full whitespace-pre-wrap break-words font-normal text-left';
+
+function renderNoteDisplayBody(displayBody, boldFirst) {
+  const lines = displayBody
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(normalizeBulletDisplayLine);
+  return lines.map((line, i) => {
+    if (boldFirst && i === 0) {
+      const { lead, bold } = splitFirstLineForBoldDisplay(line);
+      return (
+        <span key={i} className={DISPLAY_LINE_BLOCK}>
+          {renderBoldLeadVisual(lead)}
+          {bold ? <span className="font-semibold">{bold}</span> : null}
+        </span>
+      );
+    }
+    return (
+      <span key={i} className={DISPLAY_LINE_BLOCK}>
+        {renderDisplayLineVisual(line)}
+      </span>
+    );
+  });
+}
 
 function TrashIcon() {
   return (
@@ -71,6 +172,31 @@ export function NoteCard({
   const toggleEditTimerRef = useRef(null);
   const archivedEditKeyRef = useRef(note.text);
   const deleteTimerRef = useRef(null);
+  const textareaRef = useRef(null);
+  const cardShellRef = useRef(null);
+  const commitFnRef = useRef(() => {});
+  const [textareaFocused, setTextareaFocused] = useState(false);
+  const floatingSubmitTopPx = useFloatingSubmitTopPx();
+
+  const {
+    boldMode,
+    setBoldMode,
+    bulletsMode,
+    setBulletsMode,
+    newlineMode,
+    popoverExpanded,
+    openPopover,
+    closePopover,
+    onPopoverPointerDown,
+    onPopoverPointerUp,
+    onTypingWhileExpanded,
+    handleTextareaKeyDown,
+    toggleBullets,
+    resetFormatModes,
+  } = useNoteFormatModes({
+    searchMode: false,
+    onCommit: () => commitFnRef.current(),
+  });
 
   const isArchived = variant === 'archived';
 
@@ -87,7 +213,11 @@ export function NoteCard({
     };
   }, []);
 
-  const commitText = () => {
+  useEffect(() => {
+    if (isEditing) setBoldMode(Boolean(note.boldFirstLine));
+  }, [isEditing, note.id, setBoldMode]);
+
+  const commitText = useCallback(() => {
     const { tags } = parseNoteBodyAndTags(note.text);
     const full = composeNoteWithTags(tags, editBody);
     if (isArchived) {
@@ -95,11 +225,32 @@ export function NoteCard({
         onArchivedUpdate?.(archivedEditKeyRef.current, { text: full });
       }
       setIsEditing(false);
+      resetFormatModes();
       return;
     }
-    if (full !== note.text) onUpdate(note.id, { text: full });
+    const updates = {};
+    if (full !== note.text) updates.text = full;
+    if (Boolean(note.boldFirstLine) !== Boolean(boldMode)) updates.boldFirstLine = boldMode;
+    if (Object.keys(updates).length > 0) onUpdate(note.id, updates);
     setIsEditing(false);
-  };
+    resetFormatModes();
+  }, [boldMode, editBody, isArchived, note.boldFirstLine, note.id, note.text, onArchivedUpdate, onUpdate, resetFormatModes]);
+
+  commitFnRef.current = commitText;
+
+  const handleTextareaBlur = useCallback(
+    (e) => {
+      requestAnimationFrame(() => setTextareaFocused(false));
+      const rt = typeof e.relatedTarget === 'string' ? null : e.relatedTarget;
+      if (rt instanceof Node && cardShellRef.current?.contains(rt)) return;
+      commitText();
+    },
+    [commitText],
+  );
+
+  const setEditBodyFromFormat = useCallback((next) => {
+    setEditBody(String(next ?? ''));
+  }, []);
 
   /** Single activate toggles meta; second activate within window opens editor (mouse dblclick + touch double-tap). */
   const handleTextBodyPointerPick = () => {
@@ -130,6 +281,11 @@ export function NoteCard({
   const bodyTextClass = isArchived
     ? 'text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation'
     : 'text-stone-700 dark:text-stone-300 whitespace-pre-wrap cursor-pointer min-h-[1.5em] touch-manipulation';
+
+  /** Read-only body: per-line blocks + `px-2 text-base` to match the editor textarea (no bold-only assumptions). */
+  const displayBodyParaClass = isArchived
+    ? 'text-neutral-700 dark:text-neutral-300 cursor-pointer min-h-[1.5em] touch-manipulation px-2 text-base font-normal'
+    : 'text-stone-700 dark:text-stone-300 cursor-pointer min-h-[1.5em] touch-manipulation px-2 text-base font-normal';
 
   const deletedAtIso =
     note.lastDeletedAt != null
@@ -164,21 +320,27 @@ export function NoteCard({
     }, ARCHIVE_DELETE_MS);
   };
 
+  const displayBody = parsed.body;
+  const displayBoldFirst = Boolean(note.boldFirstLine);
+
   return (
     <div className={outerWrapClass}>
       <div
+        ref={cardShellRef}
         className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
       >
         {isEditing ? (
           <textarea
+            ref={textareaRef}
             value={editBody}
-            onChange={(e) => setEditBody(e.target.value)}
-            onBlur={commitText}
+            onChange={(e) => {
+              setEditBody(e.target.value);
+              if (popoverExpanded) onTypingWhileExpanded();
+            }}
+            onBlur={handleTextareaBlur}
+            onFocus={() => setTextareaFocused(true)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                commitText();
-              }
+              handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
             }}
             className={
               isArchived
@@ -188,9 +350,20 @@ export function NoteCard({
             autoFocus
           />
         ) : (
-          <p onClick={handleTextBodyPointerPick} className={bodyTextClass}>
-            {parsed.body || 'Double-click or double-tap to edit…'}
-          </p>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={handleTextBodyPointerPick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleTextBodyPointerPick();
+              }
+            }}
+            className={displayBody ? displayBodyParaClass : bodyTextClass}
+          >
+            {displayBody ? renderNoteDisplayBody(displayBody, displayBoldFirst) : 'Double-click or double-tap to edit…'}
+          </div>
         )}
         <div
           className={`grid transition-[grid-template-rows] duration-200 ease-out ${showMetaRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
@@ -256,20 +429,24 @@ export function NoteCard({
               )}
             </div>
 
-            {parsed.tags.length > 0 ? (
+            {parsed.tags.length > 0 || isEditing ? (
               <div
-                className={`flex items-start gap-1.5 pt-2 transition-opacity duration-150 ease-out ${
+                className={`flex min-w-0 items-stretch gap-1 pt-2 transition-opacity duration-150 ease-out ${
                   showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                 }`}
               >
-                <TagRowIcon
-                  className={
-                    isArchived
-                      ? 'w-3.5 h-3.5 shrink-0 text-neutral-400 dark:text-neutral-500 mt-0.5'
-                      : 'w-3.5 h-3.5 shrink-0 text-stone-400 dark:text-stone-500 mt-0.5'
-                  }
-                />
-                <div className="flex flex-wrap gap-1 min-w-0">
+                {parsed.tags.length > 0 ? (
+                  <TagRowIcon
+                    className={
+                      isArchived
+                        ? 'w-3.5 h-3.5 shrink-0 self-start text-neutral-400 dark:text-neutral-500 mt-0.5'
+                        : 'w-3.5 h-3.5 shrink-0 self-start text-stone-400 dark:text-stone-500 mt-0.5'
+                    }
+                  />
+                ) : isEditing ? (
+                  <span className="w-3.5 shrink-0 self-start" aria-hidden />
+                ) : null}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-center gap-1 self-center">
                   {parsed.tags.map((t) => (
                     <button
                       key={t}
@@ -296,11 +473,37 @@ export function NoteCard({
                     </button>
                   ))}
                 </div>
+                {isEditing ? (
+                  <NoteFormatPopover
+                    expanded={popoverExpanded}
+                    onOpen={openPopover}
+                    onClose={closePopover}
+                    boldMode={boldMode}
+                    onBoldChange={setBoldMode}
+                    bulletsMode={bulletsMode}
+                    onBulletsChange={setBulletsMode}
+                    onPopoverPointerDown={onPopoverPointerDown}
+                    onPopoverPointerUp={onPopoverPointerUp}
+                    textareaRef={textareaRef}
+                    value={editBody}
+                    setValue={setEditBodyFromFormat}
+                    toggleBullets={toggleBullets}
+                  />
+                ) : null}
               </div>
             ) : null}
           </div>
         </div>
       </div>
+
+      {isEditing ? (
+        <FloatingNoteSubmit
+          visible={newlineMode && textareaFocused}
+          topPx={floatingSubmitTopPx}
+          onClick={commitText}
+          disabled={false}
+        />
+      ) : null}
     </div>
   );
 }

@@ -709,15 +709,14 @@ export function WorkspaceProvider({ children }) {
     [activeStorageKey, bumpWorkspaceSwitch],
   );
 
-  const addNote = useCallback((text, category = null) => {
+  const addNote = useCallback((text, category = null, opts = {}) => {
     const now = new Date().toISOString();
     const id = uuidv4();
+    const row = { id, text, category, createdAt: now, updatedAt: now };
+    if (opts.boldFirstLine) row.boldFirstLine = true;
     setData((prev) => ({
       ...prev,
-      notes: [
-        { id, text, category, createdAt: now, updatedAt: now },
-        ...(prev.notes || []),
-      ],
+      notes: [row, ...(prev.notes || [])],
     }));
     queueFullSync();
     return id;

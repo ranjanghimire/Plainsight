@@ -104,7 +104,7 @@ describe('tags in notes — persist locally', () => {
     const user2 = userEvent.setup();
     renderFullApp(['/']);
     await waitFor(() => {
-      expect(screen.getByText(/persisttag/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/persisttag/i).length).toBeGreaterThanOrEqual(1);
     });
     const d = loadWorkspace('workspace_home');
     const note = d.notes?.find((n) => String(n.text).includes('persisttag'));

@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getMasterKey, setMasterKey, clearMasterKey } from '../utils/storage';
 import { LiveTextScanner } from '../plugins/liveTextScanner.js';
+import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
+import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js';
+import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPopover.jsx';
 
 const TEXTAREA_MAX_PX = 160;
 const TAG_LEADING_ICON = '#';
@@ -81,11 +84,34 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     useWorkspace();
   const textareaRef = useRef(null);
   const rootRef = useRef(null);
+  const submitEntryRef = useRef(() => {});
   /** True while focus is anywhere inside the bar (textarea, tags, or send). */
   const [barFocused, setBarFocused] = useState(false);
+  const [textareaFocused, setTextareaFocused] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const [liveTextScanAvailable, setLiveTextScanAvailable] = useState(false);
   const [liveTextScanMessage, setLiveTextScanMessage] = useState('');
+  const floatingSubmitTopPx = useFloatingSubmitTopPx();
+
+  const {
+    boldMode,
+    setBoldMode,
+    bulletsMode,
+    setBulletsMode,
+    newlineMode,
+    popoverExpanded,
+    openPopover,
+    closePopover,
+    onPopoverPointerDown,
+    onPopoverPointerUp,
+    onTypingWhileExpanded,
+    handleTextareaKeyDown,
+    toggleBullets,
+    resetFormatModes,
+  } = useNoteFormatModes({
+    searchMode: true,
+    onSubmit: () => submitEntryRef.current(),
+  });
 
   useEffect(() => {
     if (Capacitor.getPlatform() !== 'ios') return undefined;
@@ -137,6 +163,17 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_PX)}px`;
   }, [value]);
 
+  const setValueFromFormat = useCallback(
+    (next) => {
+      let v = String(next ?? '');
+      if (!searchOnly) {
+        v = v.replace(/^\.\.\s+/, '..').replace(/^\.\s+/, '.');
+      }
+      onChange?.(v);
+    },
+    [onChange, searchOnly],
+  );
+
   const handleChange = useCallback(
     (e) => {
       let v = e.target.value;
@@ -144,8 +181,9 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
         v = v.replace(/^\.\.\s+/, '..').replace(/^\.\s+/, '.');
       }
       onChange?.(v);
+      if (popoverExpanded) onTypingWhileExpanded();
     },
-    [onChange, searchOnly],
+    [onChange, searchOnly, popoverExpanded, onTypingWhileExpanded],
   );
 
   const applyCommand = useCallback(() => {
@@ -211,19 +249,22 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     }
     const tagLine = tags.length ? tags.map((t) => `#${t}`).join(' ') : '';
     const combined = tagLine ? `${tagLine}\n${trimmed}` : trimmed;
-    onCreateNote?.(combined);
+    onCreateNote?.(combined, { boldFirstLine: boldMode });
     onChange?.('');
     setTagDraft('');
-  }, [searchOnly, value, applyCommand, onCreateNote, onChange, tags]);
+    resetFormatModes();
+  }, [searchOnly, value, applyCommand, onCreateNote, onChange, tags, boldMode, resetFormatModes]);
+
+  submitEntryRef.current = submitEntry;
 
   const handleKeyDown = useCallback(
     (e) => {
       if (searchOnly) return;
-      if (e.key !== 'Enter' || e.shiftKey) return;
-      e.preventDefault();
-      submitEntry();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        handleTextareaKeyDown(e, textareaRef.current, value, setValueFromFormat);
+      }
     },
-    [searchOnly, submitEntry],
+    [searchOnly, handleTextareaKeyDown, value, setValueFromFormat],
   );
 
   const canSubmit = !searchOnly && Boolean(value.trim());
@@ -266,7 +307,13 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => setLiveTextScanMessage('')}
+          onFocus={() => {
+            setLiveTextScanMessage('');
+            setTextareaFocused(true);
+          }}
+          onBlur={() => {
+            requestAnimationFrame(() => setTextareaFocused(false));
+          }}
           aria-label={searchOnly ? 'Search archive' : 'New note'}
         />
         {liveTextScanAvailable && !searchOnly && (
@@ -294,50 +341,76 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       ) : null}
 
       {showTagRow && (
-        <div className="border-t border-stone-200 dark:border-stone-600 px-4 py-2 flex items-center gap-0 text-stone-500 dark:text-stone-400">
-          <span className="select-none text-sm shrink-0 leading-none pr-0" aria-hidden>
-            {TAG_LEADING_ICON}
-          </span>
-          <input
-            type="text"
-            value={tagDraft}
-            onChange={(e) => {
-              let v = e.target.value;
-              v = v.replace(/^#+/, '');
-              v = v.replace(/\s+#+/g, ' #');
-              setTagDraft(v);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submitEntry();
-                return;
-              }
-              if (e.key !== ' ' && e.key !== 'Spacebar') return;
-              e.preventDefault();
-              const input = e.currentTarget;
-              const start = input.selectionStart ?? tagDraft.length;
-              const end = input.selectionEnd ?? tagDraft.length;
-              const before = tagDraft.slice(0, start);
-              const after = tagDraft.slice(end);
-              if (/\s#\s*$/.test(before)) return;
-              const insert = ' #';
-              const next = `${before}${insert}${after}`;
-              setTagDraft(next);
-              const newPos = start + insert.length;
-              requestAnimationFrame(() => {
-                try {
-                  input.setSelectionRange(newPos, newPos);
-                } catch {
-                  /* ignore */
+        <div className="border-t border-stone-200 dark:border-stone-600 px-4 py-2 flex min-w-0 items-stretch gap-1.5 overflow-visible text-stone-500 dark:text-stone-400">
+          <div className="flex min-h-0 min-w-0 flex-1 items-center gap-0 overflow-hidden">
+            <span className="select-none text-sm shrink-0 leading-none pr-0" aria-hidden>
+              {TAG_LEADING_ICON}
+            </span>
+            <input
+              type="text"
+              value={tagDraft}
+              onChange={(e) => {
+                let v = e.target.value;
+                v = v.replace(/^#+/, '');
+                v = v.replace(/\s+#+/g, ' #');
+                setTagDraft(v);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitEntry();
+                  return;
                 }
-              });
-            }}
-            placeholder="tag"
-            className="flex-1 min-w-0 bg-transparent text-sm text-stone-700 dark:text-stone-200 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none pl-0"
-            aria-label="Tags"
+                if (e.key !== ' ' && e.key !== 'Spacebar') return;
+                e.preventDefault();
+                const input = e.currentTarget;
+                const start = input.selectionStart ?? tagDraft.length;
+                const end = input.selectionEnd ?? tagDraft.length;
+                const before = tagDraft.slice(0, start);
+                const after = tagDraft.slice(end);
+                if (/\s#\s*$/.test(before)) return;
+                const insert = ' #';
+                const next = `${before}${insert}${after}`;
+                setTagDraft(next);
+                const newPos = start + insert.length;
+                requestAnimationFrame(() => {
+                  try {
+                    input.setSelectionRange(newPos, newPos);
+                  } catch {
+                    /* ignore */
+                  }
+                });
+              }}
+              placeholder="tag"
+              className="flex-1 min-w-0 bg-transparent text-sm text-stone-700 dark:text-stone-200 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none pl-0"
+              aria-label="Tags"
+            />
+          </div>
+          <NoteFormatPopover
+            expanded={popoverExpanded}
+            onOpen={openPopover}
+            onClose={closePopover}
+            boldMode={boldMode}
+            onBoldChange={setBoldMode}
+            bulletsMode={bulletsMode}
+            onBulletsChange={setBulletsMode}
+            onPopoverPointerDown={onPopoverPointerDown}
+            onPopoverPointerUp={onPopoverPointerUp}
+            textareaRef={textareaRef}
+            value={value}
+            setValue={setValueFromFormat}
+            toggleBullets={toggleBullets}
           />
         </div>
+      )}
+
+      {!searchOnly && (
+        <FloatingNoteSubmit
+          visible={newlineMode && textareaFocused}
+          topPx={floatingSubmitTopPx}
+          onClick={submitEntry}
+          disabled={!canSubmit}
+        />
       )}
     </div>
   );
