@@ -106,28 +106,23 @@ export function EnableSyncModal({
 
           <div className="my-5 h-px w-full bg-white/[0.08]" aria-hidden />
 
-          <ul className="space-y-2 text-[0.8125rem] leading-relaxed text-stone-100">
-            <li className="flex items-start gap-2.5">
-              <span
-                className="mt-[0.52em] h-1 w-1 shrink-0 self-start rounded-full bg-white/70"
-                aria-hidden
-              />
-              <span className="min-w-0">Sync across your devices</span>
-            </li>
-            <li className="flex items-start gap-2.5">
-              <span
-                className="mt-[0.52em] h-1 w-1 shrink-0 self-start rounded-full bg-white/70"
-                aria-hidden
-              />
-              <span className="min-w-0">Cloud backup for your workspaces and notes</span>
-            </li>
-            <li className="flex items-start gap-2.5">
-              <span
-                className="mt-[0.52em] h-1 w-1 shrink-0 self-start rounded-full bg-white/70"
-                aria-hidden
-              />
-              <span className="min-w-0">Changes update while you work</span>
-            </li>
+          <ul className="space-y-2 text-stone-100">
+            {[
+              'Sync across your devices',
+              'Cloud backup for your workspaces and notes',
+              'Changes update while you work',
+            ].map((line) => (
+              <li
+                key={line}
+                className="relative pl-4 text-left text-[0.8125rem] font-normal leading-relaxed"
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-[1px] top-[0.5lh] size-1 -translate-y-1/2 rounded-full bg-white text-[0.8125rem] leading-relaxed opacity-70"
+                />
+                <span className="min-w-0">{line}</span>
+              </li>
+            ))}
           </ul>
 
           <div className="mt-6 flex flex-col items-stretch gap-2.5">
