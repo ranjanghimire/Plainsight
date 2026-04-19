@@ -470,7 +470,7 @@ export function NoteCard({
                 : 'flex min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-stone-50 focus-within:border-stone-300 focus-within:ring-2 focus-within:ring-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:focus-within:border-stone-500 dark:focus-within:ring-stone-600'
             }
           >
-            <div className="flex min-w-0 gap-2 items-start px-2 pt-1.5">
+            <div className="flex min-w-0 items-center gap-2 px-2 pt-1.5">
               <textarea
                 ref={textareaRef}
                 value={editBody}
@@ -505,8 +505,8 @@ export function NoteCard({
                 }}
                 className={
                   isArchived
-                    ? 'mt-0.5 shrink-0 self-start rounded-lg bg-neutral-200/90 p-2 text-neutral-600 transition-colors hover:bg-neutral-300/95 disabled:pointer-events-none disabled:opacity-40 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600'
-                    : 'mt-0.5 shrink-0 self-start rounded-lg bg-stone-100 p-2 text-stone-600 transition-colors hover:bg-stone-200 disabled:pointer-events-none disabled:opacity-40 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600'
+                    ? 'shrink-0 rounded-lg bg-neutral-200/90 p-2 text-neutral-600 transition-colors hover:bg-neutral-300/95 disabled:pointer-events-none disabled:opacity-40 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600'
+                    : 'shrink-0 rounded-lg bg-stone-100 p-2 text-stone-600 transition-colors hover:bg-stone-200 disabled:pointer-events-none disabled:opacity-40 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600'
                 }
               >
                 <NoteCardSendIcon />
