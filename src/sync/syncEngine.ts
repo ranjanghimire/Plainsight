@@ -479,11 +479,34 @@ function sanitizeNotesForPush(rows: Note[]): Note[] {
   return out;
 }
 
+/** PostgREST: column not in schema cache (migration not applied yet). */
+function isMissingBoldFirstLineColumnError(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false;
+  if (err.code === 'PGRST204' && String(err.message || '').includes('bold_first_line')) return true;
+  return String(err.message || '').includes("Could not find the 'bold_first_line' column");
+}
+
+function stripBoldFirstLineForPush(rows: Note[]): Note[] {
+  return rows.map((row) => {
+    const { bold_first_line: _b, ...rest } = row;
+    return rest as Note;
+  });
+}
+
 export async function pushNotes(localNotes: Note[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
     const notesToPush = sanitizeNotesForPush(localNotes);
-    const res = await getSupabase().from('notes').upsert(notesToPush, { onConflict: 'id' }).select('*');
+    let res = await getSupabase().from('notes').upsert(notesToPush, { onConflict: 'id' }).select('*');
+    if (res.error && isMissingBoldFirstLineColumnError(res.error)) {
+      console.warn(
+        '[pushNotes] Remote notes table has no bold_first_line; retrying without it. Apply supabase/migrations/20260419120000_notes_bold_first_line.sql to sync that field.',
+      );
+      res = await getSupabase()
+        .from('notes')
+        .upsert(stripBoldFirstLineForPush(notesToPush), { onConflict: 'id' })
+        .select('*');
+    }
     console.log('pushNotes result:', res);
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     return { ok: true };
