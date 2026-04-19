@@ -144,6 +144,22 @@ function TrashIcon() {
   );
 }
 
+/** Same paper-plane stroke as SearchCommandBar “Add note” / FloatingNoteSubmit. */
+function NoteCardSendIcon({ className = 'w-5 h-5' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <g transform="rotate(90 12 12)">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+        />
+      </g>
+    </svg>
+  );
+}
+
 function TagRowIcon({ className = 'w-3.5 h-3.5' }) {
   return (
     <svg
@@ -454,29 +470,48 @@ export function NoteCard({
                 : 'flex min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-stone-50 focus-within:border-stone-300 focus-within:ring-2 focus-within:ring-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:focus-within:border-stone-500 dark:focus-within:ring-stone-600'
             }
           >
-            <textarea
-              ref={textareaRef}
-              value={editBody}
-              onChange={(e) => {
-                setEditBody(e.target.value);
-              }}
-              onBlur={handleTextareaBlur}
-              onFocus={() => setTextareaFocused(true)}
-              onKeyDown={(e) => {
-                handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  requestAnimationFrame(() => {
-                    requestAnimationFrame(() => scrollNoteTextareaCaretIntoView(textareaRef.current));
-                  });
+            <div className="flex min-w-0 gap-2 items-start px-2 pt-1.5">
+              <textarea
+                ref={textareaRef}
+                value={editBody}
+                onChange={(e) => {
+                  setEditBody(e.target.value);
+                }}
+                onBlur={handleTextareaBlur}
+                onFocus={() => setTextareaFocused(true)}
+                onKeyDown={(e) => {
+                  handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => scrollNoteTextareaCaretIntoView(textareaRef.current));
+                    });
+                  }
+                }}
+                className={
+                  isArchived
+                    ? 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
+                    : 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
                 }
-              }}
-              className={
-                isArchived
-                  ? 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto rounded-none border-0 bg-transparent px-2 py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
-                  : 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto rounded-none border-0 bg-transparent px-2 py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
-              }
-              autoFocus
-            />
+                autoFocus
+              />
+              <button
+                type="button"
+                aria-label="Save note"
+                disabled={bulkDissolve || isDeleting}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  commitText();
+                }}
+                className={
+                  isArchived
+                    ? 'mt-0.5 shrink-0 self-start rounded-lg bg-neutral-200/90 p-2 text-neutral-600 transition-colors hover:bg-neutral-300/95 disabled:pointer-events-none disabled:opacity-40 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600'
+                    : 'mt-0.5 shrink-0 self-start rounded-lg bg-stone-100 p-2 text-stone-600 transition-colors hover:bg-stone-200 disabled:pointer-events-none disabled:opacity-40 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600'
+                }
+              >
+                <NoteCardSendIcon />
+              </button>
+            </div>
             <div
               className={
                 isArchived
@@ -545,7 +580,7 @@ export function NoteCard({
           </div>
         ) : displayBody ? (
           readMoreActive ? (
-            <div className="flex flex-col gap-0.5">
+            <div className={readMoreExpanded ? 'flex flex-col gap-0.5' : ''}>
               <div
                 className={`relative overflow-hidden text-base leading-normal transition-[max-height] duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-reduce:transition-[max-height] motion-reduce:duration-200 ${
                   readMoreExpanded ? 'max-h-[min(120rem,9999px)]' : 'max-h-[10.5em]'
@@ -566,31 +601,50 @@ export function NoteCard({
                   {renderNoteDisplayBody(displayBody, displayBoldFirst)}
                 </div>
                 {!readMoreExpanded ? (
-                  <div
-                    className={`pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-16 bg-gradient-to-t ${
-                      isArchived
-                        ? 'from-neutral-100 via-neutral-100/75 to-transparent dark:from-neutral-800 dark:via-neutral-800/75'
-                        : 'from-white via-white/80 to-transparent dark:from-stone-800 dark:via-stone-800/80'
-                    }`}
-                    aria-hidden
-                  />
+                  <>
+                    <div
+                      className={`pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-16 bg-gradient-to-t ${
+                        isArchived
+                          ? 'from-neutral-100 via-neutral-100/75 to-transparent dark:from-neutral-800 dark:via-neutral-800/75'
+                          : 'from-white via-white/80 to-transparent dark:from-stone-800 dark:via-stone-800/80'
+                      }`}
+                      aria-hidden
+                    />
+                    <button
+                      type="button"
+                      aria-label="Show more"
+                      className={
+                        isArchived
+                          ? 'absolute bottom-[1.1rem] left-1/2 z-[2] -translate-x-1/2 rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
+                          : 'absolute bottom-[1.1rem] left-1/2 z-[2] -translate-x-1/2 rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReadMoreExpanded(true);
+                      }}
+                    >
+                      <ReadMoreExpandIcon />
+                    </button>
+                  </>
                 ) : null}
               </div>
-              <button
-                type="button"
-                aria-label={readMoreExpanded ? 'Show less' : 'Show more'}
-                className={
-                  isArchived
-                    ? 'self-center rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
-                    : 'self-center rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setReadMoreExpanded((v) => !v);
-                }}
-              >
-                {readMoreExpanded ? <ReadMoreCollapseIcon /> : <ReadMoreExpandIcon />}
-              </button>
+              {readMoreExpanded ? (
+                <button
+                  type="button"
+                  aria-label="Show less"
+                  className={
+                    isArchived
+                      ? 'self-center rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
+                      : 'self-center rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReadMoreExpanded(false);
+                  }}
+                >
+                  <ReadMoreCollapseIcon />
+                </button>
+              ) : null}
             </div>
           ) : (
             <div
