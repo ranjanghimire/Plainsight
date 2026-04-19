@@ -14,7 +14,7 @@ export function NoteList({
     <div
       className={`
         rounded-lg transition-opacity duration-200 ease-out
-        ${archiveMode ? 'bg-neutral-50 dark:bg-neutral-900 px-3 py-4 -mx-1' : ''}
+        ${archiveMode ? 'bg-neutral-50 dark:bg-neutral-900 py-4 -mx-1' : ''}
         ${rootClassName}
       `}
     >
