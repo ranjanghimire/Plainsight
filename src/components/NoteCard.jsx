@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTagsNav } from '../context/TagsNavContext';
 import { CategoryDropdown } from './CategoryDropdown';
@@ -173,7 +173,6 @@ export function NoteCard({
   const archivedEditKeyRef = useRef(note.text);
   const deleteTimerRef = useRef(null);
   const textareaRef = useRef(null);
-  const pendingBulletsOnEditRef = useRef(false);
   const cardShellRef = useRef(null);
   const commitFnRef = useRef(() => {});
   const [textareaFocused, setTextareaFocused] = useState(false);
@@ -252,24 +251,6 @@ export function NoteCard({
   const setEditBodyFromFormat = useCallback((next) => {
     setEditBody(String(next ?? ''));
   }, []);
-
-  useLayoutEffect(() => {
-    if (!isEditing || !pendingBulletsOnEditRef.current) return;
-    let cancelled = false;
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        const ta = textareaRef.current;
-        if (!ta || !pendingBulletsOnEditRef.current) return;
-        pendingBulletsOnEditRef.current = false;
-        toggleBullets(true, ta, editBody, setEditBodyFromFormat);
-      });
-    });
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(id);
-    };
-  }, [isEditing, editBody, toggleBullets, setEditBodyFromFormat]);
 
   /** Single activate toggles meta; second activate within window opens editor (mouse dblclick + touch double-tap). */
   const handleTextBodyPointerPick = () => {
@@ -368,45 +349,6 @@ export function NoteCard({
             }
             autoFocus
           />
-        ) : !isArchived ? (
-          <div className="flex gap-2 items-start">
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={handleTextBodyPointerPick}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleTextBodyPointerPick();
-                }
-              }}
-              className={
-                displayBody ? `${displayBodyParaClass} flex-1 min-w-0` : `${bodyTextClass} flex-1 min-w-0`
-              }
-            >
-              {displayBody ? renderNoteDisplayBody(displayBody, displayBoldFirst) : 'Double-click or double-tap to edit…'}
-            </div>
-            <NoteFormatPopover
-              expanded={popoverExpanded}
-              onOpen={openPopover}
-              onClose={closePopover}
-              boldMode={Boolean(note.boldFirstLine)}
-              onBoldChange={(next) => onUpdate(note.id, { boldFirstLine: next })}
-              bulletsMode={false}
-              onBulletsChange={() => {}}
-              editorActive={false}
-              onRequestBulletsEdit={() => {
-                pendingBulletsOnEditRef.current = true;
-                setIsEditing(true);
-              }}
-              onPopoverPointerDown={onPopoverPointerDown}
-              onPopoverPointerUp={onPopoverPointerUp}
-              textareaRef={textareaRef}
-              value={editBody}
-              setValue={setEditBodyFromFormat}
-              toggleBullets={toggleBullets}
-            />
-          </div>
         ) : (
           <div
             role="button"
