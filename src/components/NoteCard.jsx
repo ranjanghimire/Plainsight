@@ -187,9 +187,6 @@ export function NoteCard({
     popoverExpanded,
     openPopover,
     closePopover,
-    onPopoverPointerDown,
-    onPopoverPointerUp,
-    onTypingWhileExpanded,
     handleTextareaKeyDown,
     toggleBullets,
     resetFormatModes,
@@ -335,7 +332,6 @@ export function NoteCard({
             value={editBody}
             onChange={(e) => {
               setEditBody(e.target.value);
-              if (popoverExpanded) onTypingWhileExpanded();
             }}
             onBlur={handleTextareaBlur}
             onFocus={() => setTextareaFocused(true)}
@@ -482,8 +478,6 @@ export function NoteCard({
                     onBoldChange={setBoldMode}
                     bulletsMode={bulletsMode}
                     onBulletsChange={setBulletsMode}
-                    onPopoverPointerDown={onPopoverPointerDown}
-                    onPopoverPointerUp={onPopoverPointerUp}
                     textareaRef={textareaRef}
                     value={editBody}
                     setValue={setEditBodyFromFormat}

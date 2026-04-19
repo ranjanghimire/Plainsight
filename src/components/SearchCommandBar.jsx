@@ -102,9 +102,6 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     popoverExpanded,
     openPopover,
     closePopover,
-    onPopoverPointerDown,
-    onPopoverPointerUp,
-    onTypingWhileExpanded,
     handleTextareaKeyDown,
     toggleBullets,
     resetFormatModes,
@@ -181,9 +178,8 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
         v = v.replace(/^\.\.\s+/, '..').replace(/^\.\s+/, '.');
       }
       onChange?.(v);
-      if (popoverExpanded) onTypingWhileExpanded();
     },
-    [onChange, searchOnly, popoverExpanded, onTypingWhileExpanded],
+    [onChange, searchOnly],
   );
 
   const applyCommand = useCallback(() => {
@@ -394,8 +390,6 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
             onBoldChange={setBoldMode}
             bulletsMode={bulletsMode}
             onBulletsChange={setBulletsMode}
-            onPopoverPointerDown={onPopoverPointerDown}
-            onPopoverPointerUp={onPopoverPointerUp}
             textareaRef={textareaRef}
             value={value}
             setValue={setValueFromFormat}
