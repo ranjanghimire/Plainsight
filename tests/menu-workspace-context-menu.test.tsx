@@ -60,6 +60,17 @@ afterEach(() => {
 });
 
 describe('MenuPanel workspace context menu', () => {
+  function enablePaidMenuTestMode(userId = '44444444-4444-4444-8444-444444444444') {
+    globalThis.__PS_TEST_FLAGS__ = {
+      paidSync: true,
+      sessionUserId: userId,
+    };
+    localStorage.setItem('plainsight_local_user_id', userId);
+    localStorage.setItem('plainsight_local_session_token', 'session-paid');
+    localStorage.setItem('plainsight_auth_display_email', 'vitest@plainsight.test');
+    localStorage.setItem('plainsight_sync_remote_active', '1');
+  }
+
   it('opens rename inline editor from context menu → Rename', async () => {
     seedHomePlusVisibleWorkspace('CtxWs');
     const user = userEvent.setup();
@@ -76,6 +87,39 @@ describe('MenuPanel workspace context menu', () => {
     await waitFor(() => {
       const names = (loadAppState().visibleWorkspaces || []).map((e) => e.name);
       expect(names).toContain('RenamedCtx');
+    });
+  });
+
+  it('shows Share action for visible workspace context menu', async () => {
+    enablePaidMenuTestMode();
+    seedHomePlusVisibleWorkspace('ShareMe');
+    const user = userEvent.setup();
+    renderFullApp();
+    await openMenu(user);
+    const row = screen.getByRole('button', { name: 'ShareMe' });
+    fireEvent.contextMenu(row, {
+      clientX: 90,
+      clientY: 140,
+      bubbles: true,
+      preventDefault: vi.fn(),
+    });
+    expect(await screen.findByRole('menuitem', { name: 'Share' })).toBeInTheDocument();
+  });
+
+  it('shows Shared Workspaces section with accept CTA for paid users', async () => {
+    enablePaidMenuTestMode();
+    seedHomePlusVisibleWorkspace('SharedRoot');
+
+    const user = userEvent.setup();
+    renderFullApp();
+    await openMenu(user);
+
+    expect(screen.getByText('Shared Workspaces')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByText('No shared workspaces yet.'),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
     });
   });
 });

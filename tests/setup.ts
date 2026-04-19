@@ -3,6 +3,8 @@ import { cleanup } from '@testing-library/react';
 import React from 'react';
 import { afterEach, vi } from 'vitest';
 import { resetSyncQueueForTests } from '../src/sync/syncHelpers';
+import { getSession as getLocalSession } from '../src/auth/localSession';
+import { readAuthDisplayEmail } from '../src/auth/authDisplayEmail';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -93,6 +95,84 @@ vi.mock('../src/auth/checkSyncEntitlementRemote', () => ({
     return false;
   }),
 }));
+
+vi.mock('../src/sync/sharedWorkspaces', async () => {
+  const actual = await vi.importActual<typeof import('../src/sync/sharedWorkspaces')>(
+    '../src/sync/sharedWorkspaces',
+  );
+
+  const normalize = (v: unknown) => String(v || '').trim().toLowerCase();
+
+  const listWorkspaceShares = vi.fn(async () => {
+    const paid = !!globalThis.__PS_TEST_FLAGS__?.paidSync;
+    if (!paid) return { data: [] };
+    const uid = normalize(getLocalSession().userId);
+    const email = normalize(readAuthDisplayEmail() || '');
+    const now = new Date().toISOString();
+    if (!uid) return { data: [] };
+    return {
+      data: [
+        {
+          id: 'share-owner-accepted',
+          workspace_id: 'ws-shared-owner',
+          owner_id: uid,
+          recipient_email: 'friend@example.com',
+          recipient_user_id: '33333333-3333-4333-8333-333333333333',
+          workspace_name: 'Shared Owner Workspace',
+          owner_email: email || 'vitest@plainsight.test',
+          status: 'accepted',
+          created_at: now,
+          updated_at: now,
+          accepted_at: now,
+          revoked_at: null,
+        },
+        {
+          id: 'share-invite-pending',
+          workspace_id: 'ws-shared-invite',
+          owner_id: '99999999-9999-4999-8999-999999999999',
+          recipient_email: email || 'vitest@plainsight.test',
+          recipient_user_id: uid,
+          workspace_name: 'Pending Invite Workspace',
+          owner_email: 'owner@plainsight.test',
+          status: 'pending',
+          created_at: now,
+          updated_at: now,
+          accepted_at: null,
+          revoked_at: null,
+        },
+      ],
+    };
+  });
+
+  const shareWorkspaceByEmail = vi.fn(async () => ({ ok: true }));
+  const acceptWorkspaceShare = vi.fn(async () => ({ ok: true }));
+  const makeWorkspacePrivate = vi.fn(async () => ({ ok: true, revokedCount: 1 }));
+  const fetchWorkspaceActivityLogs = vi.fn(async (workspaceId: string) => ({
+    data: [
+      {
+        id: 'log-1',
+        workspace_id: workspaceId,
+        actor_user_id: normalize(getLocalSession().userId) || 'unknown',
+        actor_email: normalize(readAuthDisplayEmail() || '') || 'vitest@plainsight.test',
+        action: 'note_updated',
+        summary: 'Updated note',
+        details: {},
+        created_at: new Date().toISOString(),
+      },
+    ],
+  }));
+  const logWorkspaceActivity = vi.fn(async () => ({ ok: true }));
+
+  return {
+    ...actual,
+    listWorkspaceShares,
+    shareWorkspaceByEmail,
+    acceptWorkspaceShare,
+    makeWorkspacePrivate,
+    fetchWorkspaceActivityLogs,
+    logWorkspaceActivity,
+  };
+});
 
 vi.mock('../src/components/ConfirmDialog.jsx', () => ({
   ConfirmDialog: ({

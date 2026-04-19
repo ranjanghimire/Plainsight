@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useSyncEntitlement } from '../context/SyncEntitlementContext';
 import { useAuth } from '../context/AuthContext';
+import { VISIBLE_WS_PREFIX } from '../utils/storage';
 import {
   getSyncEntitled,
   getSyncRemoteActive,
@@ -18,6 +19,8 @@ import {
 } from '../hooks/useItemContextMenu';
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ShareWorkspaceDialog } from './ShareWorkspaceDialog';
+import { WorkspaceActivityLogDialog } from './WorkspaceActivityLogDialog';
 
 function MenuIcon({ className = '' }) {
   return (
@@ -92,9 +95,17 @@ export function MenuPanel({ open, onClose }) {
   const {
     activeStorageKey,
     visibleWorkspaces,
+    sharedWorkspaces,
+    pendingSharedInvites,
     switchVisibleWorkspace,
+    openSharedWorkspace,
     createVisibleWorkspace,
     renameVisibleWorkspace,
+    getWorkspaceIdByVisibleEntry,
+    shareVisibleWorkspace,
+    acceptSharedWorkspaceInvite,
+    makeWorkspacePrivateById,
+    fetchWorkspaceActivityLog,
     deleteVisibleWorkspace,
     syncHydrationConnectivityWarning,
   } = useWorkspace();
@@ -127,7 +138,12 @@ export function MenuPanel({ open, onClose }) {
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [workspaceRenameTarget, setWorkspaceRenameTarget] = useState(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState('');
+  const [shareWorkspaceTarget, setShareWorkspaceTarget] = useState(null);
+  const [shareRecipientEmail, setShareRecipientEmail] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
   const [pendingDeleteWorkspace, setPendingDeleteWorkspace] = useState(null);
+  const [pendingMakePrivateWorkspace, setPendingMakePrivateWorkspace] = useState(null);
+  const [logsWorkspaceTarget, setLogsWorkspaceTarget] = useState(null);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const wsMenu = useItemContextMenu();
 
@@ -205,6 +221,41 @@ export function MenuPanel({ open, onClose }) {
     setWorkspaceRenameTarget(null);
     setWorkspaceRenameDraft('');
   };
+
+  const submitWorkspaceShare = async (emailInput) => {
+    if (!shareWorkspaceTarget || shareBusy) return;
+    const email = String(emailInput || '').trim();
+    if (!email) return;
+    if (authEmail && String(authEmail).trim().toLowerCase() === email.toLowerCase()) {
+      showToast('You cannot share a workspace with your own email');
+      return;
+    }
+    setShareBusy(true);
+    try {
+      const res = await shareVisibleWorkspace(shareWorkspaceTarget, email);
+      if (!res?.ok) {
+        showToast(res?.error?.message || 'Could not share workspace');
+        return;
+      }
+      showToast(`Invite sent to ${email.toLowerCase()}`);
+      setShareWorkspaceTarget(null);
+      setShareRecipientEmail('');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const isPaidCollabEnabled =
+    customAuthSession && syncEntitled && syncRemoteActive;
+  const canManageSharedWorkspace = (row) =>
+    Boolean(
+      row &&
+        row.isOwner &&
+        row.ownerEmail &&
+        authEmail &&
+        String(row.ownerEmail).trim().toLowerCase() ===
+          String(authEmail).trim().toLowerCase(),
+    );
 
   if (!mounted) return null;
 
@@ -455,6 +506,96 @@ export function MenuPanel({ open, onClose }) {
             )}
           </div>
 
+          <div className="mt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400 mb-2">
+              Shared Workspaces
+            </h3>
+            <div className="border-t border-stone-200 dark:border-stone-600 pt-2 space-y-1">
+              {!isPaidCollabEnabled ? (
+                <p className="px-1 py-1 text-xs text-stone-500 dark:text-stone-400">
+                  Shared workspaces are available for paid users with cloud sync on.
+                </p>
+              ) : (
+                <>
+                  {(pendingSharedInvites || []).map((invite) => (
+                    <div
+                      key={invite.shareId}
+                      className="rounded-md border border-dashed border-stone-300/80 bg-stone-50 px-2.5 py-2 dark:border-stone-600/80 dark:bg-stone-900/60"
+                    >
+                      <p className="truncate text-sm text-stone-800 dark:text-stone-100">
+                        {invite.workspaceName}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-stone-500 dark:text-stone-400">
+                        Invite from {invite.ownerEmail || 'workspace owner'}
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                        onClick={() => {
+                          void (async () => {
+                            const res = await acceptSharedWorkspaceInvite(invite.shareId);
+                            if (!res?.ok) {
+                              showToast(res?.error?.message || 'Could not accept invite');
+                              return;
+                            }
+                            showToast(`Joined ${invite.workspaceName}`);
+                          })();
+                        }}
+                      >
+                        Accept
+                      </button>
+                    </div>
+                  ))}
+
+                  {(sharedWorkspaces || []).map((row) => {
+                    const active = activeStorageKey === `${VISIBLE_WS_PREFIX}${row.workspaceId}`;
+                    return (
+                      <button
+                        key={row.workspaceId}
+                        type="button"
+                        {...wsMenu.bindTrigger(
+                          {
+                            kind: 'shared-workspace',
+                            row: {
+                              ...row,
+                              canManage: canManageSharedWorkspace(row),
+                            },
+                          },
+                          () => {
+                            openSharedWorkspace(row.workspaceId);
+                            navigate('/');
+                            onClose();
+                          },
+                        )}
+                        className={`
+                          w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors
+                          ${CONTEXT_MENU_TRIGGER_CLASS}
+                          ${
+                            active
+                              ? 'bg-neutral-100 text-neutral-900 border-l-2 border-neutral-400 dark:bg-neutral-800 dark:text-neutral-100'
+                              : 'text-neutral-600 dark:text-neutral-400 border-l-2 border-transparent hover:bg-stone-50 dark:hover:bg-stone-700/50'
+                          }
+                        `}
+                      >
+                        <span className="truncate">{row.workspaceName}</span>
+                        <span className="ml-auto text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">
+                          shared
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {(pendingSharedInvites || []).length === 0 &&
+                  (sharedWorkspaces || []).length === 0 ? (
+                    <p className="px-1 py-1 text-xs text-stone-500 dark:text-stone-400">
+                      No shared workspaces yet.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+
           {authReady &&
           customAuthSession &&
           revenueCatReady &&
@@ -493,15 +634,50 @@ export function MenuPanel({ open, onClose }) {
         entered={wsMenu.entered}
         x={wsMenu.menu.x}
         y={wsMenu.menu.y}
+        showRename={wsMenu.menu.target?.kind === 'workspace'}
         showDelete={
           wsMenu.menu.target?.kind === 'workspace' &&
           wsMenu.menu.target.entry.id !== 'home'
         }
+        showShare={
+          isPaidCollabEnabled &&
+          wsMenu.menu.target?.kind === 'workspace' &&
+          wsMenu.menu.target.entry.id !== 'home'
+        }
+        showLogs={wsMenu.menu.target?.kind === 'shared-workspace'}
+        showMakePrivate={
+          wsMenu.menu.target?.kind === 'shared-workspace' &&
+          wsMenu.menu.target.row.canManage
+        }
+        renameLabel="Rename"
+        deleteLabel="Delete"
+        shareLabel="Share"
+        logsLabel="Logs"
+        makePrivateLabel="Make private"
         onRename={() => {
           const t = wsMenu.menu.target;
           if (t?.kind === 'workspace') {
             setWorkspaceRenameTarget(t.entry);
             setWorkspaceRenameDraft(t.entry.name);
+          }
+        }}
+        onShare={() => {
+          const t = wsMenu.menu.target;
+          if (t?.kind === 'workspace') {
+            setShareWorkspaceTarget(t.entry);
+            setShareRecipientEmail('');
+          }
+        }}
+        onLogs={() => {
+          const t = wsMenu.menu.target;
+          if (t?.kind === 'shared-workspace') {
+            setLogsWorkspaceTarget(t.row);
+          }
+        }}
+        onMakePrivate={() => {
+          const t = wsMenu.menu.target;
+          if (t?.kind === 'shared-workspace' && t.row.canManage) {
+            setPendingMakePrivateWorkspace(t.row);
           }
         }}
         onDelete={() => {
@@ -538,6 +714,53 @@ export function MenuPanel({ open, onClose }) {
             );
           }
         }}
+      />
+
+      <ConfirmDialog
+        open={pendingMakePrivateWorkspace != null}
+        title="Make workspace private?"
+        description={
+          pendingMakePrivateWorkspace
+            ? `Stop sharing “${pendingMakePrivateWorkspace.workspaceName}” with all collaborators? They will lose access immediately.`
+            : ''
+        }
+        confirmLabel="Make private"
+        destructive
+        onCancel={() => setPendingMakePrivateWorkspace(null)}
+        onConfirm={async () => {
+          const row = pendingMakePrivateWorkspace;
+          if (!row) return;
+          const res = await makeWorkspacePrivateById(row.workspaceId);
+          if (!res?.ok) {
+            showToast(res?.error?.message || 'Could not make workspace private');
+            return;
+          }
+          setPendingMakePrivateWorkspace(null);
+          showToast('Workspace is private again');
+        }}
+      />
+
+      <ShareWorkspaceDialog
+        open={shareWorkspaceTarget != null}
+        workspaceName={shareWorkspaceTarget?.name || ''}
+        busy={shareBusy}
+        initialEmail={shareRecipientEmail}
+        onClose={() => {
+          if (shareBusy) return;
+          setShareWorkspaceTarget(null);
+          setShareRecipientEmail('');
+        }}
+        onSubmit={async (email) => {
+          await submitWorkspaceShare(email);
+        }}
+      />
+
+      <WorkspaceActivityLogDialog
+        open={logsWorkspaceTarget != null}
+        workspaceName={logsWorkspaceTarget?.workspaceName || ''}
+        workspaceId={logsWorkspaceTarget?.workspaceId || ''}
+        fetchLogs={fetchWorkspaceActivityLog}
+        onClose={() => setLogsWorkspaceTarget(null)}
       />
     </div>
   );

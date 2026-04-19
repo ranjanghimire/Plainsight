@@ -443,8 +443,12 @@ export function resolveHiddenWorkspaceIdBySlugFromList(storageKey, workspaces) {
 /**
  * Build Menu-visible workspace list from merged Supabase-shaped workspaces.
  */
-export function rebuildVisibleWorkspacesFromRemote(workspaces) {
-  const visible = (workspaces || []).filter((w) => w.kind === 'visible');
+export function rebuildVisibleWorkspacesFromRemote(workspaces, ownerId) {
+  const visible = (workspaces || []).filter(
+    (w) =>
+      w.kind === 'visible' &&
+      (ownerId ? String(w.owner_id || '') === String(ownerId) : true),
+  );
   const entries = [{ id: 'home', name: 'Home', key: 'workspace_home' }];
   for (const w of visible) {
     if ((w.name || '').trim().toLowerCase() === 'home') continue;

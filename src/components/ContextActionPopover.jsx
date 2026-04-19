@@ -5,11 +5,21 @@ export function ContextActionPopover({
   entered,
   x,
   y,
+  showRename = true,
   showDelete,
+  showShare = false,
+  showLogs = false,
+  showMakePrivate = false,
   renameLabel = 'Rename',
   deleteLabel = 'Delete',
+  shareLabel = 'Share',
+  logsLabel = 'Logs',
+  makePrivateLabel = 'Make private',
   onRename,
   onDelete,
+  onShare,
+  onLogs,
+  onMakePrivate,
   onDismiss,
 }) {
   if (!open || typeof document === 'undefined') return null;
@@ -33,17 +43,58 @@ export function ContextActionPopover({
         style={{ left: x, top: y }}
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          role="menuitem"
-          className="w-full text-left px-3 py-2 text-sm text-stone-800 hover:bg-stone-100 dark:text-stone-100 dark:hover:bg-stone-700/80"
-          onClick={() => {
-            onRename();
-            onDismiss();
-          }}
-        >
-          {renameLabel}
-        </button>
+        {showRename ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full text-left px-3 py-2 text-sm text-stone-800 hover:bg-stone-100 dark:text-stone-100 dark:hover:bg-stone-700/80"
+            onClick={() => {
+              onRename?.();
+              onDismiss();
+            }}
+          >
+            {renameLabel}
+          </button>
+        ) : null}
+        {showShare ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full text-left px-3 py-2 text-sm text-stone-800 hover:bg-stone-100 dark:text-stone-100 dark:hover:bg-stone-700/80"
+            onClick={() => {
+              onShare?.();
+              onDismiss();
+            }}
+          >
+            {shareLabel}
+          </button>
+        ) : null}
+        {showLogs ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full text-left px-3 py-2 text-sm text-stone-800 hover:bg-stone-100 dark:text-stone-100 dark:hover:bg-stone-700/80"
+            onClick={() => {
+              onLogs?.();
+              onDismiss();
+            }}
+          >
+            {logsLabel}
+          </button>
+        ) : null}
+        {showMakePrivate ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full text-left px-3 py-2 text-sm text-stone-800 hover:bg-stone-100 dark:text-stone-100 dark:hover:bg-stone-700/80"
+            onClick={() => {
+              onMakePrivate?.();
+              onDismiss();
+            }}
+          >
+            {makePrivateLabel}
+          </button>
+        ) : null}
         {showDelete ? (
           <button
             type="button"

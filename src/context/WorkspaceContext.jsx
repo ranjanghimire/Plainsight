@@ -69,6 +69,35 @@ import {
   saveLocalWorkspaces,
 } from '../sync/localDB';
 import { archivedRowIdForText } from '../sync/workspaceStorageBridge';
+import {
+  acceptWorkspaceShare,
+  buildSharedWorkspaceRows,
+  fetchWorkspaceActivityLogs,
+  listWorkspaceShares,
+  logWorkspaceActivity,
+  makeWorkspacePrivate,
+  shareWorkspaceByEmail,
+} from '../sync/sharedWorkspaces';
+
+/**
+ * Resolve workspace UUID for menu-visible entries:
+ * - Home: workspace_home mapping
+ * - Personal visible tabs: `entry.id`
+ * - Shared menu rows: `entry.workspaceId`
+ */
+function extractWorkspaceIdFromVisibleEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  if (entry.workspaceId) return String(entry.workspaceId);
+  if (entry.id && entry.id !== 'home') return String(entry.id);
+  if (entry.key) return getWorkspaceIdForStorageKey(String(entry.key)) || null;
+  return null;
+}
+
+function normalizeVisibilityWorkspaceName(raw) {
+  const name = String(raw || '').trim();
+  if (!name) return 'Workspace';
+  return name;
+}
 
 async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const now = new Date().toISOString();
@@ -92,7 +121,7 @@ async function ensureWorkspaceRow({ storageKey, name, kind }) {
     next[idx] = {
       ...prev,
       ...row,
-      owner_id: userId,
+      owner_id: prev.owner_id || row.owner_id,
       created_at: prev.created_at || row.created_at,
     };
   } else {
@@ -186,6 +215,12 @@ export function WorkspaceProvider({ children }) {
     () => initialWorkspaceState.currentWorkspace,
   );
   const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
+  /** Raw share rows visible to current user (owner/recipient). */
+  const [sharedWorkspaceShares, setSharedWorkspaceShares] = useState([]);
+  /** Accepted shared workspaces shown in the menu section. */
+  const [sharedWorkspaceRows, setSharedWorkspaceRows] = useState([]);
+  /** Pending incoming invites for the signed-in user. */
+  const [pendingSharedInvites, setPendingSharedInvites] = useState([]);
   /** Local / entitled-only: true. When canUseSupabase, false until fullSync notifies. */
   const [canUseSupabase, setCanUseSupabase] = useState(() => getCanUseSupabase());
   const [hydrationComplete, setHydrationComplete] = useState(() => !getCanUseSupabase());
@@ -198,6 +233,60 @@ export function WorkspaceProvider({ children }) {
   useEffect(() => {
     hydrationWarningRef.current = syncHydrationConnectivityWarning;
   }, [syncHydrationConnectivityWarning]);
+
+  const refreshSharedWorkspaceState = useCallback(async () => {
+    if (!getCanUseSupabase()) {
+      setSharedWorkspaceShares([]);
+      setSharedWorkspaceRows([]);
+      setPendingSharedInvites([]);
+      return { ok: true };
+    }
+    const sharesRes = await listWorkspaceShares();
+    if (sharesRes.error) {
+      return { ok: false, error: sharesRes.error };
+    }
+    const localRows = Array.isArray(sharesRes.data) ? sharesRes.data : [];
+    const nameById = new Map();
+    for (const v of visibleWorkspaces || []) {
+      const wid = getWorkspaceIdForStorageKey(v.key);
+      if (wid) nameById.set(wid, v.name);
+    }
+    const built = buildSharedWorkspaceRows({
+      shares: localRows,
+      workspaceNamesById: nameById,
+    });
+    setSharedWorkspaceShares(localRows);
+    setSharedWorkspaceRows(built.acceptedRows);
+    setPendingSharedInvites(built.pendingRows);
+    return { ok: true };
+  }, [visibleWorkspaces]);
+
+  const getWorkspaceIdByVisibleEntry = useCallback(
+    (entry) => extractWorkspaceIdFromVisibleEntry(entry),
+    [],
+  );
+
+  const getWorkspaceNameById = useCallback(
+    (workspaceId) => {
+      if (!workspaceId) return 'Workspace';
+      const fromVisible = (visibleWorkspaces || []).find(
+        (e) => String(extractWorkspaceIdFromVisibleEntry(e) || '') === String(workspaceId),
+      );
+      if (fromVisible?.name) return normalizeVisibilityWorkspaceName(fromVisible.name);
+      const fromShared = (sharedWorkspaceRows || []).find(
+        (r) => String(r.workspaceId) === String(workspaceId),
+      );
+      if (fromShared?.workspaceName) {
+        return normalizeVisibilityWorkspaceName(fromShared.workspaceName);
+      }
+      const storageKey = getStorageKeyForWorkspaceId(String(workspaceId));
+      if (storageKey) {
+        return normalizeVisibilityWorkspaceName(getWorkspaceNameFromKey(storageKey));
+      }
+      return 'Workspace';
+    },
+    [sharedWorkspaceRows, visibleWorkspaces],
+  );
 
   useEffect(
     () => subscribeSyncGating(() => setCanUseSupabase(getCanUseSupabase())),
@@ -411,10 +500,24 @@ export function WorkspaceProvider({ children }) {
       const app = loadAppState();
       setVisibleWorkspaces(app.visibleWorkspaces);
       setData(loadWorkspace(activeStorageKey));
+      void refreshSharedWorkspaceState();
     };
     window.addEventListener('plainsight:full-sync', onSync);
     return () => window.removeEventListener('plainsight:full-sync', onSync);
-  }, [canUseSupabase, activeStorageKey]);
+  }, [canUseSupabase, activeStorageKey, refreshSharedWorkspaceState]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) {
+      if (!canUseSupabase) {
+        setSharedWorkspaceShares([]);
+        setSharedWorkspaceRows([]);
+        setPendingSharedInvites([]);
+      }
+      return undefined;
+    }
+    void refreshSharedWorkspaceState();
+    return undefined;
+  }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
 
   const applyNavigateByWorkspaceName = useCallback(
     (name) => {
@@ -498,6 +601,40 @@ export function WorkspaceProvider({ children }) {
       );
     },
     [applySwitchVisibleWorkspace, queueWorkspaceContentTransition],
+  );
+
+  const openSharedWorkspace = useCallback(
+    (workspaceId) => {
+      const wid = String(workspaceId || '').trim();
+      if (!wid) return false;
+      const key = getStorageKeyForWorkspaceId(wid) || `${VISIBLE_WS_PREFIX}${wid}`;
+      let nextData = loadWorkspace(key);
+      if (isWorkspaceDataEmpty(nextData)) {
+        nextData = getDefaultWorkspaceData();
+        saveWorkspace(key, nextData);
+      }
+      const name = getWorkspaceNameById(wid);
+      void ensureWorkspaceRow({
+        storageKey: key,
+        name,
+        kind: 'visible',
+      });
+      setActiveStorageKey(key);
+      setData(nextData);
+      setCurrentWorkspace(`visible:${wid}`);
+      saveAppStatePartial({ lastActiveStorageKey: key });
+      setVisibleWorkspaces((prev) => {
+        const exists = (prev || []).some((e) => String(e.key) === String(key));
+        if (exists) return prev;
+        const next = [...(prev || []), { id: wid, name, key }];
+        saveAppStatePartial({ visibleWorkspaces: next, lastActiveStorageKey: key });
+        return next;
+      });
+      bumpWorkspaceSwitch();
+      void queueFullSync();
+      return true;
+    },
+    [bumpWorkspaceSwitch, getWorkspaceNameById],
   );
 
   const createVisibleWorkspace = useCallback(
@@ -726,6 +863,65 @@ export function WorkspaceProvider({ children }) {
     [activeStorageKey, bumpWorkspaceSwitch],
   );
 
+  const shareVisibleWorkspace = useCallback(
+    async (entry, recipientEmail) => {
+      const workspaceId = getWorkspaceIdByVisibleEntry(entry);
+      if (!workspaceId) {
+        return { ok: false, error: { message: 'Workspace id is missing' } };
+      }
+      const workspaceName = normalizeVisibilityWorkspaceName(entry?.name || 'Workspace');
+      const res = await shareWorkspaceByEmail(workspaceId, workspaceName, recipientEmail);
+      if (!res.ok) return res;
+      await logWorkspaceActivity(
+        workspaceId,
+        'workspace_shared',
+        `Shared with ${String(recipientEmail || '').trim().toLowerCase()}`,
+        { recipient_email: String(recipientEmail || '').trim().toLowerCase() },
+      );
+      await refreshSharedWorkspaceState();
+      void queueFullSync();
+      return { ok: true };
+    },
+    [getWorkspaceIdByVisibleEntry, refreshSharedWorkspaceState],
+  );
+
+  const acceptSharedWorkspaceInvite = useCallback(
+    async (shareId) => {
+      const res = await acceptWorkspaceShare(shareId);
+      if (!res.ok) return res;
+      await refreshSharedWorkspaceState();
+      void queueFullSync();
+      return { ok: true };
+    },
+    [refreshSharedWorkspaceState],
+  );
+
+  const makeWorkspacePrivateById = useCallback(
+    async (workspaceId) => {
+      if (!workspaceId) return { ok: false, revokedCount: 0 };
+      const res = await makeWorkspacePrivate(workspaceId);
+      if (!res.ok) return res;
+      await refreshSharedWorkspaceState();
+      void queueFullSync();
+      return res;
+    },
+    [refreshSharedWorkspaceState],
+  );
+
+  const fetchWorkspaceActivityLog = useCallback(async (workspaceId, limit = 80) => {
+    if (!workspaceId) return { data: [] };
+    return fetchWorkspaceActivityLogs(workspaceId, limit);
+  }, []);
+
+  const logWorkspaceEditActivity = useCallback(
+    async (action, summary, details = {}) => {
+      const workspaceId = getWorkspaceIdForStorageKey(activeStorageKey);
+      if (!workspaceId) return { ok: false, error: { message: 'Workspace id missing' } };
+      return logWorkspaceActivity(workspaceId, action, summary, details);
+    },
+    [activeStorageKey],
+  );
+
   const addNote = useCallback((text, category = null, opts = {}) => {
     const now = new Date().toISOString();
     const id = uuidv4();
@@ -736,8 +932,12 @@ export function WorkspaceProvider({ children }) {
       notes: [row, ...(prev.notes || [])],
     }));
     queueFullSync();
+    void logWorkspaceEditActivity('note_added', 'Added note', {
+      note_id: id,
+      category: category ?? null,
+    });
     return id;
-  }, []);
+  }, [logWorkspaceEditActivity]);
 
   const updateNote = useCallback((id, updates) => {
     const now = new Date().toISOString();
@@ -748,7 +948,11 @@ export function WorkspaceProvider({ children }) {
       ),
     }));
     queueFullSync();
-  }, []);
+    void logWorkspaceEditActivity('note_updated', 'Updated note', {
+      note_id: id,
+      fields: Object.keys(updates || {}),
+    });
+  }, [logWorkspaceEditActivity]);
 
   const deleteNote = useCallback((id) => {
     setData((prev) => {
@@ -816,7 +1020,10 @@ export function WorkspaceProvider({ children }) {
       /* ignore */
     }
     queueFullSync();
-  }, [activeStorageKey]);
+    void logWorkspaceEditActivity('note_deleted', 'Deleted note to archive', {
+      note_id: id,
+    });
+  }, [activeStorageKey, logWorkspaceEditActivity]);
 
   const restoreArchivedNote = useCallback((textKey, resolvedCategory) => {
     setData((prev) => {
@@ -843,7 +1050,11 @@ export function WorkspaceProvider({ children }) {
       };
     });
     queueFullSync();
-  }, []);
+    void logWorkspaceEditActivity('note_restored', 'Restored archived note', {
+      text: textKey,
+      category: resolvedCategory ?? null,
+    });
+  }, [logWorkspaceEditActivity]);
 
   const updateArchivedNote = useCallback((textKey, updates) => {
     setData((prev) => {
@@ -870,7 +1081,11 @@ export function WorkspaceProvider({ children }) {
       return { ...prev, archivedNotes: arch };
     });
     queueFullSync();
-  }, []);
+    void logWorkspaceEditActivity('archived_note_updated', 'Updated archived note', {
+      text: textKey,
+      fields: Object.keys(updates || {}),
+    });
+  }, [logWorkspaceEditActivity]);
 
   const permanentlyDeleteArchived = useCallback((textKey) => {
     setData((prev) => {
@@ -896,7 +1111,12 @@ export function WorkspaceProvider({ children }) {
       /* ignore */
     }
     queueFullSync();
-  }, [activeStorageKey]);
+    void logWorkspaceEditActivity(
+      'archived_note_deleted_permanently',
+      'Permanently deleted archived note',
+      { text: textKey },
+    );
+  }, [activeStorageKey, logWorkspaceEditActivity]);
 
   const removeArchivedByTextKeys = useCallback((textKeys) => {
     if (!textKeys?.length) return;
@@ -924,7 +1144,10 @@ export function WorkspaceProvider({ children }) {
       /* ignore */
     }
     queueFullSync();
-  }, [activeStorageKey]);
+    void logWorkspaceEditActivity('archived_notes_bulk_deleted', 'Cleared archived notes', {
+      count: textKeys.length,
+    });
+  }, [activeStorageKey, logWorkspaceEditActivity]);
 
   const addCategory = useCallback((name) => {
     const trimmed = (name || '').trim();
@@ -934,7 +1157,8 @@ export function WorkspaceProvider({ children }) {
       if (cats.includes(trimmed)) return prev;
       return { ...prev, categories: [...cats, trimmed] };
     });
-  }, []);
+    void logWorkspaceEditActivity('category_added', 'Added category', { name: trimmed });
+  }, [logWorkspaceEditActivity]);
 
   const deleteCategory = useCallback((name) => {
     const trimmed = (name || '').trim();
@@ -973,8 +1197,9 @@ export function WorkspaceProvider({ children }) {
           archivedNotes: arch,
         };
       });
+      void logWorkspaceEditActivity('category_deleted', 'Deleted category', { name: trimmed });
     });
-  }, [activeStorageKey]);
+  }, [activeStorageKey, logWorkspaceEditActivity]);
 
   const renameCategory = useCallback((oldName, newName) => {
     const trimmed = (newName || '').trim();
@@ -997,7 +1222,31 @@ export function WorkspaceProvider({ children }) {
         archivedNotes: arch,
       };
     });
-  }, []);
+    void logWorkspaceEditActivity('category_renamed', 'Renamed category', {
+      from: oldName,
+      to: trimmed,
+    });
+  }, [logWorkspaceEditActivity]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return;
+    const onSession = () => {
+      void refreshSharedWorkspaceState();
+    };
+    window.addEventListener('plainsight:local-session', onSession);
+    return () => window.removeEventListener('plainsight:local-session', onSession);
+  }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return;
+    void refreshSharedWorkspaceState();
+  }, [
+    canUseSupabase,
+    hydrationComplete,
+    refreshSharedWorkspaceState,
+    visibleWorkspaces,
+    workspaceSwitchGeneration,
+  ]);
 
   const value = {
     currentWorkspace,
@@ -1007,6 +1256,10 @@ export function WorkspaceProvider({ children }) {
     syncHydrationConnectivityWarning,
     data,
     visibleWorkspaces,
+    sharedWorkspaceShares,
+    sharedWorkspaces: sharedWorkspaceRows,
+    pendingSharedInvites,
+    pendingSharedWorkspaceInvites: pendingSharedInvites,
     workspaceSwitchGeneration,
     workspaceTransitionMode,
     workspaceContentTransitioning,
@@ -1016,8 +1269,15 @@ export function WorkspaceProvider({ children }) {
     save,
     switchWorkspace,
     switchVisibleWorkspace,
+    openSharedWorkspace,
     createVisibleWorkspace,
     renameVisibleWorkspace,
+    getWorkspaceIdByVisibleEntry,
+    shareVisibleWorkspace,
+    acceptSharedWorkspaceInvite,
+    makeWorkspacePrivateById,
+    fetchWorkspaceActivityLog,
+    logWorkspaceEditActivity,
     deleteVisibleWorkspace,
     deleteHiddenWorkspace,
     addNote,

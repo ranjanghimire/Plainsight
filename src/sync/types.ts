@@ -66,6 +66,34 @@ export type WorkspacePin = {
   created_at: Timestamptz;
 };
 
+export type WorkspaceShareStatus = 'pending' | 'accepted' | 'revoked';
+
+export type WorkspaceShare = {
+  id: UUID;
+  workspace_id: UUID;
+  owner_id: UUID;
+  recipient_email: string;
+  recipient_user_id: UUID | null;
+  workspace_name: string;
+  owner_email: string | null;
+  status: WorkspaceShareStatus;
+  created_at: Timestamptz;
+  updated_at: Timestamptz;
+  accepted_at: Timestamptz | null;
+  revoked_at: Timestamptz | null;
+};
+
+export type WorkspaceActivityLog = {
+  id: UUID;
+  workspace_id: UUID;
+  actor_user_id: UUID;
+  actor_email: string | null;
+  action: string;
+  summary: string;
+  details: Record<string, unknown>;
+  created_at: Timestamptz;
+};
+
 /** Derived from `notes.text` first line; mirrored on the server in `note_tags`. */
 export type NoteTag = {
   note_id: UUID;

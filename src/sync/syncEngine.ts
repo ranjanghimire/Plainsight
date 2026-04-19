@@ -10,7 +10,6 @@ import type {
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import {
   getSupabase,
-  fetchAllWorkspaces,
   fetchArchivedNotes,
   fetchCategories,
   fetchNotes,
@@ -71,6 +70,7 @@ import { notifyHydrationComplete } from './hydrationBridge';
 import { getCanUseSupabase } from './syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
 import { pruneArchivedNoteRows } from '../utils/archivedPrune';
+import { listWorkspaceShares } from './sharedWorkspaces';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -81,13 +81,21 @@ async function getOwnerId(): Promise<string | null> {
   return getLocalSession().userId;
 }
 
-/** Always use the signed-in user: local dev placeholder owner_id is not a row in public.users. */
-function ensureWorkspaceOwnerId(workspaces: Workspace[], ownerId: string): Workspace[] {
-  return workspaces.map((w) => ({ ...w, owner_id: ownerId }));
-}
-
 function ensureWorkspacePinUserId(pins: WorkspacePin[], userId: string): WorkspacePin[] {
   return pins.map((p) => ({ ...p, user_id: userId }));
+}
+
+function keepWorkspaceOwnerIds(local: Workspace[], remote: Workspace[]): Workspace[] {
+  const ownerById = new Map<string, string>();
+  for (const w of remote || []) {
+    if (!w?.id) continue;
+    ownerById.set(w.id, w.owner_id);
+  }
+  return (local || []).map((w) => {
+    if (!w?.id) return w;
+    const owner = ownerById.get(w.id);
+    return owner ? { ...w, owner_id: owner } : w;
+  });
 }
 
 /**
@@ -107,8 +115,8 @@ function disambiguateWorkspaceNamesForPush(rows: Workspace[]): Workspace[] {
   });
 }
 
-function prepareWorkspacesForRemote(rows: Workspace[], ownerId: string): Workspace[] {
-  return disambiguateWorkspaceNamesForPush(ensureWorkspaceOwnerId(rows, ownerId));
+function prepareWorkspacesForRemote(rows: Workspace[]): Workspace[] {
+  return disambiguateWorkspaceNamesForPush(rows);
 }
 
 function isPostgresPkConflict(error: { code?: string; message?: string }): boolean {
@@ -246,10 +254,11 @@ export async function pushWorkspaces(
   try {
     const ownerId = await getOwnerId();
     if (!ownerId) return { ok: true };
-    const rows = prepareWorkspacesForRemote(localWorkspaces, ownerId);
+    const rows = prepareWorkspacesForRemote(localWorkspaces);
+    const ownedRows = rows.filter((w) => String(w.owner_id || '') === String(ownerId));
     const seen = workspaceIdsSeenOnRemote;
-    const toUpsert = rows.filter((w) => w.id && seen.has(w.id));
-    const toInsert = rows.filter((w) => w.id && !seen.has(w.id));
+    const toUpsert = ownedRows.filter((w) => w.id && seen.has(w.id));
+    const toInsert = ownedRows.filter((w) => w.id && !seen.has(w.id));
 
     const sb = getSupabase();
     if (toUpsert.length > 0) {
@@ -274,7 +283,7 @@ export async function pushWorkspaces(
             await remapLocalWorkspaceUuidAfterPkCollision(oldPk, newId, ownerId, row);
             const list = await getLocalWorkspaces();
             bindMergedWorkspacesToStorageKeys(list);
-            const nextVisible = rebuildVisibleWorkspacesFromRemote(list);
+            const nextVisible = rebuildVisibleWorkspacesFromRemote(list, ownerId);
             const appPrev = loadAppState();
             saveAppState(nextVisible, appPrev.lastActiveStorageKey);
             workspaceIdReplacements[oldPk] = newId;
@@ -763,13 +772,16 @@ export async function fullSync(
     }
     const remoteWorkspaces = (remoteWorkspacesRes.data || []) as Workspace[];
     let mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteWorkspaces, localWorkspaces);
+    if (ownerId) {
+      mergedWorkspaces = keepWorkspaceOwnerIds(mergedWorkspaces, remoteWorkspaces);
+    }
 
     let mergedAfterNumberedPrune = ownerId
       ? await pruneRedundantNumberedVisibleWorkspaces(mergedWorkspaces)
       : mergedWorkspaces;
 
     let mergedWorkspacesWithOwner = ownerId
-      ? prepareWorkspacesForRemote(mergedAfterNumberedPrune, ownerId)
+      ? prepareWorkspacesForRemote(mergedAfterNumberedPrune)
       : mergedAfterNumberedPrune;
 
     // Second snapshot after prune/prepare: those steps can take long enough that the user finishes
@@ -786,11 +798,14 @@ export async function fullSync(
     }
     const remoteFinal = (remoteFinalRes.data || []) as Workspace[];
     mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteFinal, localFinal);
+    if (ownerId) {
+      mergedWorkspaces = keepWorkspaceOwnerIds(mergedWorkspaces, remoteFinal);
+    }
     mergedAfterNumberedPrune = ownerId
       ? await pruneRedundantNumberedVisibleWorkspaces(mergedWorkspaces)
       : mergedWorkspaces;
     mergedWorkspacesWithOwner = ownerId
-      ? prepareWorkspacesForRemote(mergedAfterNumberedPrune, ownerId)
+      ? prepareWorkspacesForRemote(mergedAfterNumberedPrune)
       : mergedAfterNumberedPrune;
     const remoteIds = new Set(remoteFinal.map((w) => w.id));
     // `disambiguateWorkspaceNamesForPush` runs inside prepare and suffixes duplicate labels
@@ -813,6 +828,32 @@ export async function fullSync(
       });
     }
 
+    const myAccessibleWorkspaceIds = new Set<string>();
+    if (ownerId) {
+      const shareRes = await listWorkspaceShares();
+      if (shareRes.error) {
+        return { ok: false, error: mkError(shareRes.error.message, shareRes.error.details) };
+      }
+      for (const s of shareRes.data || []) {
+        if (s.status !== 'accepted') continue;
+        if (String(s.owner_id || '') === String(ownerId)) {
+          myAccessibleWorkspaceIds.add(String(s.workspace_id));
+          continue;
+        }
+        if (String(s.recipient_user_id || '') === String(ownerId)) {
+          myAccessibleWorkspaceIds.add(String(s.workspace_id));
+        }
+      }
+      for (const w of mergedWorkspacesWithOwner) {
+        if (String(w.owner_id || '') === String(ownerId)) {
+          myAccessibleWorkspaceIds.add(String(w.id));
+        }
+      }
+      mergedWorkspacesWithOwner = mergedWorkspacesWithOwner.filter((w) =>
+        myAccessibleWorkspaceIds.has(String(w.id)),
+      );
+    }
+
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
     await saveLocalWorkspaces(mergedWorkspacesWithOwner);
 
@@ -822,7 +863,10 @@ export async function fullSync(
       mergedWorkspacesWithOwner,
     );
     purgeOrphanWorkspaceBlobsFromLocalStorage(mergedWorkspacesWithOwner, mergedStorageKeys);
-    const nextVisible = rebuildVisibleWorkspacesFromRemote(mergedWorkspacesWithOwner);
+    const nextVisible = rebuildVisibleWorkspacesFromRemote(
+      mergedWorkspacesWithOwner,
+      ownerId,
+    );
     const appPrev = loadAppState();
     const mergedIds = new Set(mergedWorkspacesWithOwner.map((w) => w.id));
     let lastActive = appPrev.lastActiveStorageKey;
@@ -839,6 +883,7 @@ export async function fullSync(
     }
     saveAppState(nextVisible, lastActive);
 
+    // Owner always sees own workspaces; collaborators only sync accepted shared workspaces.
     // Ensure every merged workspace has a UI blob key present (includes hidden after bind).
     for (const w of mergedWorkspacesWithOwner) {
       if (!w?.id) continue;
@@ -854,16 +899,27 @@ export async function fullSync(
     }
 
     // 5) Determine workspace IDs for downstream pulls/merges
-    const ids =
+    let workspaceIdsToSync =
       workspaceIds && workspaceIds.length
-        ? workspaceIds
+        ? [...workspaceIds]
         : mergedWorkspacesWithOwner.map((w) => w.id);
+    if (ownerId) {
+      workspaceIdsToSync = workspaceIdsToSync.filter((wid) => myAccessibleWorkspaceIds.has(wid));
+    }
+    if (ownerId) {
+      const idsToPurge = mergedWorkspaces
+        .map((w) => String(w?.id || ''))
+        .filter((wid) => wid && !myAccessibleWorkspaceIds.has(wid));
+      for (const wid of idsToPurge) {
+        await purgeWorkspaceClientSide(wid);
+      }
+    }
 
     const remoteCategories: Record<string, Category[]> = {};
     const remoteNotes: Record<string, Note[]> = {};
     const remoteArchived: Record<string, ArchivedNote[]> = {};
 
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const [cats, notes, arch] = await Promise.all([
         fullSyncIpc.pullCategories(wid),
         fullSyncIpc.pullNotes(wid),
@@ -878,13 +934,13 @@ export async function fullSync(
     }
 
     // Seed merged categories into local DB before UI flush (so name → category_id mapping sees remote rows)
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const localCatsSeed = await getLocalCategories(wid);
       const mergedCatSeed = mergeCategories(localCatsSeed, remoteCategories[wid] || []);
       await saveLocalCategories(wid, mergedCatSeed.merged);
     }
 
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       await flushWorkspaceUiIntoLocalDb(wid);
     }
 
@@ -899,7 +955,7 @@ export async function fullSync(
     const localArchivedTombstones: Record<string, { id: string; deleted_at: string }[]> = {};
     const localCategoryTombstones: Record<string, CategoryTombstone[]> = {};
 
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const [cats, notes, arch, tombs, archTombs, catTombs] = await Promise.all([
         getLocalCategories(wid),
         getLocalNotes(wid),
@@ -926,14 +982,14 @@ export async function fullSync(
     const mergedNotes: Record<string, ReturnType<typeof mergeNotes>> = {};
     const mergedArchived: Record<string, ReturnType<typeof mergeArchivedNotes>> = {};
 
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       mergedCategories[wid] = mergeCategories(localCategories[wid] || [], remoteCategories[wid] || []);
       mergedNotes[wid] = mergeNotes(localNotes[wid] || [], remoteNotes[wid] || []);
       mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || []);
     }
 
     // Apply tombstones: locally deleted notes must not be resurrected by remote merges.
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const tombIds = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
       if (tombIds.size === 0) continue;
       mergedNotes[wid] = {
@@ -943,7 +999,7 @@ export async function fullSync(
     }
 
     // Apply tombstones: locally deleted archived notes must not be resurrected by remote merges.
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const tombIds = new Set((localArchivedTombstones[wid] || []).map((t) => t.id));
       if (tombIds.size === 0) continue;
       mergedArchived[wid] = {
@@ -953,7 +1009,7 @@ export async function fullSync(
     }
 
     // Apply tombstones: locally deleted categories must not be resurrected by remote merges.
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const tombIds = new Set((localCategoryTombstones[wid] || []).map((t) => t.id));
       if (tombIds.size === 0) continue;
       mergedCategories[wid] = {
@@ -963,7 +1019,7 @@ export async function fullSync(
     }
 
     // Cap archived notes per workspace (newest kept); queue remote deletes for trimmed rows.
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const merged = mergedArchived[wid].merged;
       const { kept, removed } = pruneArchivedNoteRows(merged);
       if (removed.length === 0) continue;
@@ -985,7 +1041,7 @@ export async function fullSync(
 
     // Save local merged for the rest of tables (workspaces already persisted above)
     await saveLocalWorkspacePins(mergedPins.merged);
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       await Promise.all([
         saveLocalCategories(wid, mergedCategories[wid].merged),
         saveLocalNotes(wid, mergedNotes[wid].merged),
@@ -998,7 +1054,7 @@ export async function fullSync(
       );
     }
 
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       await hydrateWorkspaceUiFromLocalDb(wid);
     }
 
@@ -1018,7 +1074,7 @@ export async function fullSync(
     const pinsPush = await fullSyncIpc.pushWorkspacePins(mergedPins.merged);
     if (!pinsPush.ok) return { ok: false, error: pinsPush.error };
 
-    for (const wid of ids) {
+    for (const wid of workspaceIdsToSync) {
       const cats = mergedCategories[wid].merged;
       const notesAligned = alignNoteCategoryIds(mergedNotes[wid].merged, cats);
       const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
