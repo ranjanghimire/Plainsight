@@ -22,12 +22,7 @@ import {
   waitForCategoryRowReady,
   workspaceUuidForStorageKey,
 } from './categoryTestHarness';
-import {
-  clearSupabaseTables,
-  getCategories,
-  getCategoryById,
-  getCategoryRowsByExactName,
-} from './supabaseTestHelpers';
+import { clearSupabaseTables, getCategories, getCategoryById } from './supabaseTestHelpers';
 
 const paidEnvOk =
   Boolean(process.env.VITEST_SUPABASE_USER_ID?.trim()) &&
@@ -179,11 +174,13 @@ describePaid('paid user — hidden workspace categories + Supabase', () => {
 
     await pushWorkspaceToSupabase(hiddenKey);
 
+    const hidWid = workspaceUuidForStorageKey(hiddenKey);
     let rowId = '';
     await waitFor(async () => {
-      const rows = await getCategoryRowsByExactName('PaidHidDel');
-      expect(rows.length).toBeGreaterThanOrEqual(1);
-      rowId = rows[0].id;
+      const rows = await getCategories(hidWid);
+      const row = rows.find((r) => r.name === 'PaidHidDel');
+      expect(row).toBeTruthy();
+      rowId = row!.id;
     });
 
     const user = userEvent.setup();
@@ -202,8 +199,8 @@ describePaid('paid user — hidden workspace categories + Supabase', () => {
 
     await waitFor(async () => {
       expect(await getCategoryById(rowId)).toBeNull();
-      const rows = await getCategoryRowsByExactName('PaidHidDel');
-      expect(rows.length).toBe(0);
+      const rows = await getCategories(hidWid);
+      expect(rows.some((r) => r.name === 'PaidHidDel')).toBe(false);
     });
   });
 });

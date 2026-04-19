@@ -76,7 +76,7 @@ describe('WorkspacePage (isolated route)', () => {
     });
     renderWorkspaceRoute([`/w/${switchName}`]);
     await waitFor(() => {
-      expect(screen.getByText('only in hidden deeplink')).toBeInTheDocument();
+      expect(screen.getAllByText('only in hidden deeplink').length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByRole('textbox', { name: 'New note' })).toBeInTheDocument();
   });

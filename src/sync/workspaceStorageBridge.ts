@@ -73,8 +73,21 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
   const now = new Date().toISOString();
 
   const existingCats = await getLocalCategories(workspaceId);
-  const byName = new Map(existingCats.map((c) => [c.name, c]));
-  const categories: Category[] = [...existingCats];
+  /** One row per name (avoids duplicate-name rows if local DB was ever inconsistent). */
+  const byName = new Map<string, Category>();
+  for (const c of existingCats) {
+    const prev = byName.get(c.name);
+    if (!prev) {
+      byName.set(c.name, c);
+      continue;
+    }
+    const ct = Date.parse(c.updated_at);
+    const pt = Date.parse(prev.updated_at);
+    const cOk = Number.isFinite(ct);
+    const pOk = Number.isFinite(pt);
+    if ((cOk && pOk && ct >= pt) || (cOk && !pOk)) byName.set(c.name, c);
+  }
+  const categories: Category[] = Array.from(byName.values());
   function ensureCategoryForName(name: string | null): string | null {
     if (name === null || name === '') return null;
     const n = name.trim();
@@ -111,7 +124,13 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
     }
   }
   for (const name of referencedNames) ensureCategoryForName(name);
-  await saveLocalCategories(workspaceId, categories);
+  // Drop categories no longer referenced by the UI blob (prevents orphan rows + duplicate
+  // workspace_id/name on push after the user deletes a chip).
+  const categoriesSaved = [...referencedNames]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => byName.get(name))
+    .filter((c): c is Category => Boolean(c));
+  await saveLocalCategories(workspaceId, categoriesSaved);
 
   const localNotes = await getLocalNotes(workspaceId);
   const uiNoteRows: Note[] = (ui.notes || []).map((n: Record<string, unknown>) => {
