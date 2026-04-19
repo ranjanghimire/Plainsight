@@ -400,7 +400,13 @@ export function NoteCard({
         className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
       >
         {isEditing ? (
-          <div className="flex min-w-0 flex-col">
+          <div
+            className={
+              isArchived
+                ? 'flex min-w-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 focus-within:border-neutral-300 focus-within:ring-2 focus-within:ring-neutral-300 dark:border-neutral-600 dark:bg-neutral-900 dark:focus-within:border-neutral-500 dark:focus-within:ring-neutral-600'
+                : 'flex min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-stone-50 focus-within:border-stone-300 focus-within:ring-2 focus-within:ring-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:focus-within:border-stone-500 dark:focus-within:ring-stone-600'
+            }
+          >
             <textarea
               ref={textareaRef}
               value={editBody}
@@ -419,16 +425,16 @@ export function NoteCard({
               }}
               className={
                 isArchived
-                  ? 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-neutral-800 bg-neutral-50 rounded border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200 dark:focus:ring-neutral-600 caret-neutral-900 dark:caret-neutral-100'
-                  : 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto px-2 py-1.5 pb-8 text-base text-stone-800 bg-stone-50 rounded border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300 dark:bg-stone-700 dark:border-stone-600 dark:text-stone-200 caret-stone-900 dark:caret-stone-100'
+                  ? 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto rounded-none border-0 bg-transparent px-2 py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
+                  : 'w-full min-h-[80px] max-h-[min(70vh,32rem)] overflow-y-auto rounded-none border-0 bg-transparent px-2 py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
               }
               autoFocus
             />
             <div
               className={
                 isArchived
-                  ? 'mt-2 flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-neutral-200 px-2 pt-2 text-neutral-500 dark:border-neutral-600 dark:text-neutral-400'
-                  : 'mt-2 flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-stone-200 px-2 pt-2 text-stone-500 dark:border-stone-600 dark:text-stone-400'
+                  ? 'flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-neutral-200 px-2 py-2 text-neutral-500 dark:border-neutral-600 dark:text-neutral-400'
+                  : 'flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-stone-200 px-2 py-2 text-stone-500 dark:border-stone-600 dark:text-stone-400'
               }
             >
               <div className="flex min-h-0 min-w-0 flex-1 items-center gap-0 overflow-hidden">
