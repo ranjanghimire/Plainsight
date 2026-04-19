@@ -466,12 +466,15 @@ function sanitizeNotesForPush(rows: Note[]): Note[] {
       console.warn('pushNotes: skipping note with invalid workspace_id', row);
       continue;
     }
+    const { bold_first_line: bfl, ...rest } = row;
+    const cleaned: Note =
+      bfl === true ? { ...rest, bold_first_line: true } : { ...rest };
     if (!isUuid(row.id || '')) {
       console.warn('pushNotes: regenerating invalid note id', row);
-      out.push({ ...row, id: uuidv4() });
+      out.push({ ...cleaned, id: uuidv4() });
       continue;
     }
-    out.push(row);
+    out.push(cleaned);
   }
   return out;
 }

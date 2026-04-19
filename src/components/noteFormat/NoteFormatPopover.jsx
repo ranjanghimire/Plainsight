@@ -82,6 +82,9 @@ export function NoteFormatPopover({
   value,
   setValue,
   toggleBullets,
+  /** When false, bullets opens the editor instead of mutating a textarea (read-only card view). */
+  editorActive = true,
+  onRequestBulletsEdit,
 }) {
   const [closing, setClosing] = useState(false);
   const [panelEnter, setPanelEnter] = useState(false);
@@ -189,6 +192,10 @@ export function NoteFormatPopover({
         onMouseDown={(e) => e.preventDefault()}
         onClick={(e) => {
           e.stopPropagation();
+          if (!editorActive) {
+            onRequestBulletsEdit?.();
+            return;
+          }
           const next = !bulletsMode;
           if (next) {
             toggleBullets(true, textareaRef?.current, value, setValue);

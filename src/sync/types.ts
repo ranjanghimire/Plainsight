@@ -34,6 +34,8 @@ export type Note = {
   category_id: UUID | null;
   created_at: Timestamptz;
   updated_at: Timestamptz;
+  /** Client display: emphasize first line when true. */
+  bold_first_line?: boolean;
 };
 
 export type NoteTombstone = {

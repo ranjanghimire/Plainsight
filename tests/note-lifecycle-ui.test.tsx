@@ -63,9 +63,26 @@ async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * NotesView renders prev / current / next category swipe columns, so the same note body text
+ * can appear multiple times in the DOM — target the center column (index 1 of 3).
+ */
+function centerSwipePick<T extends Element>(elements: T[]): T {
+  return elements.length === 3 ? elements[1]! : elements[0]!;
+}
+
+function getNoteBodyClickTarget(text: string) {
+  return centerSwipePick(screen.getAllByText(text));
+}
+
+/** Prev/current/next category columns duplicate note actions — use the center column. */
+function getCenterRoleButton(name: string | RegExp) {
+  return centerSwipePick(screen.getAllByRole('button', { name }));
+}
+
 /** NoteCard reveals meta row after a single tap and a short delay. */
 async function revealNoteMeta(user: ReturnType<typeof userEvent.setup>, text: string) {
-  const body = screen.getByText(text);
+  const body = getNoteBodyClickTarget(text);
   await user.click(body);
   await sleep(320);
 }
@@ -91,11 +108,11 @@ describe('note lifecycle (free, local)', () => {
     await user.type(main, 'alpha lifecycle note');
     await user.click(screen.getByRole('button', { name: 'Add note' }));
     await waitFor(() => {
-      expect(screen.getByText('alpha lifecycle note')).toBeInTheDocument();
+      expect(screen.getAllByText('alpha lifecycle note').length).toBeGreaterThan(0);
     });
 
     await revealNoteMeta(user, 'alpha lifecycle note');
-    await user.click(screen.getByRole('button', { name: 'Delete note' }));
+    await user.click(getCenterRoleButton('Delete note'));
     await sleep(250);
     await waitFor(() => {
       expect(loadWorkspace('workspace_home').notes?.length ?? 0).toBe(0);
@@ -110,23 +127,31 @@ describe('note lifecycle (free, local)', () => {
     await user.click(main);
     await user.type(main, 'restore me body');
     await user.click(screen.getByRole('button', { name: 'Add note' }));
-    await waitFor(() => expect(screen.getByText('restore me body')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText('restore me body').length).toBeGreaterThan(0),
+    );
     await revealNoteMeta(user, 'restore me body');
-    await user.click(screen.getByRole('button', { name: 'Delete note' }));
+    await user.click(getCenterRoleButton('Delete note'));
     await sleep(250);
-    await waitFor(() => expect(screen.queryByText('restore me body')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryAllByText('restore me body').length).toBe(0),
+    );
 
     await user.click(screen.getByRole('button', { name: 'Toggle archive test' }));
     await sleep(200);
-    await waitFor(() => expect(screen.getByText(/Archived items/i)).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('restore me body')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText(/Archived items/i).length).toBeGreaterThan(0),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText('restore me body').length).toBeGreaterThan(0),
+    );
     await revealNoteMeta(user, 'restore me body');
-    await user.click(screen.getByRole('button', { name: 'Restore note' }));
+    await user.click(getCenterRoleButton('Restore note'));
     await sleep(200);
     await user.click(screen.getByRole('button', { name: 'Toggle archive test' }));
     await sleep(200);
     await waitFor(() => {
-      expect(screen.getByText('restore me body')).toBeInTheDocument();
+      expect(screen.getAllByText('restore me body').length).toBeGreaterThan(0);
       expect(loadWorkspace('workspace_home').notes?.length ?? 0).toBeGreaterThan(0);
     });
   });
@@ -138,16 +163,20 @@ describe('note lifecycle (free, local)', () => {
     await user.click(main);
     await user.type(main, 'gone forever');
     await user.click(screen.getByRole('button', { name: 'Add note' }));
-    await waitFor(() => expect(screen.getByText('gone forever')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText('gone forever').length).toBeGreaterThan(0),
+    );
     await revealNoteMeta(user, 'gone forever');
-    await user.click(screen.getByRole('button', { name: 'Delete note' }));
+    await user.click(getCenterRoleButton('Delete note'));
     await sleep(250);
 
     await user.click(screen.getByRole('button', { name: 'Toggle archive test' }));
     await sleep(200);
-    await waitFor(() => expect(screen.getByText('gone forever')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText('gone forever').length).toBeGreaterThan(0),
+    );
     await revealNoteMeta(user, 'gone forever');
-    await user.click(screen.getByRole('button', { name: 'Delete archived note permanently' }));
+    await user.click(getCenterRoleButton('Delete archived note permanently'));
     await sleep(220);
     await waitFor(() => {
       expect(loadWorkspace('workspace_home').archivedNotes?.['gone forever']).toBeUndefined();

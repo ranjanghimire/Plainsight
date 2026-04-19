@@ -130,7 +130,7 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
       (typeof n.updatedAt === 'string' && n.updatedAt) ||
       (typeof n.updated_at === 'string' && n.updated_at) ||
       createdRaw;
-    return {
+    const base: Note = {
       id,
       workspace_id: workspaceId,
       text,
@@ -138,6 +138,8 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
       created_at: createdRaw,
       updated_at: updatedRaw,
     };
+    const boldRaw = (n as { boldFirstLine?: unknown }).boldFirstLine;
+    return boldRaw === true ? { ...base, bold_first_line: true } : base;
   });
   const mergedActiveNotes = mergeNotesById(localNotes, uiNoteRows);
   await saveLocalNotes(workspaceId, mergedActiveNotes);
@@ -244,6 +246,7 @@ export async function hydrateWorkspaceUiFromLocalDb(workspaceId: string): Promis
     category: n.category_id ? (idToName.get(n.category_id) ?? null) : null,
     createdAt: n.created_at,
     updatedAt: n.updated_at,
+    ...(n.bold_first_line === true ? { boldFirstLine: true } : {}),
   }));
 
   const archivedNotes: Record<
