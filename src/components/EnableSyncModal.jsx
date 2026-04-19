@@ -107,17 +107,26 @@ export function EnableSyncModal({
           <div className="my-5 h-px w-full bg-white/[0.08]" aria-hidden />
 
           <ul className="space-y-2 text-[0.8125rem] leading-relaxed text-stone-100">
-            <li className="flex gap-2.5">
-              <span className="mt-[0.35em] h-1 w-1 shrink-0 rounded-full bg-white" aria-hidden />
-              <span>Sync across your devices</span>
+            <li className="flex items-start gap-2.5">
+              <span
+                className="mt-[0.52em] h-1 w-1 shrink-0 self-start rounded-full bg-white/70"
+                aria-hidden
+              />
+              <span className="min-w-0">Sync across your devices</span>
             </li>
-            <li className="flex gap-2.5">
-              <span className="mt-[0.35em] h-1 w-1 shrink-0 rounded-full bg-white" aria-hidden />
-              <span>Cloud backup for your workspaces and notes</span>
+            <li className="flex items-start gap-2.5">
+              <span
+                className="mt-[0.52em] h-1 w-1 shrink-0 self-start rounded-full bg-white/70"
+                aria-hidden
+              />
+              <span className="min-w-0">Cloud backup for your workspaces and notes</span>
             </li>
-            <li className="flex gap-2.5">
-              <span className="mt-[0.35em] h-1 w-1 shrink-0 rounded-full bg-white" aria-hidden />
-              <span>Changes update while you work</span>
+            <li className="flex items-start gap-2.5">
+              <span
+                className="mt-[0.52em] h-1 w-1 shrink-0 self-start rounded-full bg-white/70"
+                aria-hidden
+              />
+              <span className="min-w-0">Changes update while you work</span>
             </li>
           </ul>
 
