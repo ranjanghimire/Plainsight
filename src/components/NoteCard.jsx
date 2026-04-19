@@ -18,6 +18,9 @@ import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPo
 const ACTIVE_DELETE_MS = 180;
 const ARCHIVE_DELETE_MS = 170;
 
+/** Logical newline count above which read-only body collapses with show more / less. */
+const READ_MORE_LINE_THRESHOLD = 7;
+
 /** Keep the caret line inside the textarea viewport (esp. after Enter on the last line). */
 function scrollNoteTextareaCaretIntoView(ta) {
   if (!ta) return;
@@ -173,6 +176,34 @@ function RestoreIcon() {
   );
 }
 
+/** Double chevron down — read-more expand (muted; paired with ReadMoreCollapseIcon). */
+function ReadMoreExpandIcon({ className = 'h-4 w-4' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M7 6l5 5 5-5M7 12l5 5 5-5"
+      />
+    </svg>
+  );
+}
+
+/** Double chevron up — read-more collapse. */
+function ReadMoreCollapseIcon({ className = 'h-4 w-4' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M7 18l5-5 5 5M7 12l5-5 5 5"
+      />
+    </svg>
+  );
+}
+
 export function NoteCard({
   note,
   categories,
@@ -194,6 +225,7 @@ export function NoteCard({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
+  const [readMoreExpanded, setReadMoreExpanded] = useState(false);
   const toggleEditTimerRef = useRef(null);
   const archivedEditKeyRef = useRef(note.text);
   const deleteTimerRef = useRef(null);
@@ -239,6 +271,10 @@ export function NoteCard({
   useEffect(() => {
     if (isEditing) setBoldMode(Boolean(note.boldFirstLine));
   }, [isEditing, note.id, note.boldFirstLine, setBoldMode]);
+
+  useEffect(() => {
+    setReadMoreExpanded(false);
+  }, [note.id, note.text]);
 
   /** After opening the editor, keep caret in view (textarea scroll + page scroll; mobile / tall min-height). */
   useLayoutEffect(() => {
@@ -397,8 +433,12 @@ export function NoteCard({
     }, ARCHIVE_DELETE_MS);
   };
 
-  const displayBody = trimTrailingBlankLines(parsed.body);
+  const { displayBody, displayLineCount } = useMemo(() => {
+    const b = trimTrailingBlankLines(parsed.body);
+    return { displayBody: b, displayLineCount: b ? b.split('\n').length : 0 };
+  }, [parsed.body]);
   const displayBoldFirst = Boolean(note.boldFirstLine);
+  const readMoreActive = Boolean(displayBody && displayLineCount > READ_MORE_LINE_THRESHOLD);
 
   return (
     <div className={outerWrapClass}>
@@ -503,6 +543,71 @@ export function NoteCard({
               />
             </div>
           </div>
+        ) : displayBody ? (
+          readMoreActive ? (
+            <div className="flex flex-col gap-0.5">
+              <div
+                className={`relative overflow-hidden text-base leading-normal transition-[max-height] duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-reduce:transition-[max-height] motion-reduce:duration-200 ${
+                  readMoreExpanded ? 'max-h-[min(120rem,9999px)]' : 'max-h-[10.5em]'
+                }`}
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={handleTextBodyPointerPick}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleTextBodyPointerPick();
+                    }
+                  }}
+                  className={displayBodyParaClass}
+                >
+                  {renderNoteDisplayBody(displayBody, displayBoldFirst)}
+                </div>
+                {!readMoreExpanded ? (
+                  <div
+                    className={`pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-16 bg-gradient-to-t ${
+                      isArchived
+                        ? 'from-neutral-100 via-neutral-100/75 to-transparent dark:from-neutral-800 dark:via-neutral-800/75'
+                        : 'from-white via-white/80 to-transparent dark:from-stone-800 dark:via-stone-800/80'
+                    }`}
+                    aria-hidden
+                  />
+                ) : null}
+              </div>
+              <button
+                type="button"
+                aria-label={readMoreExpanded ? 'Show less' : 'Show more'}
+                className={
+                  isArchived
+                    ? 'self-center rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
+                    : 'self-center rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setReadMoreExpanded((v) => !v);
+                }}
+              >
+                {readMoreExpanded ? <ReadMoreCollapseIcon /> : <ReadMoreExpandIcon />}
+              </button>
+            </div>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={handleTextBodyPointerPick}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleTextBodyPointerPick();
+                }
+              }}
+              className={displayBodyParaClass}
+            >
+              {renderNoteDisplayBody(displayBody, displayBoldFirst)}
+            </div>
+          )
         ) : (
           <div
             role="button"
@@ -514,9 +619,9 @@ export function NoteCard({
                 handleTextBodyPointerPick();
               }
             }}
-            className={displayBody ? displayBodyParaClass : bodyTextClass}
+            className={bodyTextClass}
           >
-            {displayBody ? renderNoteDisplayBody(displayBody, displayBoldFirst) : 'Double-click or double-tap to edit…'}
+            Double-click or double-tap to edit…
           </div>
         )}
         <div
