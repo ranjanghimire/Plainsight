@@ -853,8 +853,6 @@ export async function fullSync(
     }
 
     const myAccessibleWorkspaceIds = new Set<string>();
-    /** Collaborator can see owner’s workspace row in menu + title; must not filter it out in rebuildVisibleWorkspacesFromRemote. */
-    const sharedAsRecipientIds = new Set<string>();
     if (ownerId) {
       const shareRes = await listWorkspaceShares();
       if (shareRes.error) {
@@ -868,7 +866,6 @@ export async function fullSync(
         }
         if (String(s.recipient_user_id || '') === String(ownerId)) {
           myAccessibleWorkspaceIds.add(String(s.workspace_id));
-          sharedAsRecipientIds.add(String(s.workspace_id));
         }
       }
       for (const w of mergedWorkspacesWithOwner) {
@@ -890,11 +887,7 @@ export async function fullSync(
       mergedWorkspacesWithOwner,
     );
     purgeOrphanWorkspaceBlobsFromLocalStorage(mergedWorkspacesWithOwner, mergedStorageKeys);
-    const nextVisible = rebuildVisibleWorkspacesFromRemote(
-      mergedWorkspacesWithOwner,
-      ownerId,
-      ownerId ? { sharedAsRecipientIds } : undefined,
-    );
+    const nextVisible = rebuildVisibleWorkspacesFromRemote(mergedWorkspacesWithOwner, ownerId);
     const appPrev = loadAppState();
     const mergedIds = new Set(mergedWorkspacesWithOwner.map((w) => w.id));
     let lastActive = appPrev.lastActiveStorageKey;

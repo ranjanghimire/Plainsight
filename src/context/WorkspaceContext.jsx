@@ -544,6 +544,35 @@ export function WorkspaceProvider({ children }) {
     };
   }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
 
+  /**
+   * When Postgres Realtime does not deliver (custom session header, network, or publication gaps),
+   * periodic + focus/visibility pulls keep shared workspaces from going stale without a full reload.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    const pullIfVisible = () => {
+      if (document.visibilityState === 'visible') void queueFullSync();
+    };
+    const intervalId = window.setInterval(pullIfVisible, 30_000);
+    let debounce = null;
+    const schedulePull = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (debounce != null) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        debounce = null;
+        void queueFullSync();
+      }, 700);
+    };
+    document.addEventListener('visibilitychange', schedulePull);
+    window.addEventListener('focus', schedulePull);
+    return () => {
+      window.clearInterval(intervalId);
+      if (debounce != null) window.clearTimeout(debounce);
+      document.removeEventListener('visibilitychange', schedulePull);
+      window.removeEventListener('focus', schedulePull);
+    };
+  }, [canUseSupabase, hydrationComplete]);
+
   const applyNavigateByWorkspaceName = useCallback(
     (name) => {
       if (!canOpenOrCreateHiddenWorkspace(name)) return;
@@ -647,14 +676,8 @@ export function WorkspaceProvider({ children }) {
       setActiveStorageKey(key);
       setData(nextData);
       setCurrentWorkspace(`visible:${wid}`);
+      // Do not append to visibleWorkspaces: collaborators only list shared tabs under “Shared Workspaces”.
       saveAppStatePartial({ lastActiveStorageKey: key });
-      setVisibleWorkspaces((prev) => {
-        const exists = (prev || []).some((e) => String(e.key) === String(key));
-        if (exists) return prev;
-        const next = [...(prev || []), { id: wid, name, key }];
-        saveAppStatePartial({ visibleWorkspaces: next, lastActiveStorageKey: key });
-        return next;
-      });
       bumpWorkspaceSwitch();
       void queueFullSync();
       return true;
