@@ -257,6 +257,23 @@ export function WorkspaceProvider({ children }) {
       const wid = getWorkspaceIdForStorageKey(v.key);
       if (wid) nameById.set(wid, v.name);
     }
+    try {
+      const mergedWs = await getLocalWorkspaces();
+      for (const w of mergedWs) {
+        if (!w?.id) continue;
+        const wid = String(w.id);
+        const nm = typeof w.name === 'string' ? w.name.trim() : '';
+        if (!nm) continue;
+        const prev = nameById.get(wid);
+        const prevGeneric =
+          !prev ||
+          /^workspace$/i.test(String(prev).trim()) ||
+          String(prev).trim() === 'Workspace';
+        if (!prev || prevGeneric) nameById.set(wid, nm);
+      }
+    } catch {
+      /* ignore */
+    }
     const built = buildSharedWorkspaceRows({
       shares: localRows,
       workspaceNamesById: nameById,
@@ -438,7 +455,7 @@ export function WorkspaceProvider({ children }) {
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
         void queueFullSync();
-      }, 900);
+      }, 400);
     };
 
     const unsubs = [];
@@ -571,7 +588,7 @@ export function WorkspaceProvider({ children }) {
     const pullIfVisible = () => {
       if (document.visibilityState === 'visible') void queueFullSync();
     };
-    const intervalId = window.setInterval(pullIfVisible, 8_000);
+    const intervalId = window.setInterval(pullIfVisible, 4_000);
     let debounce = null;
     const schedulePull = () => {
       if (document.visibilityState !== 'visible') return;
@@ -579,7 +596,7 @@ export function WorkspaceProvider({ children }) {
       debounce = window.setTimeout(() => {
         debounce = null;
         void queueFullSync();
-      }, 700);
+      }, 450);
     };
     document.addEventListener('visibilitychange', schedulePull);
     window.addEventListener('focus', schedulePull);

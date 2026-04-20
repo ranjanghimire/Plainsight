@@ -51,7 +51,7 @@ export function queueFullSync() {
   timer = window.setTimeout(() => {
     timer = null;
     run();
-  }, 500);
+  }, 320);
 }
 
 /**

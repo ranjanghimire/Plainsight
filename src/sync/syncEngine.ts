@@ -1018,6 +1018,13 @@ export async function fullSync(
       remoteArchived[wid] = arch.data;
     }
 
+    const lastKnownRemoteNoteIdsByWid: Record<string, Set<string>> = {};
+    await Promise.all(
+      workspaceIdsToSync.map(async (wid) => {
+        lastKnownRemoteNoteIdsByWid[wid] = await getLastKnownRemoteNoteIds(wid);
+      }),
+    );
+
     // Seed merged categories into local DB before UI flush (so name → category_id mapping sees remote rows)
     for (const wid of workspaceIdsToSync) {
       const localCatsSeed = await getLocalCategories(wid);
@@ -1026,7 +1033,10 @@ export async function fullSync(
     }
 
     for (const wid of workspaceIdsToSync) {
-      await flushWorkspaceUiIntoLocalDb(wid);
+      await flushWorkspaceUiIntoLocalDb(wid, {
+        remoteIdsEverConfirmed: lastKnownRemoteNoteIdsByWid[wid],
+        remoteNoteIdsThisPull: new Set((remoteNotes[wid] || []).map((n) => n.id)),
+      });
     }
 
     // Load local (normalize user_id before merge so dev-session pins dedupe with remote)
@@ -1066,13 +1076,6 @@ export async function fullSync(
     const mergedCategories: Record<string, ReturnType<typeof mergeCategories>> = {};
     const mergedNotes: Record<string, ReturnType<typeof mergeNotes>> = {};
     const mergedArchived: Record<string, ReturnType<typeof mergeArchivedNotes>> = {};
-
-    const lastKnownRemoteNoteIdsByWid: Record<string, Set<string>> = {};
-    await Promise.all(
-      workspaceIdsToSync.map(async (wid) => {
-        lastKnownRemoteNoteIdsByWid[wid] = await getLastKnownRemoteNoteIds(wid);
-      }),
-    );
 
     for (const wid of workspaceIdsToSync) {
       mergedCategories[wid] = mergeCategories(localCategories[wid] || [], remoteCategories[wid] || []);

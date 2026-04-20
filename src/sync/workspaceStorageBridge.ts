@@ -75,16 +75,32 @@ function mergeArchivedById(a: ArchivedNote[], b: ArchivedNote[]): ArchivedNote[]
   return [...map.values()];
 }
 
+export type FlushWorkspaceUiOpts = {
+  /**
+   * Note ids we have previously confirmed on the server (see fullSync + local cache).
+   * With `remoteNoteIdsThisPull`, UI rows for ids that are confirmed but missing from the
+   * current pull are stripped so a stale localStorage blob cannot re-seed rows another client deleted.
+   */
+  remoteIdsEverConfirmed?: Set<string> | null;
+  /** Active note ids from the current server pull for this workspace. */
+  remoteNoteIdsThisPull?: Set<string> | null;
+};
+
 /**
  * Merge UI workspace JSON (localStorage workspace_* keys) into plainsight_local_*
  * rows so fullSync can merge with remote. Uses workspace UUID from the id map.
  */
-export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<void> {
+export async function flushWorkspaceUiIntoLocalDb(
+  workspaceId: string,
+  opts?: FlushWorkspaceUiOpts | null,
+): Promise<void> {
   const storageKey = getStorageKeyForWorkspaceId(workspaceId);
   if (!storageKey) return;
 
   const ui = loadWorkspace(storageKey);
   const now = new Date().toISOString();
+  const confirmed = opts?.remoteIdsEverConfirmed;
+  const pullIds = opts?.remoteNoteIdsThisPull;
 
   const existingCats = await getLocalCategories(workspaceId);
   /** One row per name (avoids duplicate-name rows if local DB was ever inconsistent). */
@@ -147,7 +163,18 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
   await saveLocalCategories(workspaceId, categoriesSaved);
 
   const localNotes = await getLocalNotes(workspaceId);
-  const uiNoteRows: Note[] = (ui.notes || []).map((n: Record<string, unknown>) => {
+  const rawUiNotes = Array.isArray(ui.notes) ? ui.notes : [];
+  const uiNotesForMerge =
+    confirmed && pullIds && confirmed.size > 0
+      ? rawUiNotes.filter((n) => {
+          const id =
+            typeof (n as { id?: unknown }).id === 'string' ? String((n as { id: string }).id).trim() : '';
+          if (!id) return true;
+          if (confirmed.has(id) && !pullIds.has(id)) return false;
+          return true;
+        })
+      : rawUiNotes;
+  const uiNoteRows: Note[] = uiNotesForMerge.map((n: Record<string, unknown>) => {
     const text = typeof n.text === 'string' ? n.text : '';
     const cat =
       n.category === undefined || n.category === null || n.category === ''
