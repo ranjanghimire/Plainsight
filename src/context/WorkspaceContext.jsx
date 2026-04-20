@@ -36,6 +36,7 @@ import {
 } from '../constants/workspaceLimits';
 import { pruneArchivedNotesUi } from '../utils/archivedPrune';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
+import { whenRealtimeAuthReady } from '../sync/supabaseClient';
 import {
   getCanUseSupabase,
   getSyncEntitled,
@@ -452,11 +453,12 @@ export function WorkspaceProvider({ children }) {
       }
     };
 
-    addUnsub(subscribeToWorkspaces(() => scheduleFullSync()));
-    addUnsub(subscribeToWorkspacePins(() => scheduleFullSync()));
-
-    (async () => {
+    void (async () => {
       try {
+        await whenRealtimeAuthReady();
+        if (cancelled) return;
+        addUnsub(subscribeToWorkspaces(() => scheduleFullSync()));
+        addUnsub(subscribeToWorkspacePins(() => scheduleFullSync()));
         const workspaces = await getLocalWorkspaces();
         if (cancelled) return;
         for (const w of workspaces) {
@@ -537,8 +539,19 @@ export function WorkspaceProvider({ children }) {
         queueFullSync();
       }, 400);
     };
-    const unsub = subscribeToWorkspaceShares(onRemoteShareChange);
+    let cancelled = false;
+    let unsub = () => {};
+    void (async () => {
+      try {
+        await whenRealtimeAuthReady();
+        if (cancelled) return;
+        unsub = subscribeToWorkspaceShares(onRemoteShareChange);
+      } catch {
+        /* ignore */
+      }
+    })();
     return () => {
+      cancelled = true;
       if (debounceTimer != null) window.clearTimeout(debounceTimer);
       unsub();
     };

@@ -42,6 +42,20 @@ function mergeNotesById(a: Note[], b: Note[]): Note[] {
   return [...map.values()];
 }
 
+/** Active note ids come from the UI blob; local DB rows for removed ids must not survive flush. */
+function mergeLocalNotesWithUiNotes(localNotes: Note[], uiNoteRows: Note[]): Note[] {
+  const localById = new Map(localNotes.map((n) => [n.id, n]));
+  return uiNoteRows.map((ui) => {
+    const ln = localById.get(ui.id);
+    if (!ln) return ui;
+    const ot = Date.parse(ln.updated_at);
+    const nt = Date.parse(ui.updated_at);
+    const oOk = Number.isFinite(ot);
+    const nOk = Number.isFinite(nt);
+    return !nOk ? ln : !oOk ? ui : nt >= ot ? ui : ln;
+  });
+}
+
 function mergeArchivedById(a: ArchivedNote[], b: ArchivedNote[]): ArchivedNote[] {
   const map = new Map<string, ArchivedNote>();
   for (const n of a) map.set(n.id, n);
@@ -160,7 +174,7 @@ export async function flushWorkspaceUiIntoLocalDb(workspaceId: string): Promise<
     const boldRaw = (n as { boldFirstLine?: unknown }).boldFirstLine;
     return boldRaw === true ? { ...base, bold_first_line: true } : base;
   });
-  const mergedActiveNotes = mergeNotesById(localNotes, uiNoteRows);
+  const mergedActiveNotes = mergeLocalNotesWithUiNotes(localNotes, uiNoteRows);
   await saveLocalNotes(workspaceId, mergedActiveNotes);
   await saveLocalNoteTags(workspaceId, noteTagRowsFromNotes(mergedActiveNotes));
 

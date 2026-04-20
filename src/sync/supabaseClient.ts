@@ -19,6 +19,9 @@ const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | unde
 let cachedClient: SupabaseClient | null = null;
 let cachedToken: string | null = null;
 
+/** Resolves after `realtime.setAuth` for the current cached client (private channel RLS). */
+let realtimeAuthReady: Promise<void> = Promise.resolve();
+
 function createSupabaseWithToken(token: string | null): SupabaseClient {
   const trimmed = token?.trim() ?? '';
   const sessionHeaders: Record<string, string> = trimmed
@@ -53,8 +56,17 @@ function createSupabaseWithToken(token: string | null): SupabaseClient {
     },
   });
 
-  void applyRealtimeJwtAuth(client, trimmed);
+  realtimeAuthReady = applyRealtimeJwtAuth(client, trimmed).catch(() => undefined);
   return client;
+}
+
+/**
+ * Await before subscribing to private Realtime channels so joins see `auth.uid()` / `auth.jwt()`.
+ * (Edge logs often omit `x-plainsight-session`; the function still receives it when invoked from the app.)
+ */
+export function whenRealtimeAuthReady(): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey) return Promise.resolve();
+  return realtimeAuthReady;
 }
 
 /** Private Realtime channels need `auth.jwt()` / `auth.uid()` on the WebSocket — not `x-plainsight-session`. */
