@@ -89,6 +89,19 @@ function DrawerSwitch({ checked, onChange, id, label }) {
 
 const DRAWER_MS = 300;
 
+/** Minimal hint: yours vs someone else's workspace (section title already says “shared”). */
+function sharedWorkspaceRowHint(row) {
+  if (row?.isOwner) {
+    return { label: 'Yours', title: 'You share this workspace' };
+  }
+  const email = String(row?.ownerEmail || '').trim();
+  if (!email) return { label: null, title: undefined };
+  const at = email.indexOf('@');
+  const local = at > 0 ? email.slice(0, at) : email;
+  const label = local.length > 10 ? `${local.slice(0, 9)}…` : local;
+  return { label, title: email };
+}
+
 export function MenuPanel({ open, onClose }) {
   const navigate = useNavigate();
   const { isDark, setIsDark } = useTheme();
@@ -575,6 +588,7 @@ export function MenuPanel({ open, onClose }) {
 
                   {(sharedWorkspaces || []).map((row) => {
                     const active = activeStorageKey === `${VISIBLE_WS_PREFIX}${row.workspaceId}`;
+                    const hint = sharedWorkspaceRowHint(row);
                     return (
                       <button
                         key={row.workspaceId}
@@ -603,10 +617,15 @@ export function MenuPanel({ open, onClose }) {
                           }
                         `}
                       >
-                        <span className="truncate">{row.workspaceName}</span>
-                        <span className="ml-auto text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">
-                          shared
-                        </span>
+                        <span className="truncate min-w-0">{row.workspaceName}</span>
+                        {hint.label ? (
+                          <span
+                            className="ml-auto shrink-0 max-w-[5.5rem] truncate text-right text-[10px] font-medium text-stone-400 dark:text-stone-500"
+                            title={hint.title}
+                          >
+                            {hint.label}
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
