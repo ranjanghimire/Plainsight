@@ -157,7 +157,7 @@ function TagsToggleButton() {
 }
 
 function AppHeader({ onOpenSettings }) {
-  const { currentWorkspace, visibleWorkspaces } = useWorkspace();
+  const { currentWorkspace, visibleWorkspaces, getWorkspaceNameById } = useWorkspace();
   const { archiveMode } = useArchiveMode();
   const { isTagsRoute } = useTagsNav();
 
@@ -168,13 +168,14 @@ function AppHeader({ onOpenSettings }) {
     if (typeof currentWorkspace === 'string' && currentWorkspace.startsWith('visible:')) {
       const id = currentWorkspace.slice('visible:'.length);
       const entry = (visibleWorkspaces || []).find((w) => w.id === id);
-      return entry?.name || 'Workspace';
+      if (entry?.name) return entry.name;
+      return getWorkspaceNameById(id);
     }
     const slug = typeof currentWorkspace === 'string' ? currentWorkspace : '';
     const spaced = slug.replace(/_/g, ' ').trim();
     if (!spaced) return 'Workspace';
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
-  }, [archiveMode, currentWorkspace, visibleWorkspaces, isTagsRoute]);
+  }, [archiveMode, currentWorkspace, visibleWorkspaces, getWorkspaceNameById, isTagsRoute]);
 
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">

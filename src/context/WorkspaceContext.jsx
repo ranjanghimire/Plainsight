@@ -1375,6 +1375,7 @@ export function WorkspaceProvider({ children }) {
     renameCategory,
     canOpenOrCreateHiddenWorkspace,
     peekHiddenWorkspaceCreationAllowed,
+    getWorkspaceNameById,
   };
 
   return (
