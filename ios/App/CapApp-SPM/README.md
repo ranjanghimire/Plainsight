@@ -6,22 +6,22 @@ Do not modify the contents of it or there may be unintended consequences.
 
 ## If Xcode says “Missing package product ‘CapApp-SPM’”
 
-That message usually means **SwiftPM never finished loading** this package’s graph (Xcode does not always show the underlying dependency error).
+That message usually means **SwiftPM never finished loading** this package’s graph (Xcode does not show the underlying error clearly).
 
-### This repo: vendored plugins (no `node_modules` required for iOS)
+### This repo: vendored plugins (no `node_modules` on the Xcode VM)
 
-Capacitor normally points SPM at `../../../node_modules/@capacitor/…`, which **does not exist** if you only `git pull` on a machine without npm.
+Capacitor’s default `npx cap sync ios` writes `CapApp-SPM/Package.swift` with paths into repo-root **`node_modules`**, which **does not exist** on a machine that only pulls git and opens Xcode.
 
-Here, **`ios/App/VendorSPM/`** holds copies of the official splash + status-bar Swift packages, and `Package.swift` is rewritten to use `../VendorSPM/…`. Those folders are **committed to git** so Xcode on a VM can resolve packages after a pull.
+**Fix in this repo:** `patch-package` patches **`@capacitor/cli`** so sync always emits **`../VendorSPM/splash-screen`** and **`../VendorSPM/status-bar`** (see `patches/@capacitor+cli+8.3.1.patch`). After **`npm install`**, run **`npx cap sync ios`** (or **`npm run cap:sync`**) and **commit** the updated `ios/App/CapApp-SPM/Package.swift` — it should list `../VendorSPM/…`, never `node_modules`.
 
-On a dev machine (after changing plugin versions or patches), refresh the copy:
+**`ios/App/VendorSPM/`** holds the Swift packages; keep it committed. Refresh from npm when you bump plugin versions:
 
 ```bash
 npm install
 node scripts/vendor-ios-spm-plugins.mjs
 ```
 
-That runs automatically after **`npm install`** (`postinstall`) and after **`npm run cap:sync`**.
+That vendor step also runs in **`postinstall`** and after **`npm run cap:sync`**. If you use plain **`npx cap sync ios`**, run **`npm run cap:sync:ios`** instead (sync + vendor), or rely on the CLI patch after **`npm install`**.
 
 ### Still stuck?
 

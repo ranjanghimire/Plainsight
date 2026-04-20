@@ -1,0 +1,27 @@
+diff --git a/node_modules/@capacitor/cli/dist/util/spm.js b/node_modules/@capacitor/cli/dist/util/spm.js
+index c1610ee..9ee002d 100644
+--- a/node_modules/@capacitor/cli/dist/util/spm.js
++++ b/node_modules/@capacitor/cli/dist/util/spm.js
+@@ -109,6 +109,13 @@ let package = Package(
+         }
+         else {
+             const relPath = (0, path_1.relative)(config.ios.nativeXcodeProjDirAbs, plugin.rootPath);
++            // Plainsight: use committed VendorSPM copies so Xcode resolves without repo-root node_modules.
++            const vendorPath = plugin.id === '@capacitor/splash-screen'
++                ? '../VendorSPM/splash-screen'
++                : plugin.id === '@capacitor/status-bar'
++                    ? '../VendorSPM/status-bar'
++                    : null;
++            const packagePath = vendorPath != null ? vendorPath : relPath;
+             const traits = packageTraits[plugin.id];
+             const traitsSuffix = (traits === null || traits === void 0 ? void 0 : traits.length)
+                 ? `, traits: [${traits
+@@ -118,7 +125,7 @@ let package = Package(
+                 })
+                     .join(', ')}]`
+                 : '';
+-            packageSwiftText += `,\n        .package(name: "${(_j = plugin.ios) === null || _j === void 0 ? void 0 : _j.name}", path: "${relPath}"${traitsSuffix})`;
++            packageSwiftText += `,\n        .package(name: "${(_j = plugin.ios) === null || _j === void 0 ? void 0 : _j.name}", path: "${packagePath}"${traitsSuffix})`;
+         }
+     }
+     packageSwiftText += `
