@@ -341,13 +341,32 @@ export async function deleteWorkspaceRemote(
 ): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
-    const ownerId = await getOwnerId();
-    if (!ownerId) return { ok: true };
+    /** Current signed-in user id (local session); must match `workspaces.owner_id` to delete remotely. */
+    const sessionUserId = await getOwnerId();
+    if (!sessionUserId) return { ok: true };
     if (!workspaceId || typeof workspaceId !== 'string') {
       return { ok: false, error: mkError('Missing workspace id', new Error()) };
     }
     const allowZero = options?.allowZeroRows === true;
     const cascadeChildren = options?.cascadeChildren !== false;
+
+    const { data: ownedWorkspace, error: ownedErr } = await getSupabase()
+      .from('workspaces')
+      .select('id')
+      .eq('id', workspaceId)
+      .eq('owner_id', sessionUserId)
+      .maybeSingle();
+
+    if (ownedErr) return { ok: false, error: mkError(ownedErr.message, ownedErr) };
+    if (!ownedWorkspace?.id) {
+      return {
+        ok: false,
+        error: mkError(
+          'Only the workspace owner can delete this workspace from the server.',
+          new Error('delete_workspace_not_owner'),
+        ),
+      };
+    }
 
     if (cascadeChildren) {
       const ch = await deleteWorkspaceChildrenRemote(workspaceId);

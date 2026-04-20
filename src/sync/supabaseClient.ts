@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { invokeEdgeFunction } from '../auth/functionsInvoke';
 import type {
   ArchivedNote,
   ArchivedNoteTag,
@@ -39,7 +40,7 @@ function createSupabaseWithToken(token: string | null): SupabaseClient {
     return nativeFetch(input, { ...init, headers });
   };
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
     // Custom session only — do not run GoTrue refresh/user calls (stale sb-* keys → 401 on /auth/v1).
     auth: {
       persistSession: false,
@@ -51,6 +52,38 @@ function createSupabaseWithToken(token: string | null): SupabaseClient {
       headers: sessionHeaders,
     },
   });
+
+  void applyRealtimeJwtAuth(client, trimmed);
+  return client;
+}
+
+/** Private Realtime channels need `auth.jwt()` / `auth.uid()` on the WebSocket — not `x-plainsight-session`. */
+async function applyRealtimeJwtAuth(client: SupabaseClient, plainsightSession: string) {
+  if (!plainsightSession) {
+    try {
+      await client.realtime.setAuth(null);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  const { data, error } = await invokeEdgeFunction<{ realtimeJwt?: string }>('auth-realtime-jwt', {
+    method: 'GET',
+    headers: { 'x-plainsight-session': plainsightSession },
+  });
+  if (error || !data?.realtimeJwt || typeof data.realtimeJwt !== 'string') {
+    try {
+      await client.realtime.setAuth(null);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    await client.realtime.setAuth(data.realtimeJwt);
+  } catch (e) {
+    console.warn('[Plainsight] realtime.setAuth failed', e);
+  }
 }
 
 export function getSupabase(): SupabaseClient {

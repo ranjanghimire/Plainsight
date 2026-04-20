@@ -545,15 +545,18 @@ export function WorkspaceProvider({ children }) {
   }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
 
   /**
-   * When Postgres Realtime does not deliver (custom session header, network, or publication gaps),
-   * periodic + focus/visibility pulls keep shared workspaces from going stale without a full reload.
+   * When Realtime does not wake a full sync (e.g. private broadcast auth cannot see
+   * `x-plainsight-session` on the WebSocket — only on REST), periodic + focus/visibility pulls
+   * keep shared workspaces from going stale without a full reload.
+   *
+   * Keep this modest once workspace broadcasts authorize correctly (each pull is a fullSync).
    */
   useEffect(() => {
     if (!canUseSupabase || !hydrationComplete) return undefined;
     const pullIfVisible = () => {
       if (document.visibilityState === 'visible') void queueFullSync();
     };
-    const intervalId = window.setInterval(pullIfVisible, 30_000);
+    const intervalId = window.setInterval(pullIfVisible, 8_000);
     let debounce = null;
     const schedulePull = () => {
       if (document.visibilityState !== 'visible') return;

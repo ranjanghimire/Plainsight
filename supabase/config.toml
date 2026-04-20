@@ -10,5 +10,8 @@ verify_jwt = false
 [functions.auth-session-user]
 verify_jwt = false
 
+[functions.auth-realtime-jwt]
+verify_jwt = false
+
 [functions.check-sync-entitlement]
 verify_jwt = false
