@@ -1,7 +1,9 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
-// DO NOT MODIFY THIS FILE - managed by Capacitor CLI commands
+// Capacitor may rewrite plugin `path:` entries to `node_modules` on `npx cap sync`.
+// This repo uses committed `../VendorSPM/…` so Xcode works without npm — run
+// `node scripts/vendor-ios-spm-plugins.mjs` after sync if paths revert, or use `npm run cap:sync`.
 let package = Package(
     name: "CapApp-SPM",
     platforms: [.iOS(.v15)],
@@ -12,8 +14,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.1"),
-        .package(name: "CapacitorSplashScreen", path: "../../../node_modules/@capacitor/splash-screen"),
-        .package(name: "CapacitorStatusBar", path: "../../../node_modules/@capacitor/status-bar")
+        .package(name: "CapacitorSplashScreen", path: "../VendorSPM/splash-screen"),
+        .package(name: "CapacitorStatusBar", path: "../VendorSPM/status-bar")
     ],
     targets: [
         .target(
