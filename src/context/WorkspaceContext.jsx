@@ -46,6 +46,7 @@ import {
   deleteWorkspaceRemote,
   subscribeToNotes,
   subscribeToCategories,
+  subscribeToArchivedNotes,
   subscribeToWorkspaces,
   subscribeToWorkspacePins,
 } from '../sync/syncEngine';
@@ -77,6 +78,7 @@ import {
   logWorkspaceActivity,
   makeWorkspacePrivate,
   shareWorkspaceByEmail,
+  subscribeToWorkspaceShares,
 } from '../sync/sharedWorkspaces';
 
 /**
@@ -226,6 +228,8 @@ export function WorkspaceProvider({ children }) {
   const [hydrationComplete, setHydrationComplete] = useState(() => !getCanUseSupabase());
   const [syncHydrationConnectivityWarning, setSyncHydrationConnectivityWarning] =
     useState(false);
+  /** Bumped on each successful full sync so Postgres realtime channels re-bind to the current workspace id set (e.g. after accepting a shared workspace). */
+  const [supabaseRealtimeBindingEpoch, setSupabaseRealtimeBindingEpoch] = useState(0);
   const hydrationRetryTimerRef = useRef(null);
   const hydrationWarningRef = useRef(false);
   const workspaceKey = activeStorageKey;
@@ -459,6 +463,7 @@ export function WorkspaceProvider({ children }) {
           if (!w?.id) continue;
           addUnsub(subscribeToNotes(w.id, () => scheduleFullSync()));
           addUnsub(subscribeToCategories(w.id, () => scheduleFullSync()));
+          addUnsub(subscribeToArchivedNotes(w.id, () => scheduleFullSync()));
         }
       } catch {
         /* ignore */
@@ -476,7 +481,7 @@ export function WorkspaceProvider({ children }) {
         }
       });
     };
-  }, [canUseSupabase, hydrationComplete]);
+  }, [canUseSupabase, hydrationComplete, supabaseRealtimeBindingEpoch]);
 
   useEffect(() => {
     // With cloud sync: avoid writing workspace rows before hydration (duplicate Home rows on push).
@@ -501,6 +506,7 @@ export function WorkspaceProvider({ children }) {
       setVisibleWorkspaces(app.visibleWorkspaces);
       setData(loadWorkspace(activeStorageKey));
       void refreshSharedWorkspaceState();
+      setSupabaseRealtimeBindingEpoch((n) => n + 1);
     };
     window.addEventListener('plainsight:full-sync', onSync);
     return () => window.removeEventListener('plainsight:full-sync', onSync);
@@ -517,6 +523,25 @@ export function WorkspaceProvider({ children }) {
     }
     void refreshSharedWorkspaceState();
     return undefined;
+  }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
+
+  /** Postgres Realtime on workspace_shares: pending invites + accept state without full page refresh. */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    let debounceTimer = null;
+    const onRemoteShareChange = () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void refreshSharedWorkspaceState();
+        queueFullSync();
+      }, 400);
+    };
+    const unsub = subscribeToWorkspaceShares(onRemoteShareChange);
+    return () => {
+      if (debounceTimer != null) window.clearTimeout(debounceTimer);
+      unsub();
+    };
   }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
 
   const applyNavigateByWorkspaceName = useCallback(

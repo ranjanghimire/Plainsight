@@ -16,7 +16,7 @@ describe('buildSharedWorkspaceRows', () => {
     resetIdentity();
   });
 
-  it('includes owner workspace in shared rows after an acceptance', () => {
+  it('does not list the owner’s workspace under Shared Workspaces (it stays under WORKSPACES only)', () => {
     setSession('session-owner', OWNER_ID);
     persistAuthDisplayEmail('owner@plainsight.test');
 
@@ -40,10 +40,36 @@ describe('buildSharedWorkspaceRows', () => {
     });
 
     expect(res.pendingRows).toHaveLength(0);
+    expect(res.acceptedRows).toHaveLength(0);
+  });
+
+  it('includes collaborator accepted share in shared rows', () => {
+    setSession('session-collab', COLLAB_ID);
+    persistAuthDisplayEmail('collab@example.com');
+
+    const res = buildSharedWorkspaceRows({
+      shares: [
+        {
+          id: 'share-1',
+          workspace_id: 'ws-1',
+          owner_id: OWNER_ID,
+          recipient_email: 'collab@example.com',
+          recipient_user_id: COLLAB_ID,
+          workspace_name: 'Team Notes',
+          owner_email: 'owner@plainsight.test',
+          status: 'accepted',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          accepted_at: new Date().toISOString(),
+          revoked_at: null,
+        },
+      ],
+    });
+
+    expect(res.pendingRows).toHaveLength(0);
     expect(res.acceptedRows).toHaveLength(1);
     expect(res.acceptedRows[0].workspaceId).toBe('ws-1');
-    expect(res.acceptedRows[0].isOwner).toBe(true);
-    expect(res.acceptedRows[0].acceptedCollaborators).toEqual(['friend@example.com']);
+    expect(res.acceptedRows[0].isOwner).toBe(false);
   });
 
   it('includes pending invite when recipient matches current email', () => {

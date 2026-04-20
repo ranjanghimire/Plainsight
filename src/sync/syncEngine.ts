@@ -686,6 +686,30 @@ export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Ca
   return () => sb.removeChannel(channel);
 }
 
+export function subscribeToArchivedNotes(workspaceId: string, cb: ChangeCallback<ArchivedNote>) {
+  if (!getCanUseSupabase()) return () => {};
+  const sb = getSupabase();
+  const channel = sb
+    .channel(`archived_notes:${workspaceId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'archived_notes',
+        filter: `workspace_id=eq.${workspaceId}`,
+      },
+      (p) =>
+        cb({
+          event: toEvent(p.eventType),
+          newRow: (p.new as ArchivedNote) ?? null,
+          oldRow: (p.old as ArchivedNote) ?? null,
+        }),
+    )
+    .subscribe();
+  return () => sb.removeChannel(channel);
+}
+
 export function subscribeToWorkspaces(cb: ChangeCallback<Workspace>) {
   if (!getCanUseSupabase()) return () => {};
   const sb = getSupabase();
@@ -829,6 +853,8 @@ export async function fullSync(
     }
 
     const myAccessibleWorkspaceIds = new Set<string>();
+    /** Collaborator can see owner’s workspace row in menu + title; must not filter it out in rebuildVisibleWorkspacesFromRemote. */
+    const sharedAsRecipientIds = new Set<string>();
     if (ownerId) {
       const shareRes = await listWorkspaceShares();
       if (shareRes.error) {
@@ -842,6 +868,7 @@ export async function fullSync(
         }
         if (String(s.recipient_user_id || '') === String(ownerId)) {
           myAccessibleWorkspaceIds.add(String(s.workspace_id));
+          sharedAsRecipientIds.add(String(s.workspace_id));
         }
       }
       for (const w of mergedWorkspacesWithOwner) {
@@ -866,6 +893,7 @@ export async function fullSync(
     const nextVisible = rebuildVisibleWorkspacesFromRemote(
       mergedWorkspacesWithOwner,
       ownerId,
+      ownerId ? { sharedAsRecipientIds } : undefined,
     );
     const appPrev = loadAppState();
     const mergedIds = new Set(mergedWorkspacesWithOwner.map((w) => w.id));

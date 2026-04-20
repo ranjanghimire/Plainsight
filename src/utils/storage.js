@@ -442,13 +442,21 @@ export function resolveHiddenWorkspaceIdBySlugFromList(storageKey, workspaces) {
 
 /**
  * Build Menu-visible workspace list from merged Supabase-shaped workspaces.
+ *
+ * @param {string} [ownerId] — current signed-in user id (omit to include all visible rows).
+ * @param {{ sharedAsRecipientIds?: Set<string> }} [visibilityOpts] — workspace ids the user opens
+ *   as an accepted collaborator (`workspaces.owner_id` is the other account). Without this,
+ *   shared tabs disappear from the menu after sync because the row is owned by someone else.
  */
-export function rebuildVisibleWorkspacesFromRemote(workspaces, ownerId) {
-  const visible = (workspaces || []).filter(
-    (w) =>
-      w.kind === 'visible' &&
-      (ownerId ? String(w.owner_id || '') === String(ownerId) : true),
-  );
+export function rebuildVisibleWorkspacesFromRemote(workspaces, ownerId, visibilityOpts) {
+  const recipientIds = visibilityOpts?.sharedAsRecipientIds;
+  const visible = (workspaces || []).filter((w) => {
+    if (!w || w.kind !== 'visible') return false;
+    if (!ownerId) return true;
+    if (String(w.owner_id || '') === String(ownerId)) return true;
+    if (recipientIds && recipientIds.has(String(w.id))) return true;
+    return false;
+  });
   const entries = [{ id: 'home', name: 'Home', key: 'workspace_home' }];
   for (const w of visible) {
     if ((w.name || '').trim().toLowerCase() === 'home') continue;
