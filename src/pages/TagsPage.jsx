@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { queueFullSync } from '../sync/syncHelpers';
 import {
   getAllWorkspaceKeys,
+  getWorkspaceDisplayLabelFromStorageKey,
   getWorkspaceNameFromKey,
   isKeyInVisibleWorkspacesList,
   isLegacyHiddenWorkspaceKey,
@@ -114,10 +115,10 @@ function TagRenameDialog({ open, tagSlug, draft, setDraft, busy, onSave, onCance
 function workspaceLabelForKey(key, visibleList) {
   const entry = (visibleList || []).find((e) => e.key === key);
   if (entry?.name) return entry.name;
-  return getWorkspaceNameFromKey(key);
+  return getWorkspaceDisplayLabelFromStorageKey(key);
 }
 
-/** Keys to scan for tags: visible scope = every menu tab (Home + ws_visible_*); hidden = legacy workspace_<slug> blobs only. */
+/** Keys to scan for tags: visible scope = menu tabs + any ws_visible_* blobs (shared workspaces for collaborators); hidden = legacy workspace_<slug> blobs only. */
 function collectStorageKeysForTagScope(scope, visibleList) {
   const list = Array.isArray(visibleList) ? visibleList : [];
   const seen = new Set();
@@ -132,6 +133,14 @@ function collectStorageKeysForTagScope(scope, visibleList) {
   if (scope === 'visible') {
     for (const e of list) {
       push(e?.key);
+    }
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const k = localStorage.key(i);
+        if (typeof k === 'string' && k.startsWith(VISIBLE_WS_PREFIX)) push(k);
+      }
+    } catch {
+      /* ignore */
     }
     return out;
   }
