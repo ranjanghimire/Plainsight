@@ -16,7 +16,7 @@ describe('buildSharedWorkspaceRows', () => {
     resetIdentity();
   });
 
-  it('does not list the owner’s workspace under Shared Workspaces (it stays under WORKSPACES only)', () => {
+  it('includes owner workspace in shared rows after an acceptance', () => {
     setSession('session-owner', OWNER_ID);
     persistAuthDisplayEmail('owner@plainsight.test');
 
@@ -40,7 +40,10 @@ describe('buildSharedWorkspaceRows', () => {
     });
 
     expect(res.pendingRows).toHaveLength(0);
-    expect(res.acceptedRows).toHaveLength(0);
+    expect(res.acceptedRows).toHaveLength(1);
+    expect(res.acceptedRows[0].workspaceId).toBe('ws-1');
+    expect(res.acceptedRows[0].isOwner).toBe(true);
+    expect(res.acceptedRows[0].acceptedCollaborators).toEqual(['friend@example.com']);
   });
 
   it('includes collaborator accepted share in shared rows', () => {

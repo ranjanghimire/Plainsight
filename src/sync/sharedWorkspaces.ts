@@ -329,13 +329,10 @@ export function buildSharedWorkspaceRows(opts: BuildRowsOpts): {
     }
   }
 
-  /** Owners already see these under WORKSPACES; only list collaborators’ accepted shares here. */
-  const acceptedRows = [...acceptedByWorkspace.values()]
-    .filter((row) => !row.isOwner)
-    .map((row) => ({
-      ...row,
-      acceptedCollaborators: [...new Set(row.acceptedCollaborators)].sort(),
-    }));
+  const acceptedRows = [...acceptedByWorkspace.values()].map((row) => ({
+    ...row,
+    acceptedCollaborators: [...new Set(row.acceptedCollaborators)].sort(),
+  }));
   acceptedRows.sort((a, b) =>
     a.workspaceName.localeCompare(b.workspaceName, undefined, {
       sensitivity: 'base',
