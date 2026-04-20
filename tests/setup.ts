@@ -8,7 +8,13 @@ import { readAuthDisplayEmail } from '../src/auth/authDisplayEmail';
 
 declare global {
   // eslint-disable-next-line no-var
-  var __PS_TEST_FLAGS__: { paidSync: boolean; sessionUserId: string | null } | undefined;
+  var __PS_TEST_FLAGS__:
+    | {
+        paidSync: boolean;
+        sessionUserId: string | null;
+        useRealSharedWorkspaces?: boolean;
+      }
+    | undefined;
 }
 
 globalThis.__PS_TEST_FLAGS__ = { paidSync: false, sessionUserId: null };
@@ -104,6 +110,9 @@ vi.mock('../src/sync/sharedWorkspaces', async () => {
   const normalize = (v: unknown) => String(v || '').trim().toLowerCase();
 
   const listWorkspaceShares = vi.fn(async () => {
+    if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+      return actual.listWorkspaceShares();
+    }
     const paid = !!globalThis.__PS_TEST_FLAGS__?.paidSync;
     if (!paid) return { data: [] };
     const uid = normalize(getLocalSession().userId);
@@ -144,24 +153,51 @@ vi.mock('../src/sync/sharedWorkspaces', async () => {
     };
   });
 
-  const shareWorkspaceByEmail = vi.fn(async () => ({ ok: true }));
-  const acceptWorkspaceShare = vi.fn(async () => ({ ok: true }));
-  const makeWorkspacePrivate = vi.fn(async () => ({ ok: true, revokedCount: 1 }));
-  const fetchWorkspaceActivityLogs = vi.fn(async (workspaceId: string) => ({
-    data: [
-      {
-        id: 'log-1',
-        workspace_id: workspaceId,
-        actor_user_id: normalize(getLocalSession().userId) || 'unknown',
-        actor_email: normalize(readAuthDisplayEmail() || '') || 'vitest@plainsight.test',
-        action: 'note_updated',
-        summary: 'Updated note',
-        details: {},
-        created_at: new Date().toISOString(),
-      },
-    ],
-  }));
-  const logWorkspaceActivity = vi.fn(async () => ({ ok: true }));
+  const shareWorkspaceByEmail = vi.fn(
+    async (workspaceId: string, workspaceName: string, recipientEmail: string) => {
+      if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+        return actual.shareWorkspaceByEmail(workspaceId, workspaceName, recipientEmail);
+      }
+      return { ok: true };
+    },
+  );
+  const acceptWorkspaceShare = vi.fn(async (shareId: string) => {
+    if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+      return actual.acceptWorkspaceShare(shareId);
+    }
+    return { ok: true };
+  });
+  const makeWorkspacePrivate = vi.fn(async (workspaceId: string) => {
+    if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+      return actual.makeWorkspacePrivate(workspaceId);
+    }
+    return { ok: true, revokedCount: 1 };
+  });
+  const fetchWorkspaceActivityLogs = vi.fn(async (workspaceId: string, limit = 60) => {
+    if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+      return actual.fetchWorkspaceActivityLogs(workspaceId, limit);
+    }
+    return {
+      data: [
+        {
+          id: 'log-1',
+          workspace_id: workspaceId,
+          actor_user_id: normalize(getLocalSession().userId) || 'unknown',
+          actor_email: normalize(readAuthDisplayEmail() || '') || 'vitest@plainsight.test',
+          action: 'note_updated',
+          summary: 'Updated note',
+          details: {},
+          created_at: new Date().toISOString(),
+        },
+      ],
+    };
+  });
+  const logWorkspaceActivity = vi.fn(async (workspaceId, action, summary, details) => {
+    if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+      return actual.logWorkspaceActivity(workspaceId, action, summary, details);
+    }
+    return { ok: true };
+  });
 
   return {
     ...actual,
