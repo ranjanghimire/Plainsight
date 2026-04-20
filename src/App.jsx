@@ -28,6 +28,7 @@ import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
 import { TagsPage } from './pages/TagsPage';
+import { VISIBLE_WS_PREFIX, isUuid } from './utils/storage';
 
 function RedirectWorkspaceOnLoad() {
   const navigate = useNavigate();
@@ -172,6 +173,12 @@ function AppHeader({ onOpenSettings }) {
       return getWorkspaceNameById(id);
     }
     const slug = typeof currentWorkspace === 'string' ? currentWorkspace : '';
+    if (
+      slug.startsWith(VISIBLE_WS_PREFIX) &&
+      isUuid(slug.slice(VISIBLE_WS_PREFIX.length))
+    ) {
+      return getWorkspaceNameById(slug.slice(VISIBLE_WS_PREFIX.length));
+    }
     const spaced = slug.replace(/_/g, ' ').trim();
     if (!spaced) return 'Workspace';
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());

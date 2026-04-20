@@ -26,6 +26,7 @@ import {
   getWorkspaceDisplayLabelFromStorageKey,
   getWorkspaceIdForStorageKey,
   hiddenWorkspaceSlugFromName,
+  isUuid,
   removeWorkspaceIdMapping,
   resolveWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
@@ -637,7 +638,16 @@ export function WorkspaceProvider({ children }) {
       });
       setActiveStorageKey(key);
       setData(nextData);
-      setCurrentWorkspace(name === 'home' ? 'home' : getWorkspaceNameFromKey(key));
+      const slug = name === 'home' ? 'home' : getWorkspaceNameFromKey(key);
+      if (
+        typeof slug === 'string' &&
+        slug.startsWith(VISIBLE_WS_PREFIX) &&
+        isUuid(slug.slice(VISIBLE_WS_PREFIX.length))
+      ) {
+        setCurrentWorkspace(`visible:${slug.slice(VISIBLE_WS_PREFIX.length)}`);
+      } else {
+        setCurrentWorkspace(slug);
+      }
       saveAppStatePartial({ lastActiveStorageKey: key });
       bumpWorkspaceSwitch();
       queueFullSync();

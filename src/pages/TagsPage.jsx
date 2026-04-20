@@ -17,6 +17,7 @@ import {
   isLegacyHiddenWorkspaceKey,
   loadAppState,
   loadWorkspace,
+  VISIBLE_WS_PREFIX,
 } from '../utils/storage';
 import { normalizeTagSlug, parseNoteBodyAndTags } from '../utils/noteTags';
 import {
@@ -164,7 +165,13 @@ export function TagsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { goBackFromTags, setTagsReturnTo } = useTagsNav();
-  const { currentWorkspace, visibleWorkspaces, switchVisibleWorkspace, load } = useWorkspace();
+  const {
+    currentWorkspace,
+    visibleWorkspaces,
+    switchVisibleWorkspace,
+    openSharedWorkspace,
+    load,
+  } = useWorkspace();
   const tagMenu = useItemContextMenu();
   const [selectedTag, setSelectedTag] = useState(null);
   const [query, setQuery] = useState('');
@@ -327,6 +334,14 @@ export function TagsPage() {
       switchVisibleWorkspace?.(visibleEntry);
       navigate('/');
       return;
+    }
+    const wk = note.workspaceKey;
+    if (typeof wk === 'string' && wk.startsWith(VISIBLE_WS_PREFIX)) {
+      const wid = wk.slice(VISIBLE_WS_PREFIX.length);
+      if (openSharedWorkspace?.(wid)) {
+        navigate('/');
+        return;
+      }
     }
     const slug = getWorkspaceNameFromKey(note.workspaceKey);
     load?.(slug, 'hidden');
