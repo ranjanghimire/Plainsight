@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -257,6 +257,32 @@ export function MenuPanel({ open, onClose }) {
           String(authEmail).trim().toLowerCase(),
     );
 
+  const ownerSharedWorkspaceIds = useMemo(() => {
+    const ids = new Set();
+    for (const row of sharedWorkspaces || []) {
+      if (row?.isOwner && row?.workspaceId) ids.add(String(row.workspaceId));
+    }
+    return ids;
+  }, [sharedWorkspaces]);
+
+  /** Hide owned workspaces from WORKSPACES when they appear under SHARED WORKSPACES (accepted share). */
+  const visibleWorkspacesForMenu = useMemo(
+    () =>
+      (visibleWorkspaces || []).filter((entry) => {
+        if (entry?.id === 'home') return true;
+        const wid = getWorkspaceIdByVisibleEntry(entry);
+        if (!wid) return true;
+        return !ownerSharedWorkspaceIds.has(String(wid));
+      }),
+    [visibleWorkspaces, ownerSharedWorkspaceIds, getWorkspaceIdByVisibleEntry],
+  );
+
+  const visibleEntryFromSharedOwnerRow = (row) => ({
+    id: row.workspaceId,
+    name: row.workspaceName,
+    key: `${VISIBLE_WS_PREFIX}${row.workspaceId}`,
+  });
+
   if (!mounted) return null;
 
   return (
@@ -399,7 +425,7 @@ export function MenuPanel({ open, onClose }) {
               Workspaces
             </h3>
             <div className="border-t border-stone-200 dark:border-stone-600 pt-2 space-y-0.5">
-              {visibleWorkspaces.map((entry) => {
+              {visibleWorkspacesForMenu.map((entry) => {
                 const active = entry.key === activeStorageKey;
                 const isRenaming = workspaceRenameTarget?.key === entry.key;
                 if (isRenaming) {
@@ -634,15 +660,23 @@ export function MenuPanel({ open, onClose }) {
         entered={wsMenu.entered}
         x={wsMenu.menu.x}
         y={wsMenu.menu.y}
-        showRename={wsMenu.menu.target?.kind === 'workspace'}
+        showRename={
+          wsMenu.menu.target?.kind === 'workspace' ||
+          (wsMenu.menu.target?.kind === 'shared-workspace' &&
+            wsMenu.menu.target.row?.isOwner)
+        }
         showDelete={
-          wsMenu.menu.target?.kind === 'workspace' &&
-          wsMenu.menu.target.entry.id !== 'home'
+          (wsMenu.menu.target?.kind === 'workspace' &&
+            wsMenu.menu.target.entry.id !== 'home') ||
+          (wsMenu.menu.target?.kind === 'shared-workspace' &&
+            wsMenu.menu.target.row?.isOwner)
         }
         showShare={
           isPaidCollabEnabled &&
-          wsMenu.menu.target?.kind === 'workspace' &&
-          wsMenu.menu.target.entry.id !== 'home'
+          ((wsMenu.menu.target?.kind === 'workspace' &&
+            wsMenu.menu.target.entry.id !== 'home') ||
+            (wsMenu.menu.target?.kind === 'shared-workspace' &&
+              wsMenu.menu.target.row?.isOwner))
         }
         showLogs={wsMenu.menu.target?.kind === 'shared-workspace'}
         showMakePrivate={
@@ -659,12 +693,19 @@ export function MenuPanel({ open, onClose }) {
           if (t?.kind === 'workspace') {
             setWorkspaceRenameTarget(t.entry);
             setWorkspaceRenameDraft(t.entry.name);
+          } else if (t?.kind === 'shared-workspace' && t.row?.isOwner) {
+            const entry = visibleEntryFromSharedOwnerRow(t.row);
+            setWorkspaceRenameTarget(entry);
+            setWorkspaceRenameDraft(entry.name);
           }
         }}
         onShare={() => {
           const t = wsMenu.menu.target;
           if (t?.kind === 'workspace') {
             setShareWorkspaceTarget(t.entry);
+            setShareRecipientEmail('');
+          } else if (t?.kind === 'shared-workspace' && t.row?.isOwner) {
+            setShareWorkspaceTarget(visibleEntryFromSharedOwnerRow(t.row));
             setShareRecipientEmail('');
           }
         }}
@@ -684,6 +725,8 @@ export function MenuPanel({ open, onClose }) {
           const t = wsMenu.menu.target;
           if (t?.kind === 'workspace' && t.entry.id !== 'home') {
             setPendingDeleteWorkspace(t.entry);
+          } else if (t?.kind === 'shared-workspace' && t.row?.isOwner) {
+            setPendingDeleteWorkspace(visibleEntryFromSharedOwnerRow(t.row));
           }
         }}
         onDismiss={wsMenu.closeMenu}
