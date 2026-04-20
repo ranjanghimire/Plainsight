@@ -26,6 +26,7 @@ import {
   getWorkspaceDisplayLabelFromStorageKey,
   getWorkspaceIdForStorageKey,
   hiddenWorkspaceSlugFromName,
+  isCorruptWorkspaceMenuName,
   isUuid,
   removeWorkspaceIdMapping,
   resolveWorkspaceIdForStorageKey,
@@ -125,14 +126,19 @@ async function ensureWorkspaceRow({ storageKey, name, kind }) {
   const next = [...existing];
   if (idx >= 0) {
     const prev = next[idx];
+    const prevName = typeof prev?.name === 'string' ? prev.name.trim() : '';
+    const keepPrevName =
+      isCorruptWorkspaceMenuName(name) && prevName && !isCorruptWorkspaceMenuName(prevName);
     next[idx] = {
       ...prev,
       ...row,
+      name: keepPrevName ? prevName : name,
       owner_id: prev.owner_id || row.owner_id,
       created_at: prev.created_at || row.created_at,
     };
   } else {
-    next.push(row);
+    const safeName = isCorruptWorkspaceMenuName(name) ? 'Workspace' : name;
+    next.push({ ...row, name: safeName });
   }
   await saveLocalWorkspaces(next);
 }
@@ -529,7 +535,7 @@ export function WorkspaceProvider({ children }) {
       ? 'Home'
       : visibleEntry
         ? visibleEntry.name
-        : getWorkspaceNameFromKey(key);
+        : getWorkspaceDisplayLabelFromStorageKey(key);
     const kind = visibleEntry ? 'visible' : isHome ? 'visible' : 'hidden';
     void ensureWorkspaceRow({ storageKey: key, name, kind });
   }, [canUseSupabase, hydrationComplete, activeStorageKey, visibleWorkspaces]);

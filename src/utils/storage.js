@@ -522,6 +522,14 @@ function readMergedWorkspacesFromLocalStorageSync() {
   }
 }
 
+/** True when a persisted workspace `name` is actually a storage key / technical id, not a user title. */
+export function isCorruptWorkspaceMenuName(name) {
+  const t = String(name || '').trim();
+  if (!t) return true;
+  if (/^ws_visible_[0-9a-f-]{36}$/i.test(t)) return true;
+  return false;
+}
+
 /**
  * Sync read of merged `workspaces` row name (localStorage mirror used by cloud sync).
  * Stable when visible tab list or share rows are briefly empty during refresh.
@@ -532,6 +540,7 @@ export function getMergedWorkspaceNameByIdSync(workspaceId) {
   const rows = readMergedWorkspacesFromLocalStorageSync();
   const row = rows.find((w) => w && String(w.id) === id);
   const nm = row && typeof row.name === 'string' ? row.name.trim() : '';
+  if (isCorruptWorkspaceMenuName(nm)) return '';
   return nm || '';
 }
 
