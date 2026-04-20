@@ -523,6 +523,35 @@ function readMergedWorkspacesFromLocalStorageSync() {
 }
 
 /**
+ * Sync read of merged `workspaces` row name (localStorage mirror used by cloud sync).
+ * Stable when visible tab list or share rows are briefly empty during refresh.
+ */
+export function getMergedWorkspaceNameByIdSync(workspaceId) {
+  const id = String(workspaceId || '').trim();
+  if (!id || !isUuid(id)) return '';
+  const rows = readMergedWorkspacesFromLocalStorageSync();
+  const row = rows.find((w) => w && String(w.id) === id);
+  const nm = row && typeof row.name === 'string' ? row.name.trim() : '';
+  return nm || '';
+}
+
+/**
+ * Human-readable label for a workspace storage key.
+ * Menu-visible keys `ws_visible_<uuid>` are never returned raw — we resolve the merged row name.
+ */
+export function getWorkspaceDisplayLabelFromStorageKey(key) {
+  if (!key || typeof key !== 'string') return 'Workspace';
+  if (key === 'workspace_home') return 'Home';
+  if (key.startsWith(VISIBLE_WS_PREFIX)) {
+    const id = key.slice(VISIBLE_WS_PREFIX.length);
+    const nm = getMergedWorkspaceNameByIdSync(id);
+    return nm || 'Workspace';
+  }
+  if (key.startsWith(WORKSPACE_PREFIX)) return key.slice(WORKSPACE_PREFIX.length);
+  return key;
+}
+
+/**
  * Hidden workspaces for /manage: merged `kind: 'hidden'` rows (same key assignment as bind),
  * plus any legacy `workspace_<slug>` blobs that were never mirrored into the merged list
  * (e.g. local-only before ensureWorkspaceRow wrote rows).

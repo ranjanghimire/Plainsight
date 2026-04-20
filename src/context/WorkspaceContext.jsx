@@ -20,8 +20,10 @@ import {
   saveAppStatePartial,
   VISIBLE_WS_PREFIX,
   getAllWorkspaceKeys,
+  getMergedWorkspaceNameByIdSync,
   getOrCreateWorkspaceIdForStorageKey,
   getStorageKeyForWorkspaceId,
+  getWorkspaceDisplayLabelFromStorageKey,
   getWorkspaceIdForStorageKey,
   hiddenWorkspaceSlugFromName,
   removeWorkspaceIdMapping,
@@ -300,11 +302,22 @@ export function WorkspaceProvider({ children }) {
         (r) => String(r.workspaceId) === String(workspaceId),
       );
       if (fromShared?.workspaceName) {
-        return normalizeVisibilityWorkspaceName(fromShared.workspaceName);
+        const sharedNm = String(fromShared.workspaceName).trim();
+        if (
+          sharedNm &&
+          !sharedNm.startsWith(VISIBLE_WS_PREFIX) &&
+          !/^workspace_/i.test(sharedNm)
+        ) {
+          return normalizeVisibilityWorkspaceName(sharedNm);
+        }
       }
+      const mergedNm = getMergedWorkspaceNameByIdSync(String(workspaceId));
+      if (mergedNm) return normalizeVisibilityWorkspaceName(mergedNm);
       const storageKey = getStorageKeyForWorkspaceId(String(workspaceId));
       if (storageKey) {
-        return normalizeVisibilityWorkspaceName(getWorkspaceNameFromKey(storageKey));
+        return normalizeVisibilityWorkspaceName(
+          getWorkspaceDisplayLabelFromStorageKey(storageKey),
+        );
       }
       return 'Workspace';
     },
