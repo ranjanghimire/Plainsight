@@ -657,56 +657,74 @@ function toEvent(e: string): 'INSERT' | 'UPDATE' | 'DELETE' {
   return 'UPDATE';
 }
 
+/** Matches DB `realtime.broadcast_changes` topics (private channel + broadcast listeners). */
+const workspaceRealtimeChannelConfig = {
+  config: {
+    broadcast: { self: true, ack: true },
+    private: true,
+  },
+} as const;
+
+/**
+ * Maps `realtime.broadcast_changes` payloads to the same shape we used for `postgres_changes`.
+ * Server payloads use `record` / `old_record`; some docs show `new` / `old` — accept both.
+ */
+function broadcastPayloadToChange<T>(
+  fallbackEvent: 'INSERT' | 'UPDATE' | 'DELETE',
+  msg: { payload?: unknown },
+): { event: 'INSERT' | 'UPDATE' | 'DELETE'; newRow: T | null; oldRow: T | null } {
+  const raw = msg.payload;
+  if (!raw || typeof raw !== 'object') {
+    return { event: fallbackEvent, newRow: null, oldRow: null };
+  }
+  const row = raw as Record<string, unknown>;
+  const op = typeof row.operation === 'string' ? toEvent(row.operation) : fallbackEvent;
+  const record = (row.record ?? row.new) as T | null | undefined;
+  const oldRecord = (row.old_record ?? row.old) as T | null | undefined;
+  if (op === 'DELETE') {
+    return { event: 'DELETE', newRow: null, oldRow: oldRecord ?? null };
+  }
+  if (op === 'INSERT') {
+    return { event: 'INSERT', newRow: record ?? null, oldRow: null };
+  }
+  return { event: 'UPDATE', newRow: record ?? null, oldRow: oldRecord ?? null };
+}
+
+function subscribeWorkspaceBroadcastTable<T>(topic: string, cb: ChangeCallback<T>) {
+  const sb = getSupabase();
+  const dispatch =
+    (ev: 'INSERT' | 'UPDATE' | 'DELETE') =>
+    (msg: { payload?: unknown }) => {
+      cb(broadcastPayloadToChange<T>(ev, msg));
+    };
+  return sb
+    .channel(topic, workspaceRealtimeChannelConfig)
+    .on('broadcast', { event: 'INSERT' }, dispatch('INSERT'))
+    .on('broadcast', { event: 'UPDATE' }, dispatch('UPDATE'))
+    .on('broadcast', { event: 'DELETE' }, dispatch('DELETE'));
+}
+
 export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) {
   if (!getCanUseSupabase()) return () => {};
   const sb = getSupabase();
-  const channel = sb
-    .channel(`notes:${workspaceId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'notes', filter: `workspace_id=eq.${workspaceId}` },
-      (p) => cb({ event: toEvent(p.eventType), newRow: (p.new as Note) ?? null, oldRow: (p.old as Note) ?? null }),
-    )
-    .subscribe();
-
+  const channel = subscribeWorkspaceBroadcastTable<Note>(`workspace:${workspaceId}:notes`, cb).subscribe();
   return () => sb.removeChannel(channel);
 }
 
 export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Category>) {
   if (!getCanUseSupabase()) return () => {};
   const sb = getSupabase();
-  const channel = sb
-    .channel(`categories:${workspaceId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'categories', filter: `workspace_id=eq.${workspaceId}` },
-      (p) => cb({ event: toEvent(p.eventType), newRow: (p.new as Category) ?? null, oldRow: (p.old as Category) ?? null }),
-    )
-    .subscribe();
+  const channel = subscribeWorkspaceBroadcastTable<Category>(`workspace:${workspaceId}:categories`, cb).subscribe();
   return () => sb.removeChannel(channel);
 }
 
 export function subscribeToArchivedNotes(workspaceId: string, cb: ChangeCallback<ArchivedNote>) {
   if (!getCanUseSupabase()) return () => {};
   const sb = getSupabase();
-  const channel = sb
-    .channel(`archived_notes:${workspaceId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'archived_notes',
-        filter: `workspace_id=eq.${workspaceId}`,
-      },
-      (p) =>
-        cb({
-          event: toEvent(p.eventType),
-          newRow: (p.new as ArchivedNote) ?? null,
-          oldRow: (p.old as ArchivedNote) ?? null,
-        }),
-    )
-    .subscribe();
+  const channel = subscribeWorkspaceBroadcastTable<ArchivedNote>(
+    `workspace:${workspaceId}:archived_notes`,
+    cb,
+  ).subscribe();
   return () => sb.removeChannel(channel);
 }
 
