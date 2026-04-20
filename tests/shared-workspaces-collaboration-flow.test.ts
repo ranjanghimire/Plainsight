@@ -632,11 +632,8 @@ paidDescribe('shared workspace collaboration flows (paid)', () => {
     expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
     expect(readWorkspaceNoteText(setup.workspaceId, setup.noteId)).toBe('baseline shared note');
 
-    // Owner device never ran sync after the collaborator delete; its workspace blob still lists the
-    // removed id. flushWorkspaceUiIntoLocalDb + mergeNotes would treat that as a local-only row and
-    // re-upsert it. Simulate a converged owner UI (after pull / activity) so we stress-test stability.
+    // Owner blob is still stale (still lists the deleted id) until fullSync merges with remote.
     await activateDevice(owner);
-    removeWorkspaceNote(setup.workspaceId, noteId2);
     await runWorkspaceSync(setup.workspaceId);
     expect(await countNotesInWorkspace(setup.workspaceId)).toBe(1);
     expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
@@ -686,7 +683,6 @@ paidDescribe('shared workspace collaboration flows (paid)', () => {
       });
 
       await activateDevice(owner);
-      removeWorkspaceNote(setup.workspaceId, noteId2);
       await runWorkspaceSync(setup.workspaceId);
       expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
 

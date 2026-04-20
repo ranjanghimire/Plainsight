@@ -30,6 +30,8 @@ const KEY = {
   noteTags: (workspaceId: string) => `plainsight_local_note_tags_${workspaceId}`,
   archivedNoteTags: (workspaceId: string) => `plainsight_local_archived_note_tags_${workspaceId}`,
   pins: 'plainsight_local_workspace_pins',
+  /** Ids seen on server after a successful sync; used to avoid re-upserting rows another client deleted. */
+  remoteNoteIdCache: (workspaceId: string) => `plainsight_local_remote_note_id_cache_${workspaceId}`,
 } as const;
 
 function readJson<T>(k: string, fallback: T): T {
@@ -70,9 +72,20 @@ export async function clearLocalWorkspaceData(workspaceId: string): Promise<void
     localStorage.removeItem(KEY.archivedTombstones(workspaceId));
     localStorage.removeItem(KEY.noteTags(workspaceId));
     localStorage.removeItem(KEY.archivedNoteTags(workspaceId));
+    localStorage.removeItem(KEY.remoteNoteIdCache(workspaceId));
   } catch {
     /* ignore */
   }
+}
+
+/** Note ids confirmed on the server in a prior successful fullSync (pull ∪ successful push). */
+export async function getLastKnownRemoteNoteIds(workspaceId: string): Promise<Set<string>> {
+  const arr = readJson<string[]>(KEY.remoteNoteIdCache(workspaceId), []);
+  return new Set(arr.filter((x) => typeof x === 'string' && x.length > 0));
+}
+
+export async function saveLastKnownRemoteNoteIds(workspaceId: string, ids: Set<string>): Promise<void> {
+  writeJson(KEY.remoteNoteIdCache(workspaceId), [...ids]);
 }
 
 export async function getLocalCategories(workspaceId: string): Promise<Category[]> {

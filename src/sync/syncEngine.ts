@@ -17,6 +17,7 @@ import {
 } from './supabaseClient';
 import {
   clearLocalWorkspaceData,
+  getLastKnownRemoteNoteIds,
   getLocalArchivedNoteTags,
   getLocalArchivedNotes,
   getLocalArchivedNoteTombstones,
@@ -33,6 +34,7 @@ import {
   saveLocalCategoryTombstones,
   saveLocalArchivedNoteTombstones,
   saveLocalNoteTags,
+  saveLastKnownRemoteNoteIds,
   saveLocalNoteTombstones,
   saveLocalNotes,
   saveLocalWorkspaces,
@@ -1065,9 +1067,18 @@ export async function fullSync(
     const mergedNotes: Record<string, ReturnType<typeof mergeNotes>> = {};
     const mergedArchived: Record<string, ReturnType<typeof mergeArchivedNotes>> = {};
 
+    const lastKnownRemoteNoteIdsByWid: Record<string, Set<string>> = {};
+    await Promise.all(
+      workspaceIdsToSync.map(async (wid) => {
+        lastKnownRemoteNoteIdsByWid[wid] = await getLastKnownRemoteNoteIds(wid);
+      }),
+    );
+
     for (const wid of workspaceIdsToSync) {
       mergedCategories[wid] = mergeCategories(localCategories[wid] || [], remoteCategories[wid] || []);
-      mergedNotes[wid] = mergeNotes(localNotes[wid] || [], remoteNotes[wid] || []);
+      mergedNotes[wid] = mergeNotes(localNotes[wid] || [], remoteNotes[wid] || [], {
+        remoteIdsEverConfirmed: lastKnownRemoteNoteIdsByWid[wid],
+      });
       mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || []);
     }
 
@@ -1184,6 +1195,10 @@ export async function fullSync(
 
       const noteRes = await fullSyncIpc.pushNotes(notesAligned);
       if (!noteRes.ok) return { ok: false, error: noteRes.error };
+
+      const onServerNow = new Set((remoteNotes[wid] || []).map((n) => n.id));
+      for (const n of notesAligned) onServerNow.add(n.id);
+      await saveLastKnownRemoteNoteIds(wid, onServerNow);
 
       const archRes = await fullSyncIpc.pushArchivedNotes(archAligned);
       if (!archRes.ok) return { ok: false, error: archRes.error };

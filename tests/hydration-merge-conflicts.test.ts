@@ -75,6 +75,24 @@ describe('hydration merge — notes (mergeNotes)', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].text).toBe('local wins');
   });
+
+  it('drops local-only row when id was confirmed on server and remote no longer lists it', () => {
+    const local = [note('gone', 'stale blob', '2030-01-01T00:00:00.000Z')];
+    const remote: ReturnType<typeof note>[] = [];
+    const { merged, toPush } = mergeNotes(local, remote, {
+      remoteIdsEverConfirmed: new Set(['gone']),
+    });
+    expect(merged).toHaveLength(0);
+    expect(toPush).toHaveLength(0);
+  });
+
+  it('still upserts local-only row when id was never confirmed on server (offline create)', () => {
+    const local = [note('fresh', 'offline body', '2030-01-01T00:00:00.000Z')];
+    const remote: ReturnType<typeof note>[] = [];
+    const { merged, toPush } = mergeNotes(local, remote, { remoteIdsEverConfirmed: new Set() });
+    expect(merged).toHaveLength(1);
+    expect(toPush).toHaveLength(1);
+  });
 });
 
 describe('hydration merge — categories (mergeCategories)', () => {

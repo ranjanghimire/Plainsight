@@ -79,7 +79,22 @@ export function mergeCategories(local: Category[], remote: Category[]): MergeRes
   return { merged, toPush, toPull };
 }
 
-export function mergeNotes(local: Note[], remote: Note[]): MergeResult<Note> {
+export type MergeNotesOptions = {
+  /**
+   * Note ids we have previously confirmed on the server (after a successful sync).
+   * If a note appears locally but not in the current remote snapshot, and its id is in this set,
+   * we treat it as deleted on the server (e.g. another collaborator deleted it) and omit it
+   * instead of re-upserting from a stale UI blob.
+   */
+  remoteIdsEverConfirmed?: Set<string> | null;
+};
+
+export function mergeNotes(
+  local: Note[],
+  remote: Note[],
+  options?: MergeNotesOptions | null,
+): MergeResult<Note> {
+  const confirmed = options?.remoteIdsEverConfirmed;
   const l = new Map(local.map((x) => [x.id, x]));
   const r = new Map(remote.map((x) => [x.id, x]));
   const allIds = new Set([...l.keys(), ...r.keys()]);
@@ -96,6 +111,10 @@ export function mergeNotes(local: Note[], remote: Note[]): MergeResult<Note> {
       if (winner === lv && ts(lv.updated_at) > ts(rv.updated_at)) toPush.push(lv);
       if (winner === rv && ts(rv.updated_at) > ts(lv.updated_at)) toPull.push(rv);
     } else if (lv) {
+      if (confirmed?.has(id)) {
+        // Was on server before; pull no longer lists it — remote delete, do not resurrect.
+        continue;
+      }
       merged.push(lv);
       toPush.push(lv);
     } else if (rv) {
