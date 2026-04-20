@@ -71,6 +71,7 @@ import { getCanUseSupabase } from './syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
 import { pruneArchivedNoteRows } from '../utils/archivedPrune';
 import { listWorkspaceShares } from './sharedWorkspaces';
+import { REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -611,18 +612,34 @@ export async function pushArchivedDeletes(
   }
 }
 
+export type PushNoteDeletesResult =
+  | { ok: true; deletedIds: string[] }
+  | { ok: false; error: SyncError };
+
 export async function pushNoteDeletes(
   workspaceId: string,
   noteIds: string[],
-): Promise<{ ok: true } | { ok: false; error: SyncError }> {
-  if (!getCanUseSupabase()) return { ok: true };
+): Promise<PushNoteDeletesResult> {
+  if (!getCanUseSupabase()) return { ok: true, deletedIds: [] };
   try {
     const ids = (noteIds || []).filter((id) => isUuid(id));
-    if (ids.length === 0) return { ok: true };
+    if (ids.length === 0) return { ok: true, deletedIds: [] };
     const res = await getSupabase().from('notes').delete().in('id', ids).select('*');
     console.log('pushNoteDeletes result:', { workspaceId, ...res });
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
-    return { ok: true };
+    const deletedIds = ((res.data as { id?: string }[]) || [])
+      .map((r) => (typeof r?.id === 'string' ? r.id : ''))
+      .filter(Boolean);
+    if (ids.length > 0 && deletedIds.length === 0) {
+      return {
+        ok: false,
+        error: mkError(
+          'Notes were not deleted on the server (no rows removed). Check permissions or session.',
+          new Error('push_note_deletes_zero_rows'),
+        ),
+      };
+    }
+    return { ok: true, deletedIds };
   } catch (e) {
     return { ok: false, error: mkError('Failed to delete notes', e) };
   }
@@ -685,25 +702,38 @@ const workspaceRealtimeChannelConfig = {
 } as const;
 
 /**
- * Maps `realtime.broadcast_changes` payloads to the same shape we used for `postgres_changes`.
- * Server payloads use `record` / `old_record`; some docs show `new` / `old` — accept both.
+ * Maps `realtime.broadcast_changes` (and variants) to the same shape we used for `postgres_changes`.
+ * Accepts nested `payload`, `operation`, `record` / `old_record`, or `new` / `old`.
  */
-function broadcastPayloadToChange<T>(
-  fallbackEvent: 'INSERT' | 'UPDATE' | 'DELETE',
-  msg: { payload?: unknown },
-): { event: 'INSERT' | 'UPDATE' | 'DELETE'; newRow: T | null; oldRow: T | null } {
-  const raw = msg.payload;
-  if (!raw || typeof raw !== 'object') {
-    return { event: fallbackEvent, newRow: null, oldRow: null };
+function broadcastPayloadToChangeFromServerMsg<T>(msg: unknown): {
+  event: 'INSERT' | 'UPDATE' | 'DELETE';
+  newRow: T | null;
+  oldRow: T | null;
+} {
+  if (!msg || typeof msg !== 'object') {
+    return { event: 'UPDATE', newRow: null, oldRow: null };
   }
-  const row = raw as Record<string, unknown>;
-  const op = typeof row.operation === 'string' ? toEvent(row.operation) : fallbackEvent;
+  const root = msg as Record<string, unknown>;
+  let row: Record<string, unknown> | null = null;
+  const outer = root.payload;
+  if (outer && typeof outer === 'object') {
+    row = outer as Record<string, unknown>;
+    if (typeof row.operation !== 'string' && row.payload && typeof row.payload === 'object') {
+      row = row.payload as Record<string, unknown>;
+    }
+  }
+  const opFromRow = row && typeof row.operation === 'string' ? toEvent(row.operation) : null;
+  const opFromRoot = typeof root.event === 'string' ? toEvent(root.event) : null;
+  const event = (opFromRow || opFromRoot || 'UPDATE') as 'INSERT' | 'UPDATE' | 'DELETE';
+  if (!row) {
+    return { event, newRow: null, oldRow: null };
+  }
   const record = (row.record ?? row.new) as T | null | undefined;
   const oldRecord = (row.old_record ?? row.old) as T | null | undefined;
-  if (op === 'DELETE') {
+  if (event === 'DELETE') {
     return { event: 'DELETE', newRow: null, oldRow: oldRecord ?? null };
   }
-  if (op === 'INSERT') {
+  if (event === 'INSERT') {
     return { event: 'INSERT', newRow: record ?? null, oldRow: null };
   }
   return { event: 'UPDATE', newRow: record ?? null, oldRow: oldRecord ?? null };
@@ -711,16 +741,11 @@ function broadcastPayloadToChange<T>(
 
 function subscribeWorkspaceBroadcastTable<T>(topic: string, cb: ChangeCallback<T>) {
   const sb = getSupabase();
-  const dispatch =
-    (ev: 'INSERT' | 'UPDATE' | 'DELETE') =>
-    (msg: { payload?: unknown }) => {
-      cb(broadcastPayloadToChange<T>(ev, msg));
-    };
   return sb
     .channel(topic, workspaceRealtimeChannelConfig)
-    .on('broadcast', { event: 'INSERT' }, dispatch('INSERT'))
-    .on('broadcast', { event: 'UPDATE' }, dispatch('UPDATE'))
-    .on('broadcast', { event: 'DELETE' }, dispatch('DELETE'));
+    .on('broadcast', { event: REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.ALL }, (msg: unknown) => {
+      cb(broadcastPayloadToChangeFromServerMsg<T>(msg));
+    });
 }
 
 export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) {
@@ -1134,12 +1159,21 @@ export async function fullSync(
 
     for (const wid of workspaceIdsToSync) {
       const cats = mergedCategories[wid].merged;
-      const notesAligned = alignNoteCategoryIds(mergedNotes[wid].merged, cats);
-      const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
 
       const delIds = (localNoteTombstones[wid] || []).map((t) => t.id);
       const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return { ok: false, error: delRes.error };
+      if (delIds.length) {
+        const removed = new Set(delRes.deletedIds);
+        localNoteTombstones[wid] = (localNoteTombstones[wid] || []).filter((t) => !removed.has(t.id));
+        await saveLocalNoteTombstones(wid, localNoteTombstones[wid]);
+      }
+      const tombIdsForUpsert = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
+      const notesAligned = alignNoteCategoryIds(
+        mergedNotes[wid].merged.filter((n) => !tombIdsForUpsert.has(n.id)),
+        cats,
+      );
+      const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
 
       const archDelIds = (localArchivedTombstones[wid] || []).map((t) => t.id);
       const archDelRes = await fullSyncIpc.pushArchivedDeletes(wid, archDelIds);
@@ -1158,8 +1192,7 @@ export async function fullSync(
       const catDelRes = await fullSyncIpc.pushCategoryDeletes(wid, catDelIds);
       if (!catDelRes.ok) return { ok: false, error: catDelRes.error };
 
-      // Clear tombstones after successful remote deletes.
-      if (delIds.length) await saveLocalNoteTombstones(wid, []);
+      // Clear tombstones after successful remote deletes (note tombstones updated incrementally above).
       if (archDelIds.length) await saveLocalArchivedNoteTombstones(wid, []);
       if (catDelIds.length) await saveLocalCategoryTombstones(wid, []);
     }

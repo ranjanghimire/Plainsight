@@ -4,6 +4,7 @@ import {
   useCallback,
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo,
 } from 'react';
@@ -357,7 +358,8 @@ export function WorkspaceProvider({ children }) {
     saveWorkspace(activeStorageKey, data);
   }, [activeStorageKey, data]);
 
-  useEffect(() => {
+  /** Persist before paint so a same-tick `queueFullSync` never reads stale workspace JSON from storage. */
+  useLayoutEffect(() => {
     save();
   }, [data, activeStorageKey, save]);
 
@@ -1068,25 +1070,25 @@ export function WorkspaceProvider({ children }) {
         archivedNotes: archOut,
       };
     });
-    // Record a tombstone so sync can delete the Supabase row.
-    try {
-      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
-      const deletedAt = new Date().toISOString();
-      void (async () => {
+    void (async () => {
+      try {
+        const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+        const deletedAt = new Date().toISOString();
         const existing = await getLocalNoteTombstones(workspaceId);
         const next = [
           { id, workspace_id: workspaceId, deleted_at: deletedAt },
           ...existing.filter((t) => t.id !== id),
         ];
         await saveLocalNoteTombstones(workspaceId, next);
-      })();
-    } catch {
-      /* ignore */
-    }
-    queueFullSync();
-    void logWorkspaceEditActivity('note_deleted', 'Deleted note to archive', {
-      note_id: id,
-    });
+      } catch {
+        /* ignore */
+      } finally {
+        queueFullSync();
+      }
+      void logWorkspaceEditActivity('note_deleted', 'Deleted note to archive', {
+        note_id: id,
+      });
+    })();
   }, [activeStorageKey, logWorkspaceEditActivity]);
 
   const restoreArchivedNote = useCallback((textKey, resolvedCategory) => {

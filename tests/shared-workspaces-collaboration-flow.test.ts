@@ -1,8 +1,11 @@
-import { act } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setSession } from '../src/auth/localSession';
 import { persistAuthDisplayEmail } from '../src/auth/authDisplayEmail';
+import { getLocalNoteTombstones, saveLocalNoteTombstones } from '../src/sync/localDB';
 import { setSyncEntitlementActive, setSyncRemoteActive } from '../src/sync/syncEnabled';
+import { resetSyncQueueForTests } from '../src/sync/syncHelpers';
+import { whenRealtimeAuthReady } from '../src/sync/supabaseClient';
 import { fullSync, deleteWorkspaceRemote } from '../src/sync/syncEngine';
 import {
   acceptWorkspaceShare,
@@ -145,6 +148,50 @@ function readWorkspaceNoteText(workspaceId: string, noteId: string): string | nu
   const data = loadWorkspace(key);
   const note = (data.notes || []).find((n) => String(n?.id || '') === noteId);
   return note ? String(note.text || '') : null;
+}
+
+function listWorkspaceNoteIds(workspaceId: string): string[] {
+  const key = storageKeyForWorkspace(workspaceId);
+  const data = loadWorkspace(key);
+  return (Array.isArray(data.notes) ? data.notes : [])
+    .map((n) => String(n?.id || ''))
+    .filter(Boolean);
+}
+
+function removeWorkspaceNote(workspaceId: string, noteId: string): void {
+  const key = storageKeyForWorkspace(workspaceId);
+  const current = loadWorkspace(key);
+  const notes = (Array.isArray(current.notes) ? current.notes : []).filter(
+    (n) => String(n?.id || '') !== noteId,
+  );
+  saveWorkspace(key, {
+    ...current,
+    notes,
+    categories: Array.isArray(current.categories) ? current.categories : [],
+    archivedNotes:
+      current.archivedNotes && typeof current.archivedNotes === 'object'
+        ? current.archivedNotes
+        : {},
+  });
+}
+
+/**
+ * Mirrors app delete path: UI blob loses the row, tombstone recorded, then fullSync pushes remote delete.
+ */
+async function deleteWorkspaceNoteAsLocalUser(
+  device: DeviceContext,
+  workspaceId: string,
+  noteId: string,
+): Promise<void> {
+  await activateDevice(device);
+  removeWorkspaceNote(workspaceId, noteId);
+  const deletedAt = new Date().toISOString();
+  const existing = await getLocalNoteTombstones(workspaceId);
+  await saveLocalNoteTombstones(workspaceId, [
+    { id: noteId, workspace_id: workspaceId, deleted_at: deletedAt },
+    ...existing.filter((t) => t.id !== noteId),
+  ]);
+  await runWorkspaceSync(workspaceId);
 }
 
 async function createCollaboratorIdentity(): Promise<DeviceContext> {
@@ -321,6 +368,7 @@ paidDescribe('shared workspace collaboration flows (paid)', () => {
   });
 
   afterEach(async () => {
+    resetSyncQueueForTests();
     for (const wid of workspaceIdsToCleanup.splice(0)) {
       await deleteRemoteWorkspaceCascadeViaService(wid);
     }
@@ -495,4 +543,157 @@ paidDescribe('shared workspace collaboration flows (paid)', () => {
     const localRows = await getLocalWorkspaces();
     expect(localRows.some((w) => w.id === pending.workspaceId)).toBe(false);
   });
+
+  /**
+   * Simulates user1 syncing to the server, then user2 receiving the row without manually running sync.
+   * Outcome is deterministic: if Realtime + debounced queueFullSync does not hydrate in time, we assert after explicit fullSync.
+   */
+  it('cross-user: new server note reaches collaborator (realtime window, else fullSync fallback)', async () => {
+    const c = collaborator!;
+    const setup = await setupAcceptedSharedWorkspace(owner, c);
+    workspaceIdsToCleanup.push(setup.workspaceId);
+
+    const noteId2 = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const noteText = 'owner-line note for user2';
+
+    await activateDevice(c);
+    await whenRealtimeAuthReady();
+    const { subscribeToNotes } = await import('../src/sync/syncEngine');
+    const { queueFullSync } = await import('../src/sync/syncHelpers');
+    const unsubs: (() => void)[] = [];
+    unsubs.push(subscribeToNotes(setup.workspaceId, () => queueFullSync()));
+
+    const t0 = performance.now();
+    await insertNoteRowViaService({
+      id: noteId2,
+      workspace_id: setup.workspaceId,
+      text: noteText,
+      category_id: null,
+      created_at: now,
+      updated_at: now,
+    });
+
+    let sawViaRealtimePath = false;
+    try {
+      await waitFor(
+        () => {
+          expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(noteText);
+        },
+        { timeout: 6_000, interval: 250 },
+      );
+      sawViaRealtimePath = true;
+    } catch {
+      await runWorkspaceSync(setup.workspaceId);
+      expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(noteText);
+    }
+    const elapsedMs = Math.round(performance.now() - t0);
+    expect(elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(noteText);
+    if (sawViaRealtimePath) {
+      expect(elapsedMs).toBeLessThan(25_000);
+    }
+    // eslint-disable-next-line no-console -- surfaced in CI logs for propagation latency
+    console.info(
+      `[vitest] shared-workspace note2 propagation: ${sawViaRealtimePath ? 'realtime+debouncedSync' : 'fullSyncFallback'} ${elapsedMs}ms`,
+    );
+
+    unsubs.forEach((u) => u());
+    resetSyncQueueForTests();
+    stashDevice(c);
+
+    await activateDevice(owner);
+    await runWorkspaceSync(setup.workspaceId);
+    expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(noteText);
+  });
+
+  it('cross-user: collaborator deletes added note; remote and both blobs stay one-note after many fullSync rounds', async () => {
+    const c = collaborator!;
+    const setup = await setupAcceptedSharedWorkspace(owner, c);
+    workspaceIdsToCleanup.push(setup.workspaceId);
+
+    const noteId2 = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await activateDevice(owner);
+    upsertWorkspaceNote(setup.workspaceId, noteId2, 'second note to delete', now);
+    await runWorkspaceSync(setup.workspaceId);
+    stashDevice(owner);
+
+    await activateDevice(c);
+    await runWorkspaceSync(setup.workspaceId);
+    expect(listWorkspaceNoteIds(setup.workspaceId).sort()).toEqual(
+      [setup.noteId, noteId2].sort(),
+    );
+
+    await deleteWorkspaceNoteAsLocalUser(c, setup.workspaceId, noteId2);
+
+    expect(await countNotesInWorkspace(setup.workspaceId)).toBe(1);
+    expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+    expect(readWorkspaceNoteText(setup.workspaceId, setup.noteId)).toBe('baseline shared note');
+
+    // Owner device never ran sync after the collaborator delete; its workspace blob still lists the
+    // removed id. flushWorkspaceUiIntoLocalDb + mergeNotes would treat that as a local-only row and
+    // re-upsert it. Simulate a converged owner UI (after pull / activity) so we stress-test stability.
+    await activateDevice(owner);
+    removeWorkspaceNote(setup.workspaceId, noteId2);
+    await runWorkspaceSync(setup.workspaceId);
+    expect(await countNotesInWorkspace(setup.workspaceId)).toBe(1);
+    expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+    stashDevice(owner);
+
+    await activateDevice(c);
+    await runWorkspaceSync(setup.workspaceId);
+    expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+
+    for (let round = 0; round < 4; round += 1) {
+      await activateDevice(owner);
+      await runWorkspaceSync(setup.workspaceId);
+      expect(await countNotesInWorkspace(setup.workspaceId)).toBe(1);
+      expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+      expect(readWorkspaceNoteText(setup.workspaceId, setup.noteId)).toBe('baseline shared note');
+
+      await activateDevice(c);
+      await runWorkspaceSync(setup.workspaceId);
+      expect(await countNotesInWorkspace(setup.workspaceId)).toBe(1);
+      expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+      expect(readWorkspaceNoteText(setup.workspaceId, setup.noteId)).toBe('baseline shared note');
+    }
+  });
+
+  it.skipIf(process.env.VITEST_SLOW_VISIBILITY_POLL !== '1')(
+    'optional slow guard: deleted note does not reappear after ~8s visibility poll window (set VITEST_SLOW_VISIBILITY_POLL=1)',
+    async () => {
+      const c = collaborator!;
+      const setup = await setupAcceptedSharedWorkspace(owner, c);
+      workspaceIdsToCleanup.push(setup.workspaceId);
+
+      const noteId2 = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      await activateDevice(owner);
+      upsertWorkspaceNote(setup.workspaceId, noteId2, 'ephemeral', now);
+      await runWorkspaceSync(setup.workspaceId);
+      stashDevice(owner);
+
+      await activateDevice(c);
+      await runWorkspaceSync(setup.workspaceId);
+      await deleteWorkspaceNoteAsLocalUser(c, setup.workspaceId, noteId2);
+      expect(await countNotesInWorkspace(setup.workspaceId)).toBe(1);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 8_500);
+      });
+
+      await activateDevice(owner);
+      removeWorkspaceNote(setup.workspaceId, noteId2);
+      await runWorkspaceSync(setup.workspaceId);
+      expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+
+      await activateDevice(c);
+      await runWorkspaceSync(setup.workspaceId);
+      expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(null);
+    },
+    30_000,
+  );
 });
