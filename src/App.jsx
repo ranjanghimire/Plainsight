@@ -161,8 +161,10 @@ function AppHeader({ onOpenSettings }) {
   const { currentWorkspace, visibleWorkspaces, getWorkspaceNameById } = useWorkspace();
   const { archiveMode } = useArchiveMode();
   const { isTagsRoute } = useTagsNav();
+  const location = useLocation();
 
   const headerTitle = useMemo(() => {
+    if (location.pathname === '/manage') return 'Plainsight';
     if (isTagsRoute) return 'Tags';
     if (archiveMode) return 'Archive';
     if (currentWorkspace === 'home') return 'Plainsight';
@@ -182,7 +184,14 @@ function AppHeader({ onOpenSettings }) {
     const spaced = slug.replace(/_/g, ' ').trim();
     if (!spaced) return 'Workspace';
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
-  }, [archiveMode, currentWorkspace, visibleWorkspaces, getWorkspaceNameById, isTagsRoute]);
+  }, [
+    archiveMode,
+    currentWorkspace,
+    visibleWorkspaces,
+    getWorkspaceNameById,
+    isTagsRoute,
+    location.pathname,
+  ]);
 
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">

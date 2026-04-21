@@ -77,7 +77,9 @@ export function ManagePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">Workspaces</h2>
+        <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">
+          Hidden Workspaces
+        </h2>
         <button
           type="button"
           onClick={goToMainHome}
