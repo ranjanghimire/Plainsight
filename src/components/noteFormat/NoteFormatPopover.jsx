@@ -166,7 +166,7 @@ export function FloatingNoteSubmit({ visible, topPx, onClick, disabled }) {
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
-      className="fixed z-[9999] flex h-11 w-11 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-800 shadow-lg transition-[top,opacity] duration-150 ease-out dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 disabled:pointer-events-none disabled:opacity-40"
+      className="fixed z-[9999] flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-800 shadow-lg transition-[top,opacity] duration-150 ease-out dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 disabled:pointer-events-none disabled:opacity-40"
       style={{
         top: topPx,
         bottom: 'auto',
@@ -175,7 +175,7 @@ export function FloatingNoteSubmit({ visible, topPx, onClick, disabled }) {
       }}
       aria-label="Send note"
     >
-      <PaperPlaneIcon className="h-5 w-5" />
+      <PaperPlaneIcon className="h-6 w-6" />
     </button>
   );
   if (typeof document !== 'undefined') {
