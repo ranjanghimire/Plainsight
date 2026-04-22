@@ -7,7 +7,6 @@ import type {
   Workspace,
   WorkspacePin,
 } from './types';
-import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import {
   getSupabase,
@@ -695,68 +694,73 @@ function toEvent(e: string): 'INSERT' | 'UPDATE' | 'DELETE' {
   return 'UPDATE';
 }
 
-function subscribeWorkspacePostgresTable<T>(
-  channelName: string,
-  table: string,
-  filter: string,
-  cb: ChangeCallback<T>,
-) {
+/** `realtime.broadcast_changes` uses private channels + Broadcast authorization (realtime.messages RLS). */
+const workspaceRealtimeChannelConfig = {
+  config: {
+    broadcast: { self: true, ack: true },
+    private: true,
+  },
+} as const;
+
+function broadcastPayloadToChangeFromServerMsg<T>(msg: unknown): {
+  event: 'INSERT' | 'UPDATE' | 'DELETE';
+  newRow: T | null;
+  oldRow: T | null;
+} {
+  if (!msg || typeof msg !== 'object') {
+    return { event: 'UPDATE', newRow: null, oldRow: null };
+  }
+  const root = msg as Record<string, unknown>;
+  let row: Record<string, unknown> | null = null;
+  const outer = root.payload;
+  if (outer && typeof outer === 'object') {
+    row = outer as Record<string, unknown>;
+    if (typeof row.operation !== 'string' && row.payload && typeof row.payload === 'object') {
+      row = row.payload as Record<string, unknown>;
+    }
+  }
+  const opFromRow = row && typeof row.operation === 'string' ? toEvent(row.operation) : null;
+  const opFromRoot = typeof root.event === 'string' ? toEvent(root.event) : null;
+  const event = (opFromRow || opFromRoot || 'UPDATE') as 'INSERT' | 'UPDATE' | 'DELETE';
+  if (!row) {
+    return { event, newRow: null, oldRow: null };
+  }
+  const record = (row.record ?? row.new) as T | null | undefined;
+  const oldRecord = (row.old_record ?? row.old) as T | null | undefined;
+  if (event === 'DELETE') {
+    return { event: 'DELETE', newRow: null, oldRow: oldRecord ?? null };
+  }
+  if (event === 'INSERT') {
+    return { event: 'INSERT', newRow: record ?? null, oldRow: null };
+  }
+  return { event: 'UPDATE', newRow: record ?? null, oldRow: oldRecord ?? null };
+}
+
+function subscribeWorkspaceBroadcastTable<T>(topic: string, cb: ChangeCallback<T>) {
   const sb = getSupabase();
   const channel = sb
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table, filter },
-      (p) =>
-        cb({
-          event: toEvent(p.eventType),
-          newRow: (p.new as T) ?? null,
-          oldRow: (p.old as T) ?? null,
-        }),
-    )
-    .subscribe((status, err) => {
-      // Supabase Realtime debugging: record non-subscribed states so we can tell why the UI
-      // falls back to periodic fullSync pulls.
-      if (status === 'SUBSCRIBED') return;
-      try {
-        void sendClientErrorReport({
-          type: 'realtime.channel_status',
-          message: `Realtime channel status=${String(status)} channel=${channelName} table=${table}`,
-          stack: err ? (err instanceof Error ? err.stack : JSON.stringify(err)) : undefined,
-        });
-      } catch {
-        /* ignore */
-      }
-    });
+    .channel(topic, workspaceRealtimeChannelConfig)
+    .on('broadcast', { event: '*' }, (msg: unknown) => {
+      cb(broadcastPayloadToChangeFromServerMsg<T>(msg));
+    })
+    .subscribe();
   return () => sb.removeChannel(channel);
 }
 
 export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) {
   if (!getCanUseSupabase()) return () => {};
-  return subscribeWorkspacePostgresTable<Note>(
-    `workspace:${workspaceId}:notes`,
-    'notes',
-    `workspace_id=eq.${workspaceId}`,
-    cb,
-  );
+  return subscribeWorkspaceBroadcastTable<Note>(`workspace:${workspaceId}:notes`, cb);
 }
 
 export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Category>) {
   if (!getCanUseSupabase()) return () => {};
-  return subscribeWorkspacePostgresTable<Category>(
-    `workspace:${workspaceId}:categories`,
-    'categories',
-    `workspace_id=eq.${workspaceId}`,
-    cb,
-  );
+  return subscribeWorkspaceBroadcastTable<Category>(`workspace:${workspaceId}:categories`, cb);
 }
 
 export function subscribeToArchivedNotes(workspaceId: string, cb: ChangeCallback<ArchivedNote>) {
   if (!getCanUseSupabase()) return () => {};
-  return subscribeWorkspacePostgresTable<ArchivedNote>(
+  return subscribeWorkspaceBroadcastTable<ArchivedNote>(
     `workspace:${workspaceId}:archived_notes`,
-    'archived_notes',
-    `workspace_id=eq.${workspaceId}`,
     cb,
   );
 }
