@@ -1,4 +1,4 @@
-import { getCanUseSupabase } from '../sync/syncEnabled';
+import { hasCustomAuthSession } from '../sync/syncEnabled';
 import { getSupabase } from '../sync/supabaseClient';
 import {
   compressStack,
@@ -43,7 +43,9 @@ export type ClientErrorReportInput = {
  */
 export async function sendClientErrorReport(input: ClientErrorReportInput): Promise<void> {
   if (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') return;
-  if (!getCanUseSupabase()) return;
+  // Telemetry is for debugging runtime/sync issues; it should work even when sync entitlement
+  // or remote sync is not active, as long as we have a real (OTP) session for RLS inserts.
+  if (!hasCustomAuthSession()) return;
 
   const type = sanitizeTelemetryText(input.type || 'error', 80);
   const message = sanitizeTelemetryText(input.message || '', 2000);

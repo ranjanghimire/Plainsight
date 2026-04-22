@@ -30,6 +30,7 @@ import {
   readAuthDisplayEmail,
 } from '../auth/authDisplayEmail';
 import { SendCodeModal } from '../components/SendCodeModal';
+import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 
 function isLocalDevSession() {
   const { sessionToken, userId } = getLocalSession();
@@ -115,6 +116,10 @@ export function AuthProvider({ children }) {
       if (!result.loggedIn) {
         if (result.staleNetwork) {
           setAuthConnectivityDegraded(true);
+          void sendClientErrorReport({
+            type: 'auth.session_degraded',
+            message: 'Session restore: stale network (could not validate session)',
+          });
           return;
         }
         setAuthConnectivityDegraded(false);
@@ -140,6 +145,11 @@ export function AuthProvider({ children }) {
       console.error('[Auth] session restore', e);
       if (ticket === sessionValidationTicketRef.current) {
         setAuthConnectivityDegraded(true);
+        void sendClientErrorReport({
+          type: 'auth.session_degraded',
+          message: 'Session restore: exception while validating session',
+          stack: e instanceof Error ? e.stack : String(e),
+        });
       }
     } finally {
       setAuthReady(true);

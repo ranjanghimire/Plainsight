@@ -838,13 +838,19 @@ export async function fullSync(
   }
 
   let syncSucceeded = false;
+  let hydrationFailure: SyncError | null = null;
+
+  const fail = (error: SyncError) => {
+    hydrationFailure = error;
+    return { ok: false as const, error };
+  };
 
   try {
     const ownerId = await getOwnerId();
 
     // Pull pins first (does not depend on workspace list).
     const remotePins = await fullSyncIpc.pullWorkspacePins();
-    if (remotePins.error) return { ok: false, error: remotePins.error };
+    if (remotePins.error) return fail(remotePins.error);
 
     // Fetch remote + local together, merge, prune, then persist in one tight sequence so we never
     // write a workspace list from a stale remote snapshot (e.g. user deleted rows while sync ran).
@@ -853,10 +859,7 @@ export async function fullSync(
       getLocalWorkspaces(),
     ]);
     if (remoteWorkspacesRes.error) {
-      return {
-        ok: false,
-        error: mkError(remoteWorkspacesRes.error.message, remoteWorkspacesRes.error),
-      };
+      return fail(mkError(remoteWorkspacesRes.error.message, remoteWorkspacesRes.error));
     }
     const remoteWorkspaces = (remoteWorkspacesRes.data || []) as Workspace[];
     let mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteWorkspaces, localWorkspaces);
@@ -879,10 +882,7 @@ export async function fullSync(
       getLocalWorkspaces(),
     ]);
     if (remoteFinalRes.error) {
-      return {
-        ok: false,
-        error: mkError(remoteFinalRes.error.message, remoteFinalRes.error),
-      };
+      return fail(mkError(remoteFinalRes.error.message, remoteFinalRes.error));
     }
     const remoteFinal = (remoteFinalRes.data || []) as Workspace[];
     mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteFinal, localFinal);
@@ -920,7 +920,7 @@ export async function fullSync(
     if (ownerId) {
       const shareRes = await listWorkspaceShares();
       if (shareRes.error) {
-        return { ok: false, error: mkError(shareRes.error.message, shareRes.error.details) };
+        return fail(mkError(shareRes.error.message, shareRes.error.details));
       }
       for (const s of shareRes.data || []) {
         if (s.status !== 'accepted') continue;
@@ -1010,9 +1010,9 @@ export async function fullSync(
         fullSyncIpc.pullNotes(wid),
         fullSyncIpc.pullArchivedNotes(wid),
       ]);
-      if (cats.error) return { ok: false, error: cats.error };
-      if (notes.error) return { ok: false, error: notes.error };
-      if (arch.error) return { ok: false, error: arch.error };
+      if (cats.error) return fail(cats.error);
+      if (notes.error) return fail(notes.error);
+      if (arch.error) return fail(arch.error);
       remoteCategories[wid] = cats.data;
       remoteNotes[wid] = notes.data;
       remoteArchived[wid] = arch.data;
@@ -1157,7 +1157,7 @@ export async function fullSync(
 
     // Push merged (ensure category FK order: categories before notes)
     const wsPush = await fullSyncIpc.pushWorkspaces(mergedWorkspacesWithOwner, remoteIds);
-    if (!wsPush.ok) return { ok: false, error: wsPush.error };
+    if (!wsPush.ok) return fail(wsPush.error);
     if (
       wsPush.ok &&
       wsPush.workspaceIdReplacements &&
@@ -1169,14 +1169,14 @@ export async function fullSync(
     }
 
     const pinsPush = await fullSyncIpc.pushWorkspacePins(mergedPins.merged);
-    if (!pinsPush.ok) return { ok: false, error: pinsPush.error };
+    if (!pinsPush.ok) return fail(pinsPush.error);
 
     for (const wid of workspaceIdsToSync) {
       const cats = mergedCategories[wid].merged;
 
       const delIds = (localNoteTombstones[wid] || []).map((t) => t.id);
       const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
-      if (!delRes.ok) return { ok: false, error: delRes.error };
+      if (!delRes.ok) return fail(delRes.error);
       if (delIds.length) {
         const removed = new Set(delRes.deletedIds);
         localNoteTombstones[wid] = (localNoteTombstones[wid] || []).filter((t) => !removed.has(t.id));
@@ -1191,24 +1191,24 @@ export async function fullSync(
 
       const archDelIds = (localArchivedTombstones[wid] || []).map((t) => t.id);
       const archDelRes = await fullSyncIpc.pushArchivedDeletes(wid, archDelIds);
-      if (!archDelRes.ok) return { ok: false, error: archDelRes.error };
+      if (!archDelRes.ok) return fail(archDelRes.error);
 
       const catRes = await fullSyncIpc.pushCategories(cats);
-      if (!catRes.ok) return { ok: false, error: catRes.error };
+      if (!catRes.ok) return fail(catRes.error);
 
       const noteRes = await fullSyncIpc.pushNotes(notesAligned);
-      if (!noteRes.ok) return { ok: false, error: noteRes.error };
+      if (!noteRes.ok) return fail(noteRes.error);
 
       const onServerNow = new Set((remoteNotes[wid] || []).map((n) => n.id));
       for (const n of notesAligned) onServerNow.add(n.id);
       await saveLastKnownRemoteNoteIds(wid, onServerNow);
 
       const archRes = await fullSyncIpc.pushArchivedNotes(archAligned);
-      if (!archRes.ok) return { ok: false, error: archRes.error };
+      if (!archRes.ok) return fail(archRes.error);
 
       const catDelIds = (localCategoryTombstones[wid] || []).map((t) => t.id);
       const catDelRes = await fullSyncIpc.pushCategoryDeletes(wid, catDelIds);
-      if (!catDelRes.ok) return { ok: false, error: catDelRes.error };
+      if (!catDelRes.ok) return fail(catDelRes.error);
 
       // Clear tombstones after successful remote deletes (note tombstones updated incrementally above).
       if (archDelIds.length) await saveLocalArchivedNoteTombstones(wid, []);
@@ -1218,9 +1218,18 @@ export async function fullSync(
     syncSucceeded = true;
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: mkError('Full sync failed', e) };
+    return fail(mkError('Full sync failed', e));
   } finally {
-    notifyHydrationComplete({ ok: syncSucceeded });
+    notifyHydrationComplete({
+      ok: syncSucceeded,
+      ...(syncSucceeded
+        ? null
+        : {
+            reason: 'sync_failed' as const,
+            message: hydrationFailure?.message || 'Full sync failed',
+            details: hydrationFailure?.details,
+          }),
+    });
   }
 }
 

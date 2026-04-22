@@ -24,6 +24,7 @@ import {
   customerInfoHasSyncEntitlement,
   purchasesSdkHasSyncEntitlement,
 } from '../sync/rcEntitlements';
+import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 
 const REVENUECAT_PUBLIC_API_KEY = 'test_smZiwCGJjgwRtkaZwQOrEZhEPfj';
 const RC_ANON_USER_STORAGE_KEY = 'plainsight_rc_anonymous_app_user_id';
@@ -71,6 +72,21 @@ export function SyncEntitlementProvider({ children }) {
   const [isServerEntitlementCheckPending, setIsServerEntitlementCheckPending] = useState(false);
   /** Background verify/hydration failed — menu shows amber sync dot instead of a toast. */
   const [syncMenuConnectivityWarning, setSyncMenuConnectivityWarning] = useState(false);
+  const [syncMenuConnectivityCause, setSyncMenuConnectivityCause] = useState(null);
+
+  const raiseSyncMenuConnectivityWarning = useCallback((cause, details) => {
+    setSyncMenuConnectivityCause(String(cause || 'unknown'));
+    setSyncMenuConnectivityWarning(true);
+    try {
+      void sendClientErrorReport({
+        type: 'sync.entitlement_degraded',
+        message: `Entitlement/sync gating degraded (cause=${String(cause || 'unknown')})`,
+        stack: details ? JSON.stringify(details) : undefined,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(
     () =>
@@ -309,7 +325,7 @@ export function SyncEntitlementProvider({ children }) {
         setEnableSyncOpen(false);
         showToast('Cloud sync is on');
       } else {
-        setSyncMenuConnectivityWarning(true);
+        raiseSyncMenuConnectivityWarning('unlock_no_entitlement');
       }
     } catch (e) {
       if (e?.errorCode === ErrorCode.UserCancelledError) return;
@@ -317,7 +333,7 @@ export function SyncEntitlementProvider({ children }) {
     } finally {
       setUnlocking(false);
     }
-  }, [applyCustomerInfo, lifetimePackage, showToast]);
+  }, [applyCustomerInfo, lifetimePackage, showToast, raiseSyncMenuConnectivityWarning]);
 
   const processOtpSessionQueue = useCallback(async () => {
     const purchases = purchasesRef.current;
@@ -420,11 +436,14 @@ export function SyncEntitlementProvider({ children }) {
                   setSyncEntitlementActive(false);
                   setSyncRemoteActive(false);
                 } else {
-                  setSyncMenuConnectivityWarning(true);
+                  raiseSyncMenuConnectivityWarning('verify_uncertain_entitlement', {
+                    remoteAfter,
+                    sdkEntitled,
+                  });
                 }
               } catch (e) {
                 console.error('[RevenueCat] verify session RevenueCat link', e);
-                setSyncMenuConnectivityWarning(true);
+                raiseSyncMenuConnectivityWarning('verify_identify_exception', e);
               }
             }
           }

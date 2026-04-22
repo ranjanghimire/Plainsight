@@ -58,6 +58,7 @@ import {
   subscribeToWorkspacePins,
 } from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
+import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import {
   getSession as getLocalSession,
   LOCAL_DEV_USER_ID,
@@ -442,6 +443,21 @@ export function WorkspaceProvider({ children }) {
         }
         if (!getCanUseSupabase()) return;
         setSyncHydrationConnectivityWarning(true);
+        try {
+          const reason = payload?.reason || 'sync_failed';
+          const msg = payload?.message || 'Hydration / sync failed';
+          const online =
+            typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
+              ? navigator.onLine
+              : undefined;
+          void sendClientErrorReport({
+            type: 'sync.hydration_degraded',
+            message: `${msg} (reason=${reason}${online === undefined ? '' : `, online=${online}`})`,
+            stack: payload?.details ? JSON.stringify(payload.details) : undefined,
+          });
+        } catch {
+          /* ignore */
+        }
         if (hydrationRetryTimerRef.current != null) {
           window.clearTimeout(hydrationRetryTimerRef.current);
         }
