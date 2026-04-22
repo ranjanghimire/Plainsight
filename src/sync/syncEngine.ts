@@ -501,10 +501,13 @@ async function pruneRedundantNumberedVisibleWorkspaces(
 export async function pushCategories(localCategories: Category[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
-    const { error } = await getSupabase()
-      .from('categories')
-      .upsert(localCategories, { onConflict: 'id' });
-    if (error) return { ok: false, error: mkError(error.message, error) };
+    const rows = localCategories || [];
+    const CHUNK = 250;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const slice = rows.slice(i, i + CHUNK);
+      const { error } = await getSupabase().from('categories').upsert(slice, { onConflict: 'id' });
+      if (error) return { ok: false, error: mkError(error.message, error) };
+    }
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to push categories', e) };
