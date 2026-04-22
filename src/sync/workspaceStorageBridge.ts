@@ -3,8 +3,10 @@ import type { ArchivedNote, Category, Note } from './types';
 import {
   getLocalArchivedNoteTombstones,
   getLocalArchivedNotes,
+  getLocalCategoryTombstones,
   getLocalCategories,
   getLocalNotes,
+  getLocalNoteTombstones,
   saveLocalArchivedNoteTags,
   saveLocalArchivedNotes,
   saveLocalArchivedNoteTombstones,
@@ -294,13 +296,21 @@ export async function hydrateWorkspaceUiFromLocalDb(workspaceId: string): Promis
   const cats = await getLocalCategories(workspaceId);
   const notes = await getLocalNotes(workspaceId);
   const archived = await getLocalArchivedNotes(workspaceId);
+  const noteTombs = await getLocalNoteTombstones(workspaceId);
+  const categoryTombs = await getLocalCategoryTombstones(workspaceId);
 
-  const idToName = new Map(cats.map((c) => [c.id, c.name]));
-  const categoryNames = [...cats]
+  const tombNoteIds = new Set(noteTombs.map((t) => t.id));
+  const tombCategoryIds = new Set(categoryTombs.map((t) => t.id));
+
+  const liveCats = cats.filter((c) => !tombCategoryIds.has(c.id));
+  const liveNotes = notes.filter((n) => !tombNoteIds.has(n.id));
+
+  const idToName = new Map(liveCats.map((c) => [c.id, c.name]));
+  const categoryNames = [...liveCats]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((c) => c.name);
 
-  const uiNotes = notes.map((n) => ({
+  const uiNotes = liveNotes.map((n) => ({
     id: n.id,
     text: n.text,
     category: n.category_id ? (idToName.get(n.category_id) ?? null) : null,
