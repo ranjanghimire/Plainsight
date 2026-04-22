@@ -255,7 +255,6 @@ export function NoteCard({
     boldMode,
     setBoldMode,
     bulletsMode,
-    newlineMode,
     popoverExpanded,
     openPopover,
     closePopover,
@@ -807,7 +806,7 @@ export function NoteCard({
       {isEditing ? (
         <FloatingNoteSubmit
           compact
-          visible={newlineMode && textareaFocused}
+          visible={textareaFocused}
           topPx={floatingSubmitTopPx}
           onClick={commitText}
           disabled={false}
