@@ -39,20 +39,48 @@ function BoldToggleIcon({ className }) {
   );
 }
 
+/** Classic unordered-list: bullets + lines (clearer than plain rules). */
 function BulletsToggleIcon({ className }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6v12" />
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="6" cy="6" r="1.75" opacity="0.92" />
+      <circle cx="6" cy="12" r="1.75" opacity="0.92" />
+      <circle cx="6" cy="18" r="1.75" opacity="0.92" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M11 6h9M11 12h9M11 18h5"
+        opacity="0.95"
+      />
     </svg>
   );
 }
 
-/** Checklist toolbar icon (icon-only control). */
-function ChecklistToggleIcon({ className }) {
+/** Checklist: rounded square + tick (tick always visible for affordance). */
+function ChecklistToggleIcon({ className, active }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="3" strokeWidth={2} />
+      <rect
+        x="4.5"
+        y="4.5"
+        width="15"
+        height="15"
+        rx="3.5"
+        strokeWidth={1.85}
+        fill={active ? 'currentColor' : 'none'}
+        fillOpacity={active ? 0.11 : 0}
+        opacity={0.95}
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2.25}
+        d="M8 12.25l2.75 2.75L16 9.75"
+        opacity={active ? 1 : 0.52}
+      />
     </svg>
   );
 }
@@ -82,7 +110,7 @@ const formatTrayMotion =
   'transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0';
 
 /**
- * Inline format controls in the tag row: expand to show First line bold / Bullets; collapse with chevron only.
+ * Inline format controls in the tag row: First line bold (label + icon); bullets & checklist icon-only.
  */
 export function NoteFormatPopover({
   expanded,
@@ -130,11 +158,12 @@ export function NoteFormatPopover({
             e.stopPropagation();
             applyBulletLineToggle(textareaRef?.current, value, setValue);
           }}
-          className={`${inlineBtnBase} shrink-0 ${bulletsMode ? inlineOn : inlineOff}`}
+          className={`${inlineBtnBase} shrink-0 px-1.5 ${bulletsMode ? inlineOn : inlineOff}`}
           aria-pressed={bulletsMode}
+          aria-label="Bullets"
+          title="Bullets"
         >
           <BulletsToggleIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-nowrap">Bullets</span>
         </button>
         <button
           type="button"
@@ -148,7 +177,7 @@ export function NoteFormatPopover({
           aria-label="Checklist"
           title="Checklist"
         >
-          <ChecklistToggleIcon className="h-3.5 w-3.5 shrink-0" />
+          <ChecklistToggleIcon className="h-3.5 w-3.5 shrink-0" active={checklistMode} />
         </button>
         <button
           type="button"

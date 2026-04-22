@@ -79,10 +79,18 @@ function BulletGlyph({ className }) {
 const BULLET_GLYPH_CLASS =
   'inline-block shrink-0 align-middle h-[0.58em] w-[0.58em] text-stone-400 opacity-75 dark:text-stone-500';
 
-const CHECKBOX_CTRL_CLASS =
-  'inline-flex shrink-0 align-middle h-[0.72em] w-[0.72em] items-center justify-center rounded-[2px] border border-current text-current opacity-90 -my-0.5 mx-px min-h-[1.35rem] min-w-[1.35rem] max-h-[1.35rem] max-w-[1.35rem] touch-manipulation';
+/** Compact control aligned to cap-height; outer padding preserves a comfortable tap target. */
+const CHECKBOX_OUTER_CLASS =
+  'inline-flex shrink-0 select-none touch-manipulation align-middle rounded-md p-[0.28em] -m-[0.28em] [-webkit-tap-highlight-color:transparent] transition-opacity duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/25 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:opacity-40';
+
+const CHECKBOX_BOX_CLASS =
+  'flex h-[0.68em] w-[0.68em] shrink-0 items-center justify-center rounded-[2.5px] border transition-[background-color,border-color,box-shadow,color] duration-150 ease-out shadow-[0_0.5px_1px_rgba(28,25,23,0.06)] dark:shadow-[0_0.5px_1px_rgba(0,0,0,0.35)]';
 
 function CheckboxDisplayGlyph({ checked, disabled, onToggle }) {
+  const boxClass = checked
+    ? `${CHECKBOX_BOX_CLASS} border-neutral-800/90 bg-neutral-800 text-neutral-50 shadow-none dark:border-neutral-100/90 dark:bg-neutral-100 dark:text-neutral-900`
+    : `${CHECKBOX_BOX_CLASS} border-current/25 bg-white/90 text-current dark:bg-black/20`;
+
   return (
     <button
       type="button"
@@ -96,15 +104,24 @@ function CheckboxDisplayGlyph({ checked, disabled, onToggle }) {
         e.stopPropagation();
         onToggle();
       }}
-      className={CHECKBOX_CTRL_CLASS}
+      className={CHECKBOX_OUTER_CLASS}
       aria-label={checked ? 'Mark item not done' : 'Mark item done'}
       aria-pressed={checked}
     >
-      {checked ? (
-        <svg className="h-[0.55em] w-[0.55em]" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 12.5l4 4L18 8" />
-        </svg>
-      ) : null}
+      <span className={boxClass} aria-hidden>
+        {checked ? (
+          <svg
+            className="h-[0.42em] w-[0.42em] shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={3.2}
+            aria-hidden
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.5 12.5l3.5 3.5 7.5-8.5" />
+          </svg>
+        ) : null}
+      </span>
     </button>
   );
 }
