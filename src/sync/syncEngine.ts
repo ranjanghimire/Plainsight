@@ -1007,6 +1007,7 @@ export async function fullSync(
     const remoteArchived: Record<string, ArchivedNote[]> = {};
 
     for (const wid of workspaceIdsToSync) {
+      step = `pullWorkspaceTables:${wid}`;
       const [cats, notes, arch] = await Promise.all([
         fullSyncIpc.pullCategories(wid),
         fullSyncIpc.pullNotes(wid),
@@ -1158,6 +1159,7 @@ export async function fullSync(
     }
 
     // Push merged (ensure category FK order: categories before notes)
+    step = 'pushWorkspaces';
     const wsPush = await fullSyncIpc.pushWorkspaces(mergedWorkspacesWithOwner, remoteIds);
     if (!wsPush.ok) return fail(wsPush.error);
     if (
@@ -1170,13 +1172,16 @@ export async function fullSync(
       return again;
     }
 
+    step = 'pushWorkspacePins';
     const pinsPush = await fullSyncIpc.pushWorkspacePins(mergedPins.merged);
     if (!pinsPush.ok) return fail(pinsPush.error);
 
     for (const wid of workspaceIdsToSync) {
+      step = `pushWorkspaceTables:${wid}`;
       const cats = mergedCategories[wid].merged;
 
       const delIds = (localNoteTombstones[wid] || []).map((t) => t.id);
+      step = `pushNoteDeletes:${wid}`;
       const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return fail(delRes.error);
       if (delIds.length) {
@@ -1192,12 +1197,15 @@ export async function fullSync(
       const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
 
       const archDelIds = (localArchivedTombstones[wid] || []).map((t) => t.id);
+      step = `pushArchivedDeletes:${wid}`;
       const archDelRes = await fullSyncIpc.pushArchivedDeletes(wid, archDelIds);
       if (!archDelRes.ok) return fail(archDelRes.error);
 
+      step = `pushCategories:${wid}`;
       const catRes = await fullSyncIpc.pushCategories(cats);
       if (!catRes.ok) return fail(catRes.error);
 
+      step = `pushNotes:${wid}`;
       const noteRes = await fullSyncIpc.pushNotes(notesAligned);
       if (!noteRes.ok) return fail(noteRes.error);
 
@@ -1205,10 +1213,12 @@ export async function fullSync(
       for (const n of notesAligned) onServerNow.add(n.id);
       await saveLastKnownRemoteNoteIds(wid, onServerNow);
 
+      step = `pushArchivedNotes:${wid}`;
       const archRes = await fullSyncIpc.pushArchivedNotes(archAligned);
       if (!archRes.ok) return fail(archRes.error);
 
       const catDelIds = (localCategoryTombstones[wid] || []).map((t) => t.id);
+      step = `pushCategoryDeletes:${wid}`;
       const catDelRes = await fullSyncIpc.pushCategoryDeletes(wid, catDelIds);
       if (!catDelRes.ok) return fail(catDelRes.error);
 
