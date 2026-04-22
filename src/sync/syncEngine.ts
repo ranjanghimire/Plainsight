@@ -628,6 +628,29 @@ export async function pushNoteDeletes(
   try {
     const ids = (noteIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true, deletedIds: [] };
+
+    // Prefer a server-side delete RPC to avoid ambiguous 200/0-rows cases under RLS.
+    try {
+      const rpc = await getSupabase().rpc('plainsight_delete_notes', {
+        p_workspace_id: workspaceId,
+        p_note_ids: ids,
+      });
+      if (!rpc.error) {
+        const deletedIds = ((rpc.data as { id?: string }[]) || [])
+          .map((r) => (typeof r?.id === 'string' ? r.id : ''))
+          .filter(Boolean);
+        // If RPC returns empty, treat as already deleted.
+        return { ok: true, deletedIds: deletedIds.length ? deletedIds : ids };
+      }
+      // If the function isn't deployed yet, fall back to PostgREST DELETE.
+      if (rpc.error?.code !== 'PGRST202' && rpc.error?.code !== 'PGRST301') {
+        // Any other RPC error should surface; it will include details.
+        return { ok: false, error: mkError(rpc.error.message, rpc.error) };
+      }
+    } catch {
+      // ignore and fall back
+    }
+
     const res = await getSupabase()
       .from('notes')
       .delete()
