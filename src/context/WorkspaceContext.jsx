@@ -60,6 +60,11 @@ import {
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import {
+  applyRealtimeArchivedNoteChange,
+  applyRealtimeCategoryChange,
+  applyRealtimeNoteChange,
+} from '../sync/realtimeApply';
+import {
   getSession as getLocalSession,
   LOCAL_DEV_USER_ID,
 } from '../auth/localSession';
@@ -554,9 +559,36 @@ export function WorkspaceProvider({ children }) {
         if (cancelled) return;
         for (const w of workspaces) {
           if (!w?.id) continue;
-          addUnsub(subscribeToNotes(w.id, () => scheduleFullSync()));
-          addUnsub(subscribeToCategories(w.id, () => scheduleFullSync()));
-          addUnsub(subscribeToArchivedNotes(w.id, () => scheduleFullSync()));
+          addUnsub(
+            subscribeToNotes(w.id, (payload) => {
+              void applyRealtimeNoteChange(w.id, payload).then(() => {
+                const key = getStorageKeyForWorkspaceId(w.id);
+                if (key && key === activeStorageKey) {
+                  window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
+                }
+              });
+            }),
+          );
+          addUnsub(
+            subscribeToCategories(w.id, (payload) => {
+              void applyRealtimeCategoryChange(w.id, payload).then(() => {
+                const key = getStorageKeyForWorkspaceId(w.id);
+                if (key && key === activeStorageKey) {
+                  window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
+                }
+              });
+            }),
+          );
+          addUnsub(
+            subscribeToArchivedNotes(w.id, (payload) => {
+              void applyRealtimeArchivedNoteChange(w.id, payload).then(() => {
+                const key = getStorageKeyForWorkspaceId(w.id);
+                if (key && key === activeStorageKey) {
+                  window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
+                }
+              });
+            }),
+          );
         }
       } catch {
         /* ignore */
@@ -574,7 +606,7 @@ export function WorkspaceProvider({ children }) {
         }
       });
     };
-  }, [canUseSupabase, hydrationComplete, supabaseRealtimeBindingEpoch]);
+  }, [canUseSupabase, hydrationComplete, supabaseRealtimeBindingEpoch, activeStorageKey]);
 
   useEffect(() => {
     // With cloud sync: avoid writing workspace rows before hydration (duplicate Home rows on push).
