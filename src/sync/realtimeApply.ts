@@ -1,13 +1,15 @@
-import type { ArchivedNote, Category, Note } from './types';
+import type { ArchivedNote, Category, Note, NoteTombstone } from './types';
 import {
   getLocalArchivedNotes,
   getLocalCategories,
   getLocalNotes,
+  getLocalNoteTombstones,
   saveLocalArchivedNoteTags,
   saveLocalArchivedNotes,
   saveLocalCategories,
   saveLocalNoteTags,
   saveLocalNotes,
+  saveLocalNoteTombstones,
 } from './localDB';
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import { flushWorkspaceUiIntoLocalDb, hydrateWorkspaceUiFromLocalDb } from './workspaceStorageBridge';
@@ -44,6 +46,12 @@ function removeById<T extends { id: string }>(rows: T[], id: string): T[] {
   return rows.filter((r) => r.id !== id);
 }
 
+function ts(s: string | undefined | null): number {
+  if (!s) return Number.NaN;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : Number.NaN;
+}
+
 export async function applyRealtimeNoteChange(
   workspaceId: string,
   payload: ChangePayload<Note>,
@@ -53,13 +61,49 @@ export async function applyRealtimeNoteChange(
     // that hasn't yet absorbed the user's latest typing.
     await flushWorkspaceUiIntoLocalDb(workspaceId);
     const rows = await getLocalNotes(workspaceId);
+    const tombs = await getLocalNoteTombstones(workspaceId);
     let nextRows = rows;
     if (payload.event === 'DELETE') {
       const id = payload.oldRow?.id;
-      if (id) nextRows = removeById(rows, id);
+      if (id) {
+        nextRows = removeById(rows, id);
+        const deletedAt = new Date().toISOString();
+        const nextTombs: NoteTombstone[] = [
+          { id, workspace_id: workspaceId, deleted_at: deletedAt },
+          ...tombs.filter((t) => t.id !== id),
+        ];
+        await saveLocalNoteTombstones(workspaceId, nextTombs);
+      }
     } else {
       const row = payload.newRow;
-      if (row?.id) nextRows = upsertById(rows, row);
+      if (row?.id) {
+        // Prevent resurrection:
+        // - ignore out-of-order updates (older updated_at)
+        // - ignore upserts for ids that have a newer/equal tombstone deleted_at
+        const existing = rows.find((n) => n.id === row.id) || null;
+        const existingTs = existing ? ts(existing.updated_at) : Number.NaN;
+        const incomingTs = ts(row.updated_at);
+        if (
+          Number.isFinite(existingTs) &&
+          Number.isFinite(incomingTs) &&
+          incomingTs < existingTs
+        ) {
+          // stale update; ignore
+        } else {
+          const tomb = tombs.find((t) => t.id === row.id) || null;
+          const tombTs = tomb ? ts(tomb.deleted_at) : Number.NaN;
+          if (
+            tomb &&
+            Number.isFinite(tombTs) &&
+            Number.isFinite(incomingTs) &&
+            tombTs >= incomingTs
+          ) {
+            // deleted after (or at) this update; ignore
+          } else {
+            nextRows = upsertById(rows, row);
+          }
+        }
+      }
     }
     await saveLocalNotes(workspaceId, nextRows);
     await saveLocalNoteTags(workspaceId, noteTagRowsFromNotes(nextRows));
