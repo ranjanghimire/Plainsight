@@ -625,7 +625,7 @@ export async function pushNoteDeletes(
   try {
     const ids = (noteIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true, deletedIds: [] };
-    const res = await getSupabase().from('notes').delete().in('id', ids).select('*');
+    const res = await getSupabase().from('notes').delete().in('id', ids).select('id,workspace_id');
     console.log('pushNoteDeletes result:', { workspaceId, ...res });
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     const deletedIds = ((res.data as { id?: string }[]) || [])
@@ -636,7 +636,16 @@ export async function pushNoteDeletes(
         ok: false,
         error: mkError(
           'Notes were not deleted on the server (no rows removed). Check permissions or session.',
-          new Error('push_note_deletes_zero_rows'),
+          {
+            kind: 'push_note_deletes_zero_rows',
+            workspaceId,
+            requestedIds: ids,
+            status: res.status,
+            statusText: res.statusText,
+            count: res.count,
+            // supabase-js may omit data on some delete paths; keep whatever we have
+            data: res.data,
+          },
         ),
       };
     }
@@ -854,7 +863,7 @@ export async function fullSync(
     // write a workspace list from a stale remote snapshot (e.g. user deleted rows while sync ran).
     step = 'selectWorkspaces:firstSnapshot';
     const [remoteWorkspacesRes, localWorkspaces] = await Promise.all([
-      getSupabase().from('workspaces').select('*'),
+      getSupabase().from('workspaces').select('id,owner_id,name,kind,created_at,updated_at'),
       getLocalWorkspaces(),
     ]);
     if (remoteWorkspacesRes.error) {
@@ -878,7 +887,7 @@ export async function fullSync(
     // deletes (or another tab completes sync) before we persist — do not resurrect deleted rows.
     step = 'selectWorkspaces:secondSnapshot';
     const [remoteFinalRes, localFinal] = await Promise.all([
-      getSupabase().from('workspaces').select('*'),
+      getSupabase().from('workspaces').select('id,owner_id,name,kind,created_at,updated_at'),
       getLocalWorkspaces(),
     ]);
     if (remoteFinalRes.error) {
