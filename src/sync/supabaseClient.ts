@@ -69,6 +69,19 @@ export function whenRealtimeAuthReady(): Promise<void> {
   return realtimeAuthReady;
 }
 
+/**
+ * After long PWA / mobile backgrounding, the Realtime JWT can expire while the
+ * `x-plainsight-session` header stays valid — REST sync works but private channels
+ * and broadcast auth drift. Re-fetch JWT and await before (re)subscribing.
+ */
+export async function refreshSupabaseRealtimeJwt(): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey) return;
+  const client = getSupabase();
+  const token = getLocalSession().sessionToken?.trim() ?? '';
+  realtimeAuthReady = applyRealtimeJwtAuth(client, token).catch(() => undefined);
+  await realtimeAuthReady;
+}
+
 /** Private Realtime channels need `auth.jwt()` / `auth.uid()` on the WebSocket — not `x-plainsight-session`. */
 async function applyRealtimeJwtAuth(client: SupabaseClient, plainsightSession: string) {
   if (!plainsightSession) {

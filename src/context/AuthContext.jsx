@@ -159,6 +159,25 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('online', onOnline);
   }, [runRemoteSessionValidation]);
 
+  /** PWA / background: `online` may not fire when the OS resumes the WebView. Re-check session so the amber dot can clear. */
+  useEffect(() => {
+    let debounce = null;
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!hasCustomAuthSession() || isLocalDevSession()) return;
+      if (debounce != null) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        debounce = null;
+        void runRemoteSessionValidation();
+      }, 350);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      if (debounce != null) window.clearTimeout(debounce);
+    };
+  }, [runRemoteSessionValidation]);
+
   const restoreLocalSession = useCallback(() => {
     ensureLocalSession();
   }, []);

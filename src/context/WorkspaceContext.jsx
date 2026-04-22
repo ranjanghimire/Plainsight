@@ -42,7 +42,7 @@ import {
 } from '../constants/workspaceLimits';
 import { pruneArchivedNotesUi } from '../utils/archivedPrune';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
-import { whenRealtimeAuthReady } from '../sync/supabaseClient';
+import { refreshSupabaseRealtimeJwt, whenRealtimeAuthReady } from '../sync/supabaseClient';
 import {
   getCanUseSupabase,
   getSyncEntitled,
@@ -472,6 +472,35 @@ export function WorkspaceProvider({ children }) {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [canUseSupabase]);
+
+  /**
+   * Resume from background: refresh Realtime JWT (it expires independently of the opaque session)
+   * and bump the binding epoch so workspace/note channels re-subscribe with fresh auth.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    let debounce = null;
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (debounce != null) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        debounce = null;
+        void (async () => {
+          try {
+            await refreshSupabaseRealtimeJwt();
+          } catch {
+            /* ignore */
+          }
+          setSupabaseRealtimeBindingEpoch((n) => n + 1);
+        })();
+      }, 400);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      if (debounce != null) window.clearTimeout(debounce);
+    };
+  }, [canUseSupabase, hydrationComplete]);
 
   useEffect(() => {
     if (!canUseSupabase || !hydrationComplete) return undefined;

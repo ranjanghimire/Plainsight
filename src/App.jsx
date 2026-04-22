@@ -24,6 +24,7 @@ function TagsRouteTransitionShell({ children }) {
   );
 }
 import { MenuPanel, MenuButton } from './components/MenuPanel';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
@@ -322,11 +323,13 @@ export default function App() {
           <SyncEntitlementProvider>
             <WorkspaceProvider>
               <BrowserRouter>
-                <ArchiveModeProvider>
-                  <TagsNavProvider>
-                    <AppRoutes />
-                  </TagsNavProvider>
-                </ArchiveModeProvider>
+                <AppErrorBoundary>
+                  <ArchiveModeProvider>
+                    <TagsNavProvider>
+                      <AppRoutes />
+                    </TagsNavProvider>
+                  </ArchiveModeProvider>
+                </AppErrorBoundary>
               </BrowserRouter>
             </WorkspaceProvider>
           </SyncEntitlementProvider>

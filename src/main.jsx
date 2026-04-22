@@ -4,6 +4,9 @@ import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import './index.css'
 import App from './App.jsx'
+import { installClientErrorReporter } from './telemetry/clientErrorReporter'
+
+installClientErrorReporter()
 
 if (Capacitor.isNativePlatform()) {
   void StatusBar.setStyle({ style: Style.Default })
