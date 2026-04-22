@@ -486,7 +486,10 @@ export function NoteCard({
                   setEditBody(e.target.value);
                 }}
                 onBlur={handleTextareaBlur}
-                onFocus={() => setTextareaFocused(true)}
+                onFocus={() => {
+                  setTextareaFocused(true);
+                  openPopover();
+                }}
                 onKeyDown={(e) => {
                   handleTextareaKeyDown(e, textareaRef.current, editBody, setEditBodyFromFormat);
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -543,6 +546,7 @@ export function NoteCard({
                   type="text"
                   value={tagDraft}
                   onChange={(e) => setTagDraft(normalizeTagDraftInput(e.target.value))}
+                  onFocus={() => closePopover()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();

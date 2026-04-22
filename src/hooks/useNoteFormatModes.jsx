@@ -187,6 +187,30 @@ export function useNoteFormatModes({
             indent = bulletIndentRef.current || DEFAULT_BULLET_INDENT;
           }
           bulletIndentRef.current = indent;
+          const markerPrefixLen = indentMatch ? indentMatch[0].length : indent.length + 2;
+          const singleCaret = caret === selEnd;
+          const relInLine = caret - lineStart;
+
+          if (singleCaret && caret < lineEnd && relInLine > markerPrefixLen) {
+            const beforeInLine = doc.slice(lineStart, caret);
+            const afterInLine = doc.slice(caret, lineEnd);
+            const rolled = afterInLine.replace(/^\s+/, '');
+            const secondLine = `${indent}- ${rolled}`;
+            const next = doc.slice(0, lineStart) + beforeInLine + '\n' + secondLine + doc.slice(lineEnd);
+            const secondLineMarkerLen = indent.length + 2;
+            const pos = lineStart + beforeInLine.length + 1 + secondLineMarkerLen;
+            setValue(next);
+            requestAnimationFrame(() => {
+              try {
+                ta?.setSelectionRange(pos, pos);
+                syncBulletsModeFromCaretAt(next, pos);
+              } catch {
+                /* ignore */
+              }
+            });
+            return;
+          }
+
           const insert = `\n${indent}- `;
           const next = doc.slice(0, lineEnd) + insert + doc.slice(lineEnd);
           setValue(next);
