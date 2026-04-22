@@ -79,7 +79,7 @@ describe('BackNavigationLock — browser history cannot surface workspaces', () 
     const main = await screen.findByRole('textbox', { name: 'New note' });
     await user.click(main);
     await user.type(main, `. ${slug}`);
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: new RegExp(`^${slug}$`, 'i') })).toBeInTheDocument();

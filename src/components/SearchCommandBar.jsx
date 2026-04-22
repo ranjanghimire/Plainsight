@@ -9,7 +9,10 @@ import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js
 import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPopover.jsx';
 import { normalizeTagDraftInput, parseTagsFromDraft } from '../utils/noteTags';
 
-const TEXTAREA_MAX_PX = 160;
+/** Max auto-grow height; min height is set for ~4 visible lines. */
+const TEXTAREA_MAX_PX = 280;
+/** Avoid 0px inline height when scrollHeight is 0 (e.g. empty field before layout). */
+const TEXTAREA_MIN_AUTO_PX = 104;
 const TAG_LEADING_ICON = '#';
 
 function SendNoteIcon({ className = 'w-5 h-5' }) {
@@ -53,7 +56,6 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     useWorkspace();
   const textareaRef = useRef(null);
   const rootRef = useRef(null);
-  const submitEntryRef = useRef(() => {});
   /** True while focus is anywhere inside the bar (textarea, tags, or send). */
   const [barFocused, setBarFocused] = useState(false);
   const [textareaFocused, setTextareaFocused] = useState(false);
@@ -67,16 +69,14 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     setBoldMode,
     bulletsMode,
     setBulletsMode,
-    newlineMode,
     popoverExpanded,
     openPopover,
     closePopover,
-    handleTextareaKeyDown,
     toggleBullets,
     resetFormatModes,
   } = useNoteFormatModes({
     searchMode: true,
-    onSubmit: () => submitEntryRef.current(),
+    defaultPopoverExpanded: true,
   });
 
   useEffect(() => {
@@ -126,8 +126,10 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_PX)}px`;
-  }, [value]);
+    const minH = searchOnly ? 0 : TEXTAREA_MIN_AUTO_PX;
+    const next = Math.min(Math.max(el.scrollHeight, minH), TEXTAREA_MAX_PX);
+    el.style.height = `${next}px`;
+  }, [value, searchOnly]);
 
   const setValueFromFormat = useCallback(
     (next) => {
@@ -220,18 +222,6 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     resetFormatModes();
   }, [searchOnly, value, applyCommand, onCreateNote, onChange, tags, boldMode, resetFormatModes]);
 
-  submitEntryRef.current = submitEntry;
-
-  const handleKeyDown = useCallback(
-    (e) => {
-      if (searchOnly) return;
-      if (e.key === 'Enter' && !e.shiftKey) {
-        handleTextareaKeyDown(e, textareaRef.current, value, setValueFromFormat);
-      }
-    },
-    [searchOnly, handleTextareaKeyDown, value, setValueFromFormat],
-  );
-
   const canSubmit = !searchOnly && Boolean(value.trim());
 
   const handleLiveTextScan = useCallback(async () => {
@@ -266,15 +256,15 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       <div className="flex gap-2 items-center">
         <textarea
           ref={textareaRef}
-          rows={1}
-          className={`flex-1 min-h-[2.75rem] max-h-40 px-4 py-2.5 text-base rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500 ${searchOnly ? 'mr-2' : ''}`}
+          rows={searchOnly ? 1 : 4}
+          className={`flex-1 min-h-[6.5rem] max-h-80 px-4 py-2.5 text-base leading-relaxed rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500 ${searchOnly ? 'min-h-[2.75rem] max-h-40 mr-2' : ''}`}
           placeholder={searchOnly ? 'Search archive..' : 'Type here..'}
           value={value}
           onChange={handleChange}
-          onKeyDown={handleKeyDown}
           onFocus={() => {
             setLiveTextScanMessage('');
             setTextareaFocused(true);
+            if (!searchOnly) openPopover();
           }}
           onBlur={() => {
             requestAnimationFrame(() => setTextareaFocused(false));
@@ -315,12 +305,8 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
               type="text"
               value={tagDraft}
               onChange={(e) => setTagDraft(normalizeTagDraftInput(e.target.value))}
+              onFocus={() => closePopover()}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submitEntry();
-                  return;
-                }
                 if (e.key !== ' ' && e.key !== 'Spacebar') return;
                 e.preventDefault();
                 const input = e.currentTarget;
@@ -364,7 +350,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
 
       {!searchOnly && (
         <FloatingNoteSubmit
-          visible={newlineMode && textareaFocused}
+          visible={textareaFocused}
           topPx={floatingSubmitTopPx}
           onClick={submitEntry}
           disabled={!canSubmit}

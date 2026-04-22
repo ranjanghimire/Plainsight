@@ -790,6 +790,7 @@ export function NoteCard({
 
       {isEditing ? (
         <FloatingNoteSubmit
+          compact
           visible={newlineMode && textareaFocused}
           topPx={floatingSubmitTopPx}
           onClick={commitText}

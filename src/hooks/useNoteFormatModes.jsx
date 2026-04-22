@@ -29,14 +29,20 @@ function mergeAfterRemovingLine(value, lineStart, lineEnd) {
 
 /**
  * @param {object} opts
- * @param {boolean} [opts.searchMode] — Enter submits via onSubmit when no format intercepts
+ * @param {boolean} [opts.searchMode] — Search bar: Enter inserts newline only; submit via send controls
+ * @param {boolean} [opts.defaultPopoverExpanded] — Initial expand state for format popover (tag row)
  * @param {() => void} [opts.onSubmit]
  * @param {() => void} [opts.onCommit]
  */
-export function useNoteFormatModes({ searchMode = false, onSubmit, onCommit } = {}) {
+export function useNoteFormatModes({
+  searchMode = false,
+  defaultPopoverExpanded = false,
+  onSubmit,
+  onCommit,
+} = {}) {
   const [boldMode, setBoldMode] = useState(false);
   const [bulletsMode, setBulletsMode] = useState(false);
-  const [popoverExpanded, setPopoverExpanded] = useState(false);
+  const [popoverExpanded, setPopoverExpanded] = useState(defaultPopoverExpanded);
 
   /** Implied whenever First line bold or Bullets is on (multiline); drives Enter → new line + floating send. */
   const newlineMode = boldMode || bulletsMode;
@@ -63,11 +69,11 @@ export function useNoteFormatModes({ searchMode = false, onSubmit, onCommit } = 
   const resetFormatModes = useCallback(() => {
     setBoldMode(false);
     setBulletsMode(false);
-    setPopoverExpanded(false);
+    setPopoverExpanded(defaultPopoverExpanded);
     bulletsModeRef.current = false;
     newlineModeRef.current = false;
     bulletIndentRef.current = DEFAULT_BULLET_INDENT;
-  }, []);
+  }, [defaultPopoverExpanded]);
 
   const applyBulletsTurnOn = useCallback((textarea, value, setValue) => {
     const indent = bulletIndentRef.current;
@@ -103,6 +109,10 @@ export function useNoteFormatModes({ searchMode = false, onSubmit, onCommit } = 
   const handleTextareaKeyDown = useCallback(
     (e, textarea, value, setValue) => {
       if (e.key === 'Enter' && !e.shiftKey) {
+        if (searchMode) {
+          // Native newline; submit only via send. Bold/bullets do not intercept Enter in the search bar.
+          return;
+        }
         const ta =
           textarea instanceof HTMLTextAreaElement
             ? textarea
@@ -167,10 +177,10 @@ export function useNoteFormatModes({ searchMode = false, onSubmit, onCommit } = 
           });
           return;
         }
-        if (searchMode && onSubmit) {
+        if (onSubmit) {
           e.preventDefault();
           onSubmit();
-        } else if (!searchMode && onCommit) {
+        } else if (onCommit) {
           e.preventDefault();
           onCommit();
         }

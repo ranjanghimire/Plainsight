@@ -174,7 +174,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
       const user = userEvent.setup();
       const box = screen.getByLabelText('New note');
       await user.type(box, 'local-only-note');
-      await user.keyboard('{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Add note' }));
       await waitFor(
         () => expect((loadWorkspace('workspace_home').notes || []).length).toBe(1),
         { timeout: 90_000 },
@@ -255,7 +255,7 @@ paidDescribe('entitlement loss — mid-session (Supabase)', () => {
     await waitForPaidHydrationReady();
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('New note'), 'persist-after-reload');
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
     await waitFor(() =>
       expect(screen.getByTestId('note-count-probe').getAttribute('data-note-count')).toBe('1'),
     );

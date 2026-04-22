@@ -181,7 +181,7 @@ describe('drawer — right-edge swipe and dismiss', () => {
     const noteBox = screen.getByRole('textbox', { name: 'New note' });
     await user.click(noteBox);
     await user.type(noteBox, '.drawersw');
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Drawersw' })).toBeVisible();

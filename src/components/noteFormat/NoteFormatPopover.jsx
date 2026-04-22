@@ -158,15 +158,21 @@ export function NoteFormatPopover({
   );
 }
 
-export function FloatingNoteSubmit({ visible, topPx, onClick, disabled }) {
+/**
+ * @param {object} props
+ * @param {boolean} [props.compact] — Smaller floating control (e.g. note editor); search bar uses default larger size.
+ */
+export function FloatingNoteSubmit({ visible, topPx, onClick, disabled, compact = false }) {
   if (!visible) return null;
+  const btnSize = compact ? 'h-12 w-12' : 'h-14 w-14';
+  const iconSize = compact ? 'h-6 w-6' : 'h-7 w-7';
   const button = (
     <button
       type="button"
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
-      className="fixed z-[9999] flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-800 shadow-lg transition-[top,opacity] duration-150 ease-out dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 disabled:pointer-events-none disabled:opacity-40"
+      className={`fixed z-[9999] flex ${btnSize} items-center justify-center rounded-full border border-stone-200 bg-white text-stone-800 shadow-lg transition-[top,opacity] duration-150 ease-out dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 disabled:pointer-events-none disabled:opacity-40`}
       style={{
         top: topPx,
         bottom: 'auto',
@@ -175,7 +181,7 @@ export function FloatingNoteSubmit({ visible, topPx, onClick, disabled }) {
       }}
       aria-label="Send note"
     >
-      <PaperPlaneIcon className="h-6 w-6" />
+      <PaperPlaneIcon className={iconSize} />
     </button>
   );
   if (typeof document !== 'undefined') {

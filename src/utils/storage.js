@@ -699,3 +699,37 @@ export function setMasterKey(value) {
 export function clearMasterKey() {
   localStorage.removeItem(MASTER_KEY);
 }
+
+/** Last known workspace IDs shown under Shared (owner shares); avoids menu flicker before shares load. */
+const OWNER_SHARED_WORKSPACE_IDS_CACHE_KEY = 'plainsight_owner_shared_ws_ids_v1';
+
+/**
+ * @returns {Set<string>}
+ */
+export function getOwnerSharedWorkspaceIdsCache() {
+  try {
+    const raw = localStorage.getItem(OWNER_SHARED_WORKSPACE_IDS_CACHE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.map(String));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * @param {Set<string> | Iterable<string>} ids
+ */
+export function setOwnerSharedWorkspaceIdsCache(ids) {
+  try {
+    const list = ids instanceof Set ? [...ids] : [...ids];
+    if (!list.length) {
+      localStorage.removeItem(OWNER_SHARED_WORKSPACE_IDS_CACHE_KEY);
+      return;
+    }
+    localStorage.setItem(OWNER_SHARED_WORKSPACE_IDS_CACHE_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}

@@ -31,6 +31,7 @@ import {
   removeWorkspaceIdMapping,
   resolveWorkspaceIdForStorageKey,
   setWorkspaceIdMapping,
+  setOwnerSharedWorkspaceIdsCache,
   slugFromLegacyHiddenStorageKey,
   countHiddenWorkspaceKeys,
 } from '../utils/storage';
@@ -254,6 +255,7 @@ export function WorkspaceProvider({ children }) {
       setSharedWorkspaceShares([]);
       setSharedWorkspaceRows([]);
       setPendingSharedInvites([]);
+      setOwnerSharedWorkspaceIdsCache(new Set());
       return { ok: true };
     }
     const sharesRes = await listWorkspaceShares();
@@ -287,6 +289,11 @@ export function WorkspaceProvider({ children }) {
       shares: localRows,
       workspaceNamesById: nameById,
     });
+    const ownerSharedIds = new Set();
+    for (const row of built.acceptedRows || []) {
+      if (row?.isOwner && row.workspaceId) ownerSharedIds.add(String(row.workspaceId));
+    }
+    setOwnerSharedWorkspaceIdsCache(ownerSharedIds);
     setSharedWorkspaceShares(localRows);
     setSharedWorkspaceRows(built.acceptedRows);
     setPendingSharedInvites(built.pendingRows);

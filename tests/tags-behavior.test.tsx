@@ -187,7 +187,7 @@ describe('Tags page — visible vs hidden scope', () => {
     const main = screen.getByRole('textbox', { name: 'New note' });
     await user.click(main);
     await user.type(main, `. ${switchName}`);
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
     await new Promise((r) => setTimeout(r, 500));
     await user.click(screen.getByRole('button', { name: 'Tags' }));
     await waitFor(() => {

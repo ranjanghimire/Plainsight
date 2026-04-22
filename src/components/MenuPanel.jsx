@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useSyncEntitlement } from '../context/SyncEntitlementContext';
 import { useAuth } from '../context/AuthContext';
-import { VISIBLE_WS_PREFIX } from '../utils/storage';
+import { VISIBLE_WS_PREFIX, getOwnerSharedWorkspaceIdsCache } from '../utils/storage';
 import {
   getSyncEntitled,
   getSyncRemoteActive,
@@ -271,12 +271,19 @@ export function MenuPanel({ open, onClose }) {
     );
 
   const ownerSharedWorkspaceIds = useMemo(() => {
-    const ids = new Set();
+    const fromLive = new Set();
     for (const row of sharedWorkspaces || []) {
-      if (row?.isOwner && row?.workspaceId) ids.add(String(row.workspaceId));
+      if (row?.isOwner && row?.workspaceId) fromLive.add(String(row.workspaceId));
     }
-    return ids;
-  }, [sharedWorkspaces]);
+    if (fromLive.size > 0) return fromLive;
+    if (!customAuthSession || !syncEntitled || !syncRemoteActive) return new Set();
+    return getOwnerSharedWorkspaceIdsCache();
+  }, [
+    sharedWorkspaces,
+    customAuthSession,
+    syncEntitled,
+    syncRemoteActive,
+  ]);
 
   /** Hide owned workspaces from WORKSPACES when they appear under SHARED WORKSPACES (accepted share). */
   const visibleWorkspacesForMenu = useMemo(

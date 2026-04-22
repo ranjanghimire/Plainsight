@@ -235,20 +235,20 @@ describe('hidden workspace manage page', () => {
 });
 
 describe('SearchCommandBar', () => {
-  it('Enter creates a note from a single line', async () => {
+  it('Add note sends a single line (paper plane / toolbar send)', async () => {
     seedFreshHomeWorkspace();
     const user = userEvent.setup();
     renderFullApp(['/']);
     const box = screen.getByRole('textbox', { name: 'New note' });
     await user.type(box, 'Hello from test');
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
     await waitFor(() => {
       expect(screen.getAllByText('Hello from test').length).toBeGreaterThanOrEqual(1);
     });
     expect(box).toHaveValue('');
   });
 
-  it('Enter runs dot-command (go home) when input is a command', async () => {
+  it('Send runs dot-command (go home) when input is a command', async () => {
     const { entry, visKey } = seedHomePlusVisibleWorkspace('CmdTab');
     saveAppState([HOME_VISIBLE_ENTRY, entry], visKey);
     const user = userEvent.setup();
@@ -261,7 +261,7 @@ describe('SearchCommandBar', () => {
     await waitFor(() => expect(workspaceTestHandlesRef.current?.activeStorageKey).toBe(visKey));
     const box = screen.getByRole('textbox', { name: 'New note' });
     await user.type(box, '.');
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Plainsight' })).toBeInTheDocument();
     });
@@ -294,13 +294,13 @@ describe('SearchCommandBar keyboard (isolated)', () => {
     );
   }
 
-  it('Enter submits a single-line note and clears the field', async () => {
+  it('Add note submits a single-line note and clears the field', async () => {
     const onCreate = vi.fn();
     const user = userEvent.setup();
     renderSearchBar(onCreate);
     const box = screen.getByRole('textbox', { name: 'New note' });
     await user.type(box, 'Solo line');
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
     expect(onCreate).toHaveBeenCalledWith('Solo line', { boldFirstLine: false });
     expect(box).toHaveValue('');
   });
