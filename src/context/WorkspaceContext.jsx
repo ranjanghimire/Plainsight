@@ -562,8 +562,8 @@ export function WorkspaceProvider({ children }) {
           addUnsub(
             subscribeToNotes(w.id, (payload) => {
               void applyRealtimeNoteChange(w.id, payload).then(() => {
-                const key = getStorageKeyForWorkspaceId(w.id);
-                if (key && key === activeStorageKey) {
+                const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
+                if (key === activeStorageKey) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -572,8 +572,8 @@ export function WorkspaceProvider({ children }) {
           addUnsub(
             subscribeToCategories(w.id, (payload) => {
               void applyRealtimeCategoryChange(w.id, payload).then(() => {
-                const key = getStorageKeyForWorkspaceId(w.id);
-                if (key && key === activeStorageKey) {
+                const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
+                if (key === activeStorageKey) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -582,8 +582,8 @@ export function WorkspaceProvider({ children }) {
           addUnsub(
             subscribeToArchivedNotes(w.id, (payload) => {
               void applyRealtimeArchivedNoteChange(w.id, payload).then(() => {
-                const key = getStorageKeyForWorkspaceId(w.id);
-                if (key && key === activeStorageKey) {
+                const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
+                if (key === activeStorageKey) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -810,6 +810,9 @@ export function WorkspaceProvider({ children }) {
       const wid = String(workspaceId || '').trim();
       if (!wid) return false;
       const key = getStorageKeyForWorkspaceId(wid) || `${VISIBLE_WS_PREFIX}${wid}`;
+      // Ensure shared workspaces participate in workspaceId ↔ storageKey mapping so
+      // realtime apply + hydration can find the correct UI blob.
+      setWorkspaceIdMapping(key, wid);
       let nextData = loadWorkspace(key);
       if (isWorkspaceDataEmpty(nextData)) {
         nextData = getDefaultWorkspaceData();
