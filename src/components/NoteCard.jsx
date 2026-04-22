@@ -482,6 +482,7 @@ export function NoteCard({
               <textarea
                 ref={textareaRef}
                 value={editBody}
+                rows={4}
                 onChange={(e) => {
                   setEditBody(e.target.value);
                 }}
@@ -508,8 +509,8 @@ export function NoteCard({
                 }}
                 className={
                   isArchived
-                    ? 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
-                    : 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
+                    ? 'min-h-[6rem] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
+                    : 'min-h-[6rem] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
                 }
                 autoFocus
               />
