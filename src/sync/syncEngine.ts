@@ -586,10 +586,13 @@ export async function pushNotes(localNotes: Note[]): Promise<{ ok: true } | { ok
 export async function pushArchivedNotes(localArchived: ArchivedNote[]): Promise<{ ok: true } | { ok: false; error: SyncError }> {
   if (!getCanUseSupabase()) return { ok: true };
   try {
-    const { error } = await getSupabase()
-      .from('archived_notes')
-      .upsert(localArchived, { onConflict: 'id' });
-    if (error) return { ok: false, error: mkError(error.message, error) };
+    const rows = localArchived || [];
+    const CHUNK = 250;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const slice = rows.slice(i, i + CHUNK);
+      const { error } = await getSupabase().from('archived_notes').upsert(slice, { onConflict: 'id' });
+      if (error) return { ok: false, error: mkError(error.message, error) };
+    }
     return { ok: true };
   } catch (e) {
     return { ok: false, error: mkError('Failed to push archived notes', e) };
@@ -625,13 +628,43 @@ export async function pushNoteDeletes(
   try {
     const ids = (noteIds || []).filter((id) => isUuid(id));
     if (ids.length === 0) return { ok: true, deletedIds: [] };
-    const res = await getSupabase().from('notes').delete().in('id', ids).select('id,workspace_id');
+    const res = await getSupabase()
+      .from('notes')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .in('id', ids)
+      .select('id,workspace_id');
     console.log('pushNoteDeletes result:', { workspaceId, ...res });
     if (res.error) return { ok: false, error: mkError(res.error.message, res.error) };
     const deletedIds = ((res.data as { id?: string }[]) || [])
       .map((r) => (typeof r?.id === 'string' ? r.id : ''))
       .filter(Boolean);
     if (ids.length > 0 && deletedIds.length === 0) {
+      // PostgREST deletes can return 0 rows both when nothing exists AND when RLS hides rows.
+      // If we can still *see* the rows via SELECT under the same policies, treat this as a hard failure.
+      const probe = await getSupabase()
+        .from('notes')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .in('id', ids);
+      if (probe.error) {
+        return {
+          ok: false,
+          error: mkError(probe.error.message, {
+            kind: 'push_note_deletes_probe_failed',
+            workspaceId,
+            requestedIds: ids,
+            probe: probe.error,
+          }),
+        };
+      }
+      const visible = ((probe.data as { id?: string }[]) || [])
+        .map((r) => (typeof r?.id === 'string' ? r.id : ''))
+        .filter(Boolean);
+      if (visible.length === 0) {
+        // Nothing exists remotely (or not visible to this session) — treat as already deleted.
+        return { ok: true, deletedIds: ids };
+      }
       return {
         ok: false,
         error: mkError(
@@ -640,6 +673,7 @@ export async function pushNoteDeletes(
             kind: 'push_note_deletes_zero_rows',
             workspaceId,
             requestedIds: ids,
+            visibleIds: visible,
             status: res.status,
             statusText: res.statusText,
             count: res.count,
