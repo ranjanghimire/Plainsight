@@ -265,6 +265,7 @@ export function NoteCard({
     resetFormatModes,
   } = useNoteFormatModes({
     searchMode: false,
+    defaultPopoverExpanded: true,
     onCommit: () => commitFnRef.current(),
   });
 
