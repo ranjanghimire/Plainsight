@@ -177,18 +177,32 @@ export async function fetchAllWorkspaces() {
   }
 }
 
+/** Page size for per-workspace pulls (avoids Postgres `statement_timeout` on huge workspaces). */
+const WORKSPACE_TABLE_PAGE = 350;
+const WORKSPACE_PULL_MAX_PAGES = 600;
+
 export async function fetchCategories(workspaceId: string) {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
-    const { data, error } = await client
-      .from('categories')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: true });
+    const all: Category[] = [];
+    for (let page = 0; page < WORKSPACE_PULL_MAX_PAGES; page += 1) {
+      const from = page * WORKSPACE_TABLE_PAGE;
+      const to = from + WORKSPACE_TABLE_PAGE - 1;
+      const { data, error } = await client
+        .from('categories')
+        .select('id, workspace_id, name, created_at, updated_at')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to);
 
-    if (error) return { data: [], error: err(error.message, error) };
-    return { data: data || [] };
+      if (error) return { data: [], error: err(error.message, error) };
+      const rows = (data || []) as Category[];
+      all.push(...rows);
+      if (rows.length < WORKSPACE_TABLE_PAGE) break;
+    }
+    return { data: all };
   } catch (e) {
     return { data: [], error: err('Failed to fetch categories', e) };
   }
@@ -198,14 +212,24 @@ export async function fetchNotes(workspaceId: string) {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
-    const { data, error } = await client
-      .from('notes')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('updated_at', { ascending: false });
+    const all: Note[] = [];
+    for (let page = 0; page < WORKSPACE_PULL_MAX_PAGES; page += 1) {
+      const from = page * WORKSPACE_TABLE_PAGE;
+      const to = from + WORKSPACE_TABLE_PAGE - 1;
+      const { data, error } = await client
+        .from('notes')
+        .select('id, workspace_id, text, category_id, created_at, updated_at, bold_first_line')
+        .eq('workspace_id', workspaceId)
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
 
-    if (error) return { data: [], error: err(error.message, error) };
-    return { data: data || [] };
+      if (error) return { data: [], error: err(error.message, error) };
+      const rows = (data || []) as Note[];
+      all.push(...rows);
+      if (rows.length < WORKSPACE_TABLE_PAGE) break;
+    }
+    return { data: all };
   } catch (e) {
     return { data: [], error: err('Failed to fetch notes', e) };
   }
@@ -215,14 +239,24 @@ export async function fetchArchivedNotes(workspaceId: string) {
   if (!getCanUseSupabase()) return { data: [] };
   try {
     const client = getSupabase();
-    const { data, error } = await client
-      .from('archived_notes')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('last_deleted_at', { ascending: false });
+    const all: ArchivedNote[] = [];
+    for (let page = 0; page < WORKSPACE_PULL_MAX_PAGES; page += 1) {
+      const from = page * WORKSPACE_TABLE_PAGE;
+      const to = from + WORKSPACE_TABLE_PAGE - 1;
+      const { data, error } = await client
+        .from('archived_notes')
+        .select('id, workspace_id, text, category_id, last_deleted_at, created_at')
+        .eq('workspace_id', workspaceId)
+        .order('last_deleted_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
 
-    if (error) return { data: [], error: err(error.message, error) };
-    return { data: data || [] };
+      if (error) return { data: [], error: err(error.message, error) };
+      const rows = (data || []) as ArchivedNote[];
+      all.push(...rows);
+      if (rows.length < WORKSPACE_TABLE_PAGE) break;
+    }
+    return { data: all };
   } catch (e) {
     return { data: [], error: err('Failed to fetch archived notes', e) };
   }
