@@ -130,13 +130,15 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       el.style.height = '';
       return;
     }
+    if (!textareaFocused) {
+      // Collapsed state: keep the composer one line tall until the user focuses it.
+      el.style.height = '2.5rem';
+      return;
+    }
     el.style.height = 'auto';
-    const next = Math.min(
-      Math.max(el.scrollHeight, TEXTAREA_MIN_AUTO_PX),
-      TEXTAREA_MAX_PX,
-    );
+    const next = Math.min(Math.max(el.scrollHeight, TEXTAREA_MIN_AUTO_PX), TEXTAREA_MAX_PX);
     el.style.height = `${next}px`;
-  }, [value, searchOnly]);
+  }, [value, searchOnly, textareaFocused]);
 
   useLayoutEffect(() => {
     if (searchOnly) return;
@@ -270,11 +272,13 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       <div className="flex gap-2 items-center">
         <textarea
           ref={textareaRef}
-          rows={searchOnly ? 1 : 4}
+          rows={searchOnly ? 1 : textareaFocused ? 4 : 1}
           className={
             searchOnly
               ? 'flex-1 h-10 min-h-10 max-h-10 shrink-0 px-3 py-0 mr-2 text-base leading-10 rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none overflow-y-auto dark:text-stone-200 dark:placeholder-stone-500'
-              : 'flex-1 min-h-[6.5rem] max-h-80 px-4 py-2.5 text-base leading-relaxed rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500'
+              : textareaFocused
+                ? 'flex-1 min-h-[6.5rem] max-h-80 px-4 py-2.5 text-base leading-relaxed rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500'
+                : 'flex-1 h-10 min-h-10 max-h-10 shrink-0 px-4 py-0 mr-2 text-base leading-10 rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none overflow-y-auto dark:text-stone-200 dark:placeholder-stone-500'
           }
           placeholder={searchOnly ? 'Search archive..' : 'Type here..'}
           value={value}
