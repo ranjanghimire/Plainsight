@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { invokeEdgeFunction } from '../auth/functionsInvoke';
+import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import type {
   ArchivedNote,
   ArchivedNoteTag,
@@ -90,6 +91,10 @@ async function applyRealtimeJwtAuth(client: SupabaseClient, plainsightSession: s
     } catch {
       /* ignore */
     }
+    void sendClientErrorReport({
+      type: 'realtime.auth_missing',
+      message: 'Realtime auth disabled: missing plainsight session token',
+    });
     return;
   }
   const { data, error } = await invokeEdgeFunction<{ realtimeJwt?: string }>('auth-realtime-jwt', {
@@ -102,12 +107,23 @@ async function applyRealtimeJwtAuth(client: SupabaseClient, plainsightSession: s
     } catch {
       /* ignore */
     }
+    void sendClientErrorReport({
+      type: 'realtime.auth_missing',
+      message: `Realtime auth disabled: auth-realtime-jwt did not return a JWT (error=${String(
+        error || 'missing_jwt',
+      )})`,
+    });
     return;
   }
   try {
     await client.realtime.setAuth(data.realtimeJwt);
   } catch (e) {
     console.warn('[Plainsight] realtime.setAuth failed', e);
+    void sendClientErrorReport({
+      type: 'realtime.auth_missing',
+      message: 'Realtime auth failed: realtime.setAuth threw',
+      stack: e instanceof Error ? e.stack : String(e),
+    });
   }
 }
 

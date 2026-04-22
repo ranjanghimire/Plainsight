@@ -73,7 +73,6 @@ import { getCanUseSupabase } from './syncEnabled';
 import { getSession as getLocalSession } from '../auth/localSession';
 import { pruneArchivedNoteRows } from '../utils/archivedPrune';
 import { listWorkspaceShares } from './sharedWorkspaces';
-import { REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js';
 
 function mkError(message: string, details?: unknown): SyncError {
   return { message, details };
@@ -695,83 +694,57 @@ function toEvent(e: string): 'INSERT' | 'UPDATE' | 'DELETE' {
   return 'UPDATE';
 }
 
-/** Matches DB `realtime.broadcast_changes` topics (private channel + broadcast listeners). */
-const workspaceRealtimeChannelConfig = {
-  config: {
-    broadcast: { self: true, ack: true },
-    private: true,
-  },
-} as const;
-
-/**
- * Maps `realtime.broadcast_changes` (and variants) to the same shape we used for `postgres_changes`.
- * Accepts nested `payload`, `operation`, `record` / `old_record`, or `new` / `old`.
- */
-function broadcastPayloadToChangeFromServerMsg<T>(msg: unknown): {
-  event: 'INSERT' | 'UPDATE' | 'DELETE';
-  newRow: T | null;
-  oldRow: T | null;
-} {
-  if (!msg || typeof msg !== 'object') {
-    return { event: 'UPDATE', newRow: null, oldRow: null };
-  }
-  const root = msg as Record<string, unknown>;
-  let row: Record<string, unknown> | null = null;
-  const outer = root.payload;
-  if (outer && typeof outer === 'object') {
-    row = outer as Record<string, unknown>;
-    if (typeof row.operation !== 'string' && row.payload && typeof row.payload === 'object') {
-      row = row.payload as Record<string, unknown>;
-    }
-  }
-  const opFromRow = row && typeof row.operation === 'string' ? toEvent(row.operation) : null;
-  const opFromRoot = typeof root.event === 'string' ? toEvent(root.event) : null;
-  const event = (opFromRow || opFromRoot || 'UPDATE') as 'INSERT' | 'UPDATE' | 'DELETE';
-  if (!row) {
-    return { event, newRow: null, oldRow: null };
-  }
-  const record = (row.record ?? row.new) as T | null | undefined;
-  const oldRecord = (row.old_record ?? row.old) as T | null | undefined;
-  if (event === 'DELETE') {
-    return { event: 'DELETE', newRow: null, oldRow: oldRecord ?? null };
-  }
-  if (event === 'INSERT') {
-    return { event: 'INSERT', newRow: record ?? null, oldRow: null };
-  }
-  return { event: 'UPDATE', newRow: record ?? null, oldRow: oldRecord ?? null };
-}
-
-function subscribeWorkspaceBroadcastTable<T>(topic: string, cb: ChangeCallback<T>) {
+function subscribeWorkspacePostgresTable<T>(
+  channelName: string,
+  table: string,
+  filter: string,
+  cb: ChangeCallback<T>,
+) {
   const sb = getSupabase();
-  return sb
-    .channel(topic, workspaceRealtimeChannelConfig)
-    .on('broadcast', { event: REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.ALL }, (msg: unknown) => {
-      cb(broadcastPayloadToChangeFromServerMsg<T>(msg));
-    });
+  const channel = sb
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table, filter },
+      (p) =>
+        cb({
+          event: toEvent(p.eventType),
+          newRow: (p.new as T) ?? null,
+          oldRow: (p.old as T) ?? null,
+        }),
+    )
+    .subscribe();
+  return () => sb.removeChannel(channel);
 }
 
 export function subscribeToNotes(workspaceId: string, cb: ChangeCallback<Note>) {
   if (!getCanUseSupabase()) return () => {};
-  const sb = getSupabase();
-  const channel = subscribeWorkspaceBroadcastTable<Note>(`workspace:${workspaceId}:notes`, cb).subscribe();
-  return () => sb.removeChannel(channel);
+  return subscribeWorkspacePostgresTable<Note>(
+    `workspace:${workspaceId}:notes`,
+    'notes',
+    `workspace_id=eq.${workspaceId}`,
+    cb,
+  );
 }
 
 export function subscribeToCategories(workspaceId: string, cb: ChangeCallback<Category>) {
   if (!getCanUseSupabase()) return () => {};
-  const sb = getSupabase();
-  const channel = subscribeWorkspaceBroadcastTable<Category>(`workspace:${workspaceId}:categories`, cb).subscribe();
-  return () => sb.removeChannel(channel);
+  return subscribeWorkspacePostgresTable<Category>(
+    `workspace:${workspaceId}:categories`,
+    'categories',
+    `workspace_id=eq.${workspaceId}`,
+    cb,
+  );
 }
 
 export function subscribeToArchivedNotes(workspaceId: string, cb: ChangeCallback<ArchivedNote>) {
   if (!getCanUseSupabase()) return () => {};
-  const sb = getSupabase();
-  const channel = subscribeWorkspaceBroadcastTable<ArchivedNote>(
+  return subscribeWorkspacePostgresTable<ArchivedNote>(
     `workspace:${workspaceId}:archived_notes`,
+    'archived_notes',
+    `workspace_id=eq.${workspaceId}`,
     cb,
-  ).subscribe();
-  return () => sb.removeChannel(channel);
+  );
 }
 
 export function subscribeToWorkspaces(cb: ChangeCallback<Workspace>) {
