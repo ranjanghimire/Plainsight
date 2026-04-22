@@ -72,6 +72,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     popoverExpanded,
     openPopover,
     closePopover,
+    handleTextareaKeyDown,
     toggleBullets,
     resetFormatModes,
   } = useNoteFormatModes({
@@ -261,6 +262,10 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
           placeholder={searchOnly ? 'Search archive..' : 'Type here..'}
           value={value}
           onChange={handleChange}
+          onKeyDown={(e) => {
+            if (searchOnly) return;
+            handleTextareaKeyDown(e, textareaRef.current, value, setValueFromFormat);
+          }}
           onFocus={() => {
             setLiveTextScanMessage('');
             setTextareaFocused(true);
@@ -295,56 +300,65 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
         </p>
       ) : null}
 
-      {showTagRow && (
-        <div className="border-t border-stone-200 dark:border-stone-600 px-4 py-2 flex min-w-0 items-stretch gap-1.5 overflow-visible text-stone-500 dark:text-stone-400">
-          <div className="flex min-h-0 min-w-0 flex-1 items-center gap-0 overflow-hidden">
-            <span className="select-none text-sm shrink-0 leading-none pr-0" aria-hidden>
-              {TAG_LEADING_ICON}
-            </span>
-            <input
-              type="text"
-              value={tagDraft}
-              onChange={(e) => setTagDraft(normalizeTagDraftInput(e.target.value))}
-              onFocus={() => closePopover()}
-              onKeyDown={(e) => {
-                if (e.key !== ' ' && e.key !== 'Spacebar') return;
-                e.preventDefault();
-                const input = e.currentTarget;
-                const start = input.selectionStart ?? tagDraft.length;
-                const end = input.selectionEnd ?? tagDraft.length;
-                const before = tagDraft.slice(0, start);
-                const after = tagDraft.slice(end);
-                if (/\s#\s*$/.test(before)) return;
-                const insert = ' #';
-                const next = `${before}${insert}${after}`;
-                setTagDraft(next);
-                const newPos = start + insert.length;
-                requestAnimationFrame(() => {
-                  try {
-                    input.setSelectionRange(newPos, newPos);
-                  } catch {
-                    /* ignore */
-                  }
-                });
-              }}
-              placeholder="tag"
-              className="flex-1 min-w-0 bg-transparent text-sm text-stone-700 dark:text-stone-200 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none pl-0"
-              aria-label="Tags"
-            />
+      {!searchOnly && (
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:duration-0 ${
+            showTagRow ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="border-t border-stone-200 dark:border-stone-600 px-4 py-2 flex min-w-0 items-stretch gap-1.5 text-stone-500 dark:text-stone-400">
+              <div className="flex min-h-0 min-w-0 flex-1 items-center gap-0 overflow-hidden">
+                <span className="select-none text-sm shrink-0 leading-none pr-0" aria-hidden>
+                  {TAG_LEADING_ICON}
+                </span>
+                <input
+                  type="text"
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(normalizeTagDraftInput(e.target.value))}
+                  onFocus={() => closePopover()}
+                  onKeyDown={(e) => {
+                    if (e.key !== ' ' && e.key !== 'Spacebar') return;
+                    e.preventDefault();
+                    const input = e.currentTarget;
+                    const start = input.selectionStart ?? tagDraft.length;
+                    const end = input.selectionEnd ?? tagDraft.length;
+                    const before = tagDraft.slice(0, start);
+                    const after = tagDraft.slice(end);
+                    if (/\s#\s*$/.test(before)) return;
+                    const insert = ' #';
+                    const next = `${before}${insert}${after}`;
+                    setTagDraft(next);
+                    const newPos = start + insert.length;
+                    requestAnimationFrame(() => {
+                      try {
+                        input.setSelectionRange(newPos, newPos);
+                      } catch {
+                        /* ignore */
+                      }
+                    });
+                  }}
+                  placeholder="tag"
+                  className="flex-1 min-w-0 bg-transparent text-sm text-stone-700 dark:text-stone-200 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none pl-0"
+                  aria-label="Tags"
+                  tabIndex={showTagRow ? 0 : -1}
+                />
+              </div>
+              <NoteFormatPopover
+                expanded={popoverExpanded}
+                onOpen={openPopover}
+                onClose={closePopover}
+                boldMode={boldMode}
+                onBoldChange={setBoldMode}
+                bulletsMode={bulletsMode}
+                onBulletsChange={setBulletsMode}
+                textareaRef={textareaRef}
+                value={value}
+                setValue={setValueFromFormat}
+                toggleBullets={toggleBullets}
+              />
+            </div>
           </div>
-          <NoteFormatPopover
-            expanded={popoverExpanded}
-            onOpen={openPopover}
-            onClose={closePopover}
-            boldMode={boldMode}
-            onBoldChange={setBoldMode}
-            bulletsMode={bulletsMode}
-            onBulletsChange={setBulletsMode}
-            textareaRef={textareaRef}
-            value={value}
-            setValue={setValueFromFormat}
-            toggleBullets={toggleBullets}
-          />
         </div>
       )}
 

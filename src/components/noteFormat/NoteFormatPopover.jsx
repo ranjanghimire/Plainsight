@@ -64,10 +64,13 @@ const inlineOff =
 const inlineOn = 'bg-stone-200/90 text-stone-900 dark:bg-stone-600 dark:text-stone-50';
 
 const expandTriggerClass =
-  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-100/90 dark:text-stone-400 dark:hover:bg-stone-700/80';
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-500 transition-colors duration-200 hover:bg-stone-100/90 dark:text-stone-400 dark:hover:bg-stone-700/80';
 
 const collapseTriggerClass =
-  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-100/90 dark:text-stone-400 dark:hover:bg-stone-700/80';
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-500 transition-colors duration-200 hover:bg-stone-100/90 dark:text-stone-400 dark:hover:bg-stone-700/80';
+
+const formatTrayMotion =
+  'transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0';
 
 /**
  * Inline format controls in the tag row: expand to show First line bold / Bullets; collapse with chevron only.
@@ -87,59 +90,68 @@ export function NoteFormatPopover({
 }) {
   return (
     <div
-      className="flex shrink-0 flex-wrap items-center justify-end gap-0.5 self-center"
+      className="flex shrink-0 flex-nowrap items-center justify-end gap-0 self-center"
       role="group"
       aria-label="Note formatting options"
     >
-      {expanded ? (
-        <>
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onBoldChange(!boldMode);
-            }}
-            className={`${inlineBtnBase} ${boldMode ? inlineOn : inlineOff}`}
-            aria-pressed={boldMode}
-          >
-            <BoldToggleIcon className="h-3.5 w-3.5 shrink-0" />
-            <span className="whitespace-nowrap">First line Bold</span>
-          </button>
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
-              e.stopPropagation();
-              const next = !bulletsMode;
-              if (next) {
-                toggleBullets(true, textareaRef?.current, value, setValue);
-              } else {
-                onBulletsChange(false);
-              }
-            }}
-            className={`${inlineBtnBase} ${bulletsMode ? inlineOn : inlineOff}`}
-            aria-pressed={bulletsMode}
-          >
-            <BulletsToggleIcon className="h-3.5 w-3.5 shrink-0" />
-            <span className="whitespace-nowrap">Bullets</span>
-          </button>
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
-            className={collapseTriggerClass}
-            aria-label="Collapse formatting options"
-            title="Collapse"
-            aria-expanded
-          >
-            <CollapseChevronIcon className="h-4 w-4" />
-          </button>
-        </>
-      ) : (
+      <div
+        className={`flex min-w-0 flex-nowrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} ${
+          expanded ? 'max-w-[min(100vw,22rem)] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
+        }`}
+        aria-hidden={!expanded}
+      >
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onBoldChange(!boldMode);
+          }}
+          className={`${inlineBtnBase} shrink-0 ${boldMode ? inlineOn : inlineOff}`}
+          aria-pressed={boldMode}
+        >
+          <BoldToggleIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">First line Bold</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            const next = !bulletsMode;
+            if (next) {
+              toggleBullets(true, textareaRef?.current, value, setValue);
+            } else {
+              onBulletsChange(false);
+            }
+          }}
+          className={`${inlineBtnBase} shrink-0 ${bulletsMode ? inlineOn : inlineOff}`}
+          aria-pressed={bulletsMode}
+        >
+          <BulletsToggleIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">Bullets</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className={`${collapseTriggerClass} shrink-0`}
+          aria-label="Collapse formatting options"
+          title="Collapse"
+          aria-expanded={expanded}
+        >
+          <CollapseChevronIcon className="h-4 w-4" />
+        </button>
+      </div>
+      <div
+        className={`shrink-0 overflow-hidden ${formatTrayMotion} ${
+          expanded ? 'max-w-0 opacity-0 pointer-events-none' : 'max-w-7 opacity-100'
+        }`}
+        aria-hidden={expanded}
+      >
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
@@ -149,11 +161,11 @@ export function NoteFormatPopover({
           }}
           className={expandTriggerClass}
           aria-label="Show note formatting options"
-          aria-expanded={false}
+          aria-expanded={expanded}
         >
           <FormatOptionsIcon className="h-3.5 w-3.5" />
         </button>
-      )}
+      </div>
     </div>
   );
 }

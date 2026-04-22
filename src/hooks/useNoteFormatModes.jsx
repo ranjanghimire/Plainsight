@@ -29,7 +29,7 @@ function mergeAfterRemovingLine(value, lineStart, lineEnd) {
 
 /**
  * @param {object} opts
- * @param {boolean} [opts.searchMode] — Search bar: Enter inserts newline only; submit via send controls
+ * @param {boolean} [opts.searchMode] — Search bar: Enter does not submit; bullets still continue lists; bold-only uses native newline
  * @param {boolean} [opts.defaultPopoverExpanded] — Initial expand state for format popover (tag row)
  * @param {() => void} [opts.onSubmit]
  * @param {() => void} [opts.onCommit]
@@ -109,10 +109,6 @@ export function useNoteFormatModes({
   const handleTextareaKeyDown = useCallback(
     (e, textarea, value, setValue) => {
       if (e.key === 'Enter' && !e.shiftKey) {
-        if (searchMode) {
-          // Native newline; submit only via send. Bold/bullets do not intercept Enter in the search bar.
-          return;
-        }
         const ta =
           textarea instanceof HTMLTextAreaElement
             ? textarea
@@ -123,7 +119,7 @@ export function useNoteFormatModes({
         const caret = ta?.selectionStart ?? doc.length;
         const selEnd = ta?.selectionEnd ?? doc.length;
 
-        // Bullets before newline: if both modes are on, Enter must continue the list, not insert a bare \n.
+        // Bullets: Enter continues the list (composer and search bar).
         if (bulletsModeRef.current) {
           e.preventDefault();
           const { lineStart, lineEnd, line } = lineBoundsAt(doc, caret);
@@ -161,6 +157,12 @@ export function useNoteFormatModes({
           });
           return;
         }
+
+        // Search bar: submit only via send; plain Enter inserts a newline (no bold-only synthetic newline).
+        if (searchMode) {
+          return;
+        }
+
         if (newlineModeRef.current) {
           e.preventDefault();
           const start = caret;
