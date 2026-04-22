@@ -255,13 +255,13 @@ export function NoteCard({
     boldMode,
     setBoldMode,
     bulletsMode,
-    setBulletsMode,
     newlineMode,
     popoverExpanded,
     openPopover,
     closePopover,
     handleTextareaKeyDown,
-    toggleBullets,
+    applyBulletLineToggle,
+    syncBulletsModeFromCaret,
     resetFormatModes,
   } = useNoteFormatModes({
     searchMode: false,
@@ -307,6 +307,7 @@ export function NoteCard({
         ta.setSelectionRange(len, len);
         scrollNoteTextareaCaretIntoView(ta);
         ta.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        syncBulletsModeFromCaret(ta.value, ta);
       } catch {
         /* ignore */
       }
@@ -318,7 +319,14 @@ export function NoteCard({
       cancelled = true;
       cancelAnimationFrame(id0);
     };
-  }, [isEditing]);
+  }, [isEditing, syncBulletsModeFromCaret]);
+
+  useLayoutEffect(() => {
+    if (!isEditing) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    syncBulletsModeFromCaret(editBody, ta);
+  }, [isEditing, editBody, syncBulletsModeFromCaret]);
 
   const commitText = useCallback(() => {
     const tags = parseTagsFromDraft(tagDraft);
@@ -488,6 +496,14 @@ export function NoteCard({
                     });
                   }
                 }}
+                onKeyUp={(e) => {
+                  const ta = e.currentTarget;
+                  syncBulletsModeFromCaret(ta.value, ta);
+                }}
+                onSelect={(e) => {
+                  const ta = e.currentTarget;
+                  syncBulletsModeFromCaret(ta.value, ta);
+                }}
                 className={
                   isArchived
                     ? 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
@@ -571,11 +587,10 @@ export function NoteCard({
                 boldMode={boldMode}
                 onBoldChange={setBoldMode}
                 bulletsMode={bulletsMode}
-                onBulletsChange={setBulletsMode}
                 textareaRef={textareaRef}
                 value={editBody}
                 setValue={setEditBodyFromFormat}
-                toggleBullets={toggleBullets}
+                applyBulletLineToggle={applyBulletLineToggle}
               />
             </div>
           </div>

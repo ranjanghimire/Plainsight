@@ -28,6 +28,20 @@ function mergeAfterRemovingLine(value, lineStart, lineEnd) {
 }
 
 /**
+ * True if the line is a hyphen bullet line (same notion as editor bullet rows).
+ * @param {string} lineNorm line without \r
+ */
+export function isHyphenBulletLine(lineNorm) {
+  const t = String(lineNorm || '').replace(/\r/g, '');
+  if (/^\s*-\s*$/.test(t)) return true;
+  return /^(\s*)-\s/.test(t);
+}
+
+function stripBulletMarkFromLine(lineNorm) {
+  return String(lineNorm || '').replace(/^(\s*)-\s*/, '');
+}
+
+/**
  * @param {object} opts
  * @param {boolean} [opts.searchMode] — Search bar: Enter does not submit; bullets still continue lists; bold-only uses native newline
  * @param {boolean} [opts.defaultPopoverExpanded] — Initial expand state for format popover (tag row)
@@ -75,36 +89,66 @@ export function useNoteFormatModes({
     bulletIndentRef.current = DEFAULT_BULLET_INDENT;
   }, [defaultPopoverExpanded]);
 
-  const applyBulletsTurnOn = useCallback((textarea, value, setValue) => {
-    const indent = bulletIndentRef.current;
-    const start = textarea.selectionStart ?? value.length;
-    const end = textarea.selectionEnd ?? value.length;
-    const { lineStart, lineEnd, line } = lineBoundsAt(value, start);
-    const lineIsEmpty = line.replace(/\r/g, '').trim() === '';
-
-    let next;
-    let pos;
-    // On a blank line, start the list on this line (no extra leading \n). After non-empty text,
-    // still open a new line before the first bullet.
-    if (start === end && lineIsEmpty) {
-      const ins = `${indent}- `;
-      next = replaceRange(value, lineStart, lineEnd, ins);
-      pos = lineStart + ins.length;
-    } else {
-      const ins = `\n${indent}- `;
-      next = replaceRange(value, start, end, ins);
-      pos = start + ins.length;
-    }
-    setValue(next);
-    requestAnimationFrame(() => {
-      try {
-        textarea.focus();
-        textarea.setSelectionRange(pos, pos);
-      } catch {
-        /* ignore */
-      }
-    });
+  /** Sync “Bullets” toggle highlight from caret line (hyphen bullet vs not). */
+  const syncBulletsModeFromCaretAt = useCallback((valueStr, caretPos) => {
+    const doc = String(valueStr ?? '');
+    const safe = Math.max(0, Math.min(caretPos ?? 0, doc.length));
+    const { line } = lineBoundsAt(doc, safe);
+    const on = isHyphenBulletLine(line.replace(/\r/g, ''));
+    setBulletsMode(on);
+    bulletsModeRef.current = on;
   }, []);
+
+  const syncBulletsModeFromCaret = useCallback(
+    (valueStr, textarea) => {
+      if (!textarea || typeof textarea.selectionStart !== 'number') return;
+      syncBulletsModeFromCaretAt(valueStr, textarea.selectionStart);
+    },
+    [syncBulletsModeFromCaretAt],
+  );
+
+  const applyBulletLineToggle = useCallback(
+    (textarea, value, setValue) => {
+      if (!textarea) return;
+      const doc = String(value ?? '');
+      const start = textarea.selectionStart ?? doc.length;
+      const { lineStart, lineEnd, line } = lineBoundsAt(doc, start);
+      const lineNorm = line.replace(/\r/g, '');
+
+      if (isHyphenBulletLine(lineNorm)) {
+        const stripped = stripBulletMarkFromLine(lineNorm);
+        const next = doc.slice(0, lineStart) + stripped + doc.slice(lineEnd);
+        setValue(next);
+        const pos = lineStart + stripped.length;
+        requestAnimationFrame(() => {
+          try {
+            textarea.focus();
+            textarea.setSelectionRange(pos, pos);
+            syncBulletsModeFromCaretAt(next, pos);
+          } catch {
+            /* ignore */
+          }
+        });
+        return;
+      }
+
+      const body = lineNorm.replace(/^\s+/, '');
+      const newLine = `${DEFAULT_BULLET_INDENT}- ${body}`;
+      const next = doc.slice(0, lineStart) + newLine + doc.slice(lineEnd);
+      setValue(next);
+      const pos = lineStart + newLine.length;
+      requestAnimationFrame(() => {
+        try {
+          textarea.focus();
+          textarea.setSelectionRange(pos, pos);
+          syncBulletsModeFromCaretAt(next, pos);
+        } catch {
+          /* ignore */
+        }
+      });
+    },
+    [syncBulletsModeFromCaretAt],
+  );
 
   const handleTextareaKeyDown = useCallback(
     (e, textarea, value, setValue) => {
@@ -119,19 +163,18 @@ export function useNoteFormatModes({
         const caret = ta?.selectionStart ?? doc.length;
         const selEnd = ta?.selectionEnd ?? doc.length;
 
-        // Bullets: Enter continues the list (composer and search bar).
-        if (bulletsModeRef.current) {
+        const { lineStart, lineEnd, line } = lineBoundsAt(doc, caret);
+        const lineNorm = line.replace(/\r/g, '');
+
+        if (isHyphenBulletLine(lineNorm)) {
           e.preventDefault();
-          const { lineStart, lineEnd, line } = lineBoundsAt(doc, caret);
-          const lineNorm = line.replace(/\r/g, '');
           if (/^\s*-\s*$/.test(lineNorm)) {
             const { next, pos } = mergeAfterRemovingLine(doc, lineStart, lineEnd);
-            bulletsModeRef.current = false;
-            setBulletsMode(false);
             setValue(next);
             requestAnimationFrame(() => {
               try {
                 ta?.setSelectionRange(pos, pos);
+                syncBulletsModeFromCaretAt(next, pos);
               } catch {
                 /* ignore */
               }
@@ -151,6 +194,7 @@ export function useNoteFormatModes({
           requestAnimationFrame(() => {
             try {
               ta?.setSelectionRange(pos, pos);
+              syncBulletsModeFromCaretAt(next, pos);
             } catch {
               /* ignore */
             }
@@ -173,6 +217,7 @@ export function useNoteFormatModes({
           requestAnimationFrame(() => {
             try {
               ta?.setSelectionRange(pos, pos);
+              syncBulletsModeFromCaretAt(next, pos);
             } catch {
               /* ignore */
             }
@@ -189,18 +234,7 @@ export function useNoteFormatModes({
         return;
       }
     },
-    [onCommit, onSubmit, searchMode],
-  );
-
-  const toggleBullets = useCallback(
-    (next, textarea, value, setValue) => {
-      bulletsModeRef.current = next;
-      setBulletsMode(next);
-      if (next && textarea) {
-        applyBulletsTurnOn(textarea, value, setValue);
-      }
-    },
-    [applyBulletsTurnOn],
+    [onCommit, onSubmit, searchMode, syncBulletsModeFromCaretAt],
   );
 
   return {
@@ -214,7 +248,9 @@ export function useNoteFormatModes({
     openPopover,
     closePopover,
     handleTextareaKeyDown,
-    toggleBullets,
+    applyBulletLineToggle,
+    syncBulletsModeFromCaret,
+    syncBulletsModeFromCaretAt,
     resetFormatModes,
   };
 }

@@ -68,12 +68,12 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     boldMode,
     setBoldMode,
     bulletsMode,
-    setBulletsMode,
     popoverExpanded,
     openPopover,
     closePopover,
     handleTextareaKeyDown,
-    toggleBullets,
+    applyBulletLineToggle,
+    syncBulletsModeFromCaret,
     resetFormatModes,
   } = useNoteFormatModes({
     searchMode: true,
@@ -131,6 +131,13 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     const next = Math.min(Math.max(el.scrollHeight, minH), TEXTAREA_MAX_PX);
     el.style.height = `${next}px`;
   }, [value, searchOnly]);
+
+  useLayoutEffect(() => {
+    if (searchOnly) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    syncBulletsModeFromCaret(value, ta);
+  }, [value, searchOnly, syncBulletsModeFromCaret]);
 
   const setValueFromFormat = useCallback(
     (next) => {
@@ -266,6 +273,16 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
             if (searchOnly) return;
             handleTextareaKeyDown(e, textareaRef.current, value, setValueFromFormat);
           }}
+          onKeyUp={(e) => {
+            if (searchOnly) return;
+            const ta = e.currentTarget;
+            syncBulletsModeFromCaret(ta.value, ta);
+          }}
+          onSelect={(e) => {
+            if (searchOnly) return;
+            const ta = e.currentTarget;
+            syncBulletsModeFromCaret(ta.value, ta);
+          }}
           onFocus={() => {
             setLiveTextScanMessage('');
             setTextareaFocused(true);
@@ -344,19 +361,18 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
                   tabIndex={showTagRow ? 0 : -1}
                 />
               </div>
-              <NoteFormatPopover
-                expanded={popoverExpanded}
-                onOpen={openPopover}
-                onClose={closePopover}
-                boldMode={boldMode}
-                onBoldChange={setBoldMode}
-                bulletsMode={bulletsMode}
-                onBulletsChange={setBulletsMode}
-                textareaRef={textareaRef}
-                value={value}
-                setValue={setValueFromFormat}
-                toggleBullets={toggleBullets}
-              />
+          <NoteFormatPopover
+            expanded={popoverExpanded}
+            onOpen={openPopover}
+            onClose={closePopover}
+            boldMode={boldMode}
+            onBoldChange={setBoldMode}
+            bulletsMode={bulletsMode}
+            textareaRef={textareaRef}
+            value={value}
+            setValue={setValueFromFormat}
+            applyBulletLineToggle={applyBulletLineToggle}
+          />
             </div>
           </div>
         </div>

@@ -82,11 +82,10 @@ export function NoteFormatPopover({
   boldMode,
   onBoldChange,
   bulletsMode,
-  onBulletsChange,
   textareaRef,
   value,
   setValue,
-  toggleBullets,
+  applyBulletLineToggle,
 }) {
   return (
     <div
@@ -118,12 +117,7 @@ export function NoteFormatPopover({
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => {
             e.stopPropagation();
-            const next = !bulletsMode;
-            if (next) {
-              toggleBullets(true, textareaRef?.current, value, setValue);
-            } else {
-              onBulletsChange(false);
-            }
+            applyBulletLineToggle(textareaRef?.current, value, setValue);
           }}
           className={`${inlineBtnBase} shrink-0 ${bulletsMode ? inlineOn : inlineOff}`}
           aria-pressed={bulletsMode}
