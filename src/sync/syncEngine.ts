@@ -7,6 +7,7 @@ import type {
   Workspace,
   WorkspacePin,
 } from './types';
+import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import {
   getSupabase,
@@ -713,7 +714,20 @@ function subscribeWorkspacePostgresTable<T>(
           oldRow: (p.old as T) ?? null,
         }),
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      // Supabase Realtime debugging: record non-subscribed states so we can tell why the UI
+      // falls back to periodic fullSync pulls.
+      if (status === 'SUBSCRIBED') return;
+      try {
+        void sendClientErrorReport({
+          type: 'realtime.channel_status',
+          message: `Realtime channel status=${String(status)} channel=${channelName} table=${table}`,
+          stack: err ? (err instanceof Error ? err.stack : JSON.stringify(err)) : undefined,
+        });
+      } catch {
+        /* ignore */
+      }
+    });
   return () => sb.removeChannel(channel);
 }
 
