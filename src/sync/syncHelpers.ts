@@ -1,6 +1,7 @@
 import { fullSync } from './syncEngine';
 import { getCanUseSupabase } from './syncEnabled';
 import { notifyHydrationComplete } from './hydrationBridge';
+import { recordFullSyncDurationMs, resetSyncLatencyWatchForTests } from '../telemetry/syncLatencyWatch';
 
 /**
  * Quiet, non-blocking sync queue.
@@ -35,9 +36,12 @@ async function run() {
   if (inFlight) return;
   if (!(await canSync())) return;
   pending = false;
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   inFlight = fullSync()
     .then((result) => {
       if (result && typeof result === 'object' && 'ok' in result && result.ok) {
+        const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        recordFullSyncDurationMs(t1 - t0);
         window.dispatchEvent(new CustomEvent('plainsight:full-sync'));
       }
     })
@@ -80,7 +84,12 @@ export async function runInitialHydration(): Promise<void> {
     });
     return;
   }
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const result = await fullSync();
+  if (result && typeof result === 'object' && 'ok' in result && result.ok) {
+    const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    recordFullSyncDurationMs(t1 - t0);
+  }
   if (result && typeof result === 'object' && 'ok' in result && !result.ok) {
     notifyHydrationComplete({
       ok: false,
@@ -123,5 +132,6 @@ export function resetSyncQueueForTests(): void {
   }
   pending = false;
   inFlight = null;
+  resetSyncLatencyWatchForTests();
 }
 
