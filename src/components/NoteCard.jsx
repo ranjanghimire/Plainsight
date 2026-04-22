@@ -263,6 +263,7 @@ function TagRowIcon({ className = 'w-3.5 h-3.5' }) {
   );
 }
 
+/** Return-to-list / restore (arrow U-turn), not a circular recycle arrow. */
 function RestoreIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -270,7 +271,20 @@ function RestoreIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+        d="M9 15L3 9M3 9L9 3M3 9H15C18.3137 9 21 11.6863 21 15C21 18.3137 18.3137 21 15 21H12"
+      />
+    </svg>
+  );
+}
+
+function PencilSquareIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
       />
     </svg>
   );
@@ -473,16 +487,33 @@ export function NoteCard({
     setEditBody(String(next ?? ''));
   }, []);
 
-  /** Single activate toggles meta; second activate within window opens editor (mouse dblclick + touch double-tap). */
-  const handleTextBodyPointerPick = () => {
-    if (bulkDissolve || isDeleting) return;
+  const openEditor = useCallback(() => {
+    if (bulkDissolve || isDeleting || isArchived) return;
     if (toggleEditTimerRef.current !== null) {
       clearTimeout(toggleEditTimerRef.current);
       toggleEditTimerRef.current = null;
-      if (isArchived) archivedEditKeyRef.current = note.text;
-      setEditBody(trimTrailingBlankLines(parsed.body));
-      setTagDraft(tagsToTagDraft(parsed.tags));
-      setIsEditing(true);
+    }
+    archivedEditKeyRef.current = note.text;
+    setEditBody(trimTrailingBlankLines(parsed.body));
+    setTagDraft(tagsToTagDraft(parsed.tags));
+    setIsEditing(true);
+  }, [bulkDissolve, isArchived, isDeleting, note.text, parsed.body, parsed.tags]);
+
+  /** Single activate toggles meta; second activate within window opens editor (mouse dblclick + touch double-tap). Archived: meta only, never edit. */
+  const handleTextBodyPointerPick = () => {
+    if (bulkDissolve || isDeleting) return;
+    if (isArchived) {
+      if (toggleEditTimerRef.current !== null) {
+        clearTimeout(toggleEditTimerRef.current);
+        toggleEditTimerRef.current = null;
+      }
+      setMetaVisible((v) => !v);
+      return;
+    }
+    if (toggleEditTimerRef.current !== null) {
+      clearTimeout(toggleEditTimerRef.current);
+      toggleEditTimerRef.current = null;
+      openEditor();
       return;
     }
     toggleEditTimerRef.current = setTimeout(() => {
@@ -550,7 +581,7 @@ export function NoteCard({
   const displayBoldFirst = Boolean(note.boldFirstLine);
   const readMoreActive = Boolean(displayBody && displayLineCount > READ_MORE_LINE_THRESHOLD);
 
-  const checkboxToggleDisabled = isDeleting || bulkDissolve;
+  const checkboxToggleDisabled = isDeleting || bulkDissolve || isArchived;
 
   const handleDisplayCheckboxToggle = useCallback(
     (lineIndex) => {
@@ -713,14 +744,104 @@ export function NoteCard({
               />
             </div>
           </div>
-        ) : displayBody ? (
-          readMoreActive ? (
-            <div className={readMoreExpanded ? 'flex flex-col gap-0.5' : ''}>
-              <div
-                className={`relative overflow-hidden text-base leading-normal transition-[max-height] duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-reduce:transition-[max-height] motion-reduce:duration-200 ${
-                  readMoreExpanded ? 'max-h-[min(120rem,9999px)]' : 'max-h-[10.5em]'
-                }`}
-              >
+        ) : (
+          <div className="flex min-w-0 items-stretch gap-0.5">
+            <div className="min-w-0 flex-1">
+              {displayBody ? (
+                readMoreActive ? (
+                  <div className={readMoreExpanded ? 'flex flex-col gap-0.5' : ''}>
+                    <div
+                      className={`relative overflow-hidden text-base leading-normal transition-[max-height] duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] motion-reduce:transition-[max-height] motion-reduce:duration-200 ${
+                        readMoreExpanded ? 'max-h-[min(120rem,9999px)]' : 'max-h-[10.5em]'
+                      }`}
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={handleTextBodyPointerPick}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleTextBodyPointerPick();
+                          }
+                        }}
+                        className={displayBodyParaClass}
+                      >
+                        {renderNoteDisplayBody(
+                          displayBody,
+                          displayBoldFirst,
+                          handleDisplayCheckboxToggle,
+                          checkboxToggleDisabled,
+                        )}
+                      </div>
+                      {!readMoreExpanded ? (
+                        <>
+                          <div
+                            className={`pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-16 bg-gradient-to-t ${
+                              isArchived
+                                ? 'from-neutral-100 via-neutral-100/75 to-transparent dark:from-neutral-800 dark:via-neutral-800/75'
+                                : 'from-white via-white/80 to-transparent dark:from-stone-800 dark:via-stone-800/80'
+                            }`}
+                            aria-hidden
+                          />
+                          <button
+                            type="button"
+                            aria-label="Show more"
+                            className={
+                              isArchived
+                                ? 'absolute bottom-[1.1rem] left-1/2 z-[2] -translate-x-1/2 rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
+                                : 'absolute bottom-[1.1rem] left-1/2 z-[2] -translate-x-1/2 rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReadMoreExpanded(true);
+                            }}
+                          >
+                            <ReadMoreExpandIcon />
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                    {readMoreExpanded ? (
+                      <button
+                        type="button"
+                        aria-label="Show less"
+                        className={
+                          isArchived
+                            ? 'self-center rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
+                            : 'self-center rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReadMoreExpanded(false);
+                        }}
+                      >
+                        <ReadMoreCollapseIcon />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleTextBodyPointerPick}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleTextBodyPointerPick();
+                      }
+                    }}
+                    className={displayBodyParaClass}
+                  >
+                    {renderNoteDisplayBody(
+                      displayBody,
+                      displayBoldFirst,
+                      handleDisplayCheckboxToggle,
+                      checkboxToggleDisabled,
+                    )}
+                  </div>
+                )
+              ) : (
                 <div
                   role="button"
                   tabIndex={0}
@@ -731,96 +852,30 @@ export function NoteCard({
                       handleTextBodyPointerPick();
                     }
                   }}
-                  className={displayBodyParaClass}
+                  className={bodyTextClass}
+                  aria-label={isArchived ? 'Archived note' : undefined}
                 >
-                  {renderNoteDisplayBody(
-                    displayBody,
-                    displayBoldFirst,
-                    handleDisplayCheckboxToggle,
-                    checkboxToggleDisabled,
-                  )}
+                  {isArchived ? '\u00a0' : 'Double-click or double-tap to edit…'}
                 </div>
-                {!readMoreExpanded ? (
-                  <>
-                    <div
-                      className={`pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-16 bg-gradient-to-t ${
-                        isArchived
-                          ? 'from-neutral-100 via-neutral-100/75 to-transparent dark:from-neutral-800 dark:via-neutral-800/75'
-                          : 'from-white via-white/80 to-transparent dark:from-stone-800 dark:via-stone-800/80'
-                      }`}
-                      aria-hidden
-                    />
-                    <button
-                      type="button"
-                      aria-label="Show more"
-                      className={
-                        isArchived
-                          ? 'absolute bottom-[1.1rem] left-1/2 z-[2] -translate-x-1/2 rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
-                          : 'absolute bottom-[1.1rem] left-1/2 z-[2] -translate-x-1/2 rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReadMoreExpanded(true);
-                      }}
-                    >
-                      <ReadMoreExpandIcon />
-                    </button>
-                  </>
-                ) : null}
-              </div>
-              {readMoreExpanded ? (
-                <button
-                  type="button"
-                  aria-label="Show less"
-                  className={
-                    isArchived
-                      ? 'self-center rounded-md p-1 text-neutral-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-neutral-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-neutral-500/40 dark:hover:text-neutral-400/80'
-                      : 'self-center rounded-md p-1 text-stone-400/50 opacity-80 transition-[color,opacity,transform] duration-300 ease-out hover:text-stone-500/85 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400/40 active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:transform-none dark:text-stone-500/40 dark:hover:text-stone-400/80'
-                  }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setReadMoreExpanded(false);
-                  }}
-                >
-                  <ReadMoreCollapseIcon />
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={handleTextBodyPointerPick}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleTextBodyPointerPick();
-                }
-              }}
-              className={displayBodyParaClass}
-            >
-              {renderNoteDisplayBody(
-                displayBody,
-                displayBoldFirst,
-                handleDisplayCheckboxToggle,
-                checkboxToggleDisabled,
               )}
             </div>
-          )
-        ) : (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={handleTextBodyPointerPick}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleTextBodyPointerPick();
-              }
-            }}
-            className={bodyTextClass}
-          >
-            Double-click or double-tap to edit…
+            {!isArchived && showMetaRow ? (
+              <div className="flex shrink-0 items-center self-stretch">
+                <button
+                  type="button"
+                  aria-label="Edit note"
+                  disabled={isDeleting || bulkDissolve}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditor();
+                  }}
+                  className="shrink-0 rounded-md p-1.5 text-stone-400 transition-colors hover:text-stone-700 disabled:pointer-events-none disabled:opacity-40 dark:text-stone-500 dark:hover:text-stone-200"
+                >
+                  <PencilSquareIcon />
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
         <div
@@ -832,59 +887,67 @@ export function NoteCard({
                 showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
               }`}
             >
-              <CategoryDropdown
-                categories={categories}
-                currentCategory={note.category}
-                onSelect={(cat) =>
-                  isArchived
-                    ? onArchivedUpdate?.(note.text, { category: cat })
-                    : onUpdate(note.id, { category: cat })
-                }
-                onAddNew={onAddCategory}
-                triggerLabel="+ Category"
-              />
-              {isArchived && deletedAtIso ? (
-                <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
-                  {formatNoteDate(deletedAtIso)}
-                </span>
-              ) : null}
-              {!isArchived && note.createdAt ? (
-                <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
-                  {formatNoteDate(note.createdAt)}
-                </span>
-              ) : null}
-              {isArchived ? (
-                <div className="flex items-center gap-0.5 shrink-0">
+              <div className="min-w-0 flex-1">
+                {isArchived ? (
+                  note.category ? (
+                    <span className="block truncate text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                      {note.category}
+                    </span>
+                  ) : null
+                ) : (
+                  <CategoryDropdown
+                    categories={categories}
+                    currentCategory={note.category}
+                    onSelect={(cat) => onUpdate(note.id, { category: cat })}
+                    onAddNew={onAddCategory}
+                    triggerLabel="+ Category"
+                  />
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {isArchived && deletedAtIso ? (
+                  <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
+                    {formatNoteDate(deletedAtIso)}
+                  </span>
+                ) : null}
+                {!isArchived && note.createdAt ? (
+                  <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
+                    {formatNoteDate(note.createdAt)}
+                  </span>
+                ) : null}
+                {isArchived ? (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onRestore?.(note.text)}
+                      disabled={bulkDissolve || isDeleting}
+                      className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 disabled:opacity-40"
+                      aria-label="Restore note"
+                    >
+                      <RestoreIcon />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePermanentDeleteArchived}
+                      disabled={bulkDissolve || isDeleting}
+                      className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
+                      aria-label="Delete archived note permanently"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => onRestore?.(note.text)}
-                    disabled={bulkDissolve || isDeleting}
-                    className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 disabled:opacity-40"
-                    aria-label="Restore note"
-                  >
-                    <RestoreIcon />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePermanentDeleteArchived}
-                    disabled={bulkDissolve || isDeleting}
-                    className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
-                    aria-label="Delete archived note permanently"
+                    onClick={handleDeleteActive}
+                    disabled={isDeleting}
+                    className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
+                    aria-label="Delete note"
                   >
                     <TrashIcon />
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleDeleteActive}
-                  disabled={isDeleting}
-                  className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
-                  aria-label="Delete note"
-                >
-                  <TrashIcon />
-                </button>
-              )}
+                )}
+              </div>
             </div>
 
             {parsed.tags.length > 0 && !isEditing ? (

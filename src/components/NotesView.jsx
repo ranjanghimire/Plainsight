@@ -124,7 +124,6 @@ export function NotesView() {
     renameCategory,
     deleteCategory,
     restoreArchivedNote,
-    updateArchivedNote,
     permanentlyDeleteArchived,
     removeArchivedByTextKeys,
     workspaceSwitchGeneration,
@@ -586,7 +585,6 @@ export function NotesView() {
         onAddCategory={addCategory}
         variant="archived"
         onRestore={handleRestoreArchived}
-        onArchivedUpdate={updateArchivedNote}
         onPermanentDeleteArchived={permanentlyDeleteArchived}
         archiveAnimating={!!restoringKeys[entry.text]}
         bulkDissolve={!!archiveClearDissolveKeys[entry.text]}
