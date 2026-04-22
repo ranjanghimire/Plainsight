@@ -10,7 +10,7 @@ import {
   saveLocalNotes,
 } from './localDB';
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
-import { hydrateWorkspaceUiFromLocalDb } from './workspaceStorageBridge';
+import { flushWorkspaceUiIntoLocalDb, hydrateWorkspaceUiFromLocalDb } from './workspaceStorageBridge';
 
 type ChangePayload<T> = {
   event: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -49,6 +49,9 @@ export async function applyRealtimeNoteChange(
   payload: ChangePayload<Note>,
 ): Promise<void> {
   return enqueueWorkspace(workspaceId, async () => {
+    // Preserve optimistic local edits: avoid clobbering the UI blob from a local DB snapshot
+    // that hasn't yet absorbed the user's latest typing.
+    await flushWorkspaceUiIntoLocalDb(workspaceId);
     const rows = await getLocalNotes(workspaceId);
     let nextRows = rows;
     if (payload.event === 'DELETE') {
@@ -69,6 +72,7 @@ export async function applyRealtimeCategoryChange(
   payload: ChangePayload<Category>,
 ): Promise<void> {
   return enqueueWorkspace(workspaceId, async () => {
+    await flushWorkspaceUiIntoLocalDb(workspaceId);
     const rows = await getLocalCategories(workspaceId);
     let nextRows = rows;
     if (payload.event === 'DELETE') {
@@ -88,6 +92,7 @@ export async function applyRealtimeArchivedNoteChange(
   payload: ChangePayload<ArchivedNote>,
 ): Promise<void> {
   return enqueueWorkspace(workspaceId, async () => {
+    await flushWorkspaceUiIntoLocalDb(workspaceId);
     const rows = await getLocalArchivedNotes(workspaceId);
     let nextRows = rows;
     if (payload.event === 'DELETE') {
