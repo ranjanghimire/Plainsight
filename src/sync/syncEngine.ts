@@ -830,21 +830,29 @@ export async function fullSync(
 
   let syncSucceeded = false;
   let hydrationFailure: SyncError | null = null;
+  let step = 'start';
 
   const fail = (error: SyncError) => {
-    hydrationFailure = error;
-    return { ok: false as const, error };
+    const wrapped = mkError(`[fullSync:${step}] ${error?.message || 'sync failed'}`, {
+      step,
+      error,
+    });
+    hydrationFailure = wrapped;
+    return { ok: false as const, error: wrapped };
   };
 
   try {
+    step = 'getOwnerId';
     const ownerId = await getOwnerId();
 
     // Pull pins first (does not depend on workspace list).
+    step = 'pullWorkspacePins';
     const remotePins = await fullSyncIpc.pullWorkspacePins();
     if (remotePins.error) return fail(remotePins.error);
 
     // Fetch remote + local together, merge, prune, then persist in one tight sequence so we never
     // write a workspace list from a stale remote snapshot (e.g. user deleted rows while sync ran).
+    step = 'selectWorkspaces:firstSnapshot';
     const [remoteWorkspacesRes, localWorkspaces] = await Promise.all([
       getSupabase().from('workspaces').select('*'),
       getLocalWorkspaces(),
@@ -868,6 +876,7 @@ export async function fullSync(
 
     // Second snapshot after prune/prepare: those steps can take long enough that the user finishes
     // deletes (or another tab completes sync) before we persist — do not resurrect deleted rows.
+    step = 'selectWorkspaces:secondSnapshot';
     const [remoteFinalRes, localFinal] = await Promise.all([
       getSupabase().from('workspaces').select('*'),
       getLocalWorkspaces(),
@@ -909,6 +918,7 @@ export async function fullSync(
 
     const myAccessibleWorkspaceIds = new Set<string>();
     if (ownerId) {
+      step = 'listWorkspaceShares';
       const shareRes = await listWorkspaceShares();
       if (shareRes.error) {
         return fail(mkError(shareRes.error.message, shareRes.error.details));
@@ -934,6 +944,7 @@ export async function fullSync(
     }
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
+    step = 'saveLocalWorkspaces';
     await saveLocalWorkspaces(mergedWorkspacesWithOwner);
 
     // 4b) Rebuild storage-key ↔ UUID bindings and Menu-visible workspace list (e.g. after local wipe)
