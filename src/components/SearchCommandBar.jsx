@@ -308,13 +308,20 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
           aria-label={searchOnly ? 'Search archive' : 'New note'}
         />
         {liveTextScanAvailable && !searchOnly && (
-          <button type="button" onClick={handleLiveTextScan} className={iconButtonClass} aria-label="Scan text with camera">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={handleLiveTextScan}
+            className={iconButtonClass}
+            aria-label="Scan text with camera"
+          >
             <CameraViewfinderIcon />
           </button>
         )}
         {!searchOnly && (
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={submitEntry}
             disabled={!canSubmit}
             className={`${iconButtonClass} mr-2 disabled:opacity-40 disabled:pointer-events-none`}
