@@ -59,6 +59,7 @@ import {
 } from '../sync/syncEngine';
 import { subscribeHydrationComplete } from '../sync/hydrationBridge';
 import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
+import { getRealtimeHealthSnapshot } from '../sync/realtimeHealth';
 import {
   applyRealtimeArchivedNoteChange,
   applyRealtimeCategoryChange,
@@ -689,10 +690,35 @@ export function WorkspaceProvider({ children }) {
    */
   useEffect(() => {
     if (!canUseSupabase || !hydrationComplete) return undefined;
-    const pullIfVisible = () => {
-      if (document.visibilityState === 'visible') void queueFullSync();
+    // Adaptive fallback: back off when realtime is healthy, speed up when unhealthy.
+    // This is intentionally conservative: realtime health is best-effort.
+    const HEALTHY_INTERVAL_MS = 5 * 60_000;
+    const UNHEALTHY_INTERVAL_MS = 30_000;
+    const HEALTHY_SILENCE_MS = 45_000;
+
+    let timeoutId = null;
+    const schedule = (ms) => {
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        if (document.visibilityState === 'visible') void queueFullSync();
+        // re-schedule based on latest health snapshot
+        schedule(nextInterval());
+      }, ms);
     };
-    const intervalId = window.setInterval(pullIfVisible, 30_000);
+
+    const nextInterval = () => {
+      try {
+        const { connected, lastMessageAt } = getRealtimeHealthSnapshot();
+        const fresh = lastMessageAt != null && Date.now() - lastMessageAt < HEALTHY_SILENCE_MS;
+        return connected && fresh ? HEALTHY_INTERVAL_MS : UNHEALTHY_INTERVAL_MS;
+      } catch {
+        return UNHEALTHY_INTERVAL_MS;
+      }
+    };
+
+    // Start quickly so we still self-heal if realtime never comes up.
+    schedule(UNHEALTHY_INTERVAL_MS);
     let debounce = null;
     const schedulePull = () => {
       if (document.visibilityState !== 'visible') return;
@@ -705,7 +731,7 @@ export function WorkspaceProvider({ children }) {
     document.addEventListener('visibilitychange', schedulePull);
     window.addEventListener('focus', schedulePull);
     return () => {
-      window.clearInterval(intervalId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
       if (debounce != null) window.clearTimeout(debounce);
       document.removeEventListener('visibilitychange', schedulePull);
       window.removeEventListener('focus', schedulePull);

@@ -53,6 +53,7 @@ import {
   flushWorkspaceUiIntoLocalDb,
   hydrateWorkspaceUiFromLocalDb,
 } from './workspaceStorageBridge';
+import { recordRealtimeMessage, recordRealtimeStatus } from './realtimeHealth';
 import { v4 as uuidv4 } from 'uuid';
 import {
   bindMergedWorkspacesToStorageKeys,
@@ -810,9 +811,12 @@ function subscribeWorkspaceBroadcastTable<T>(topic: string, cb: ChangeCallback<T
   const channel = sb
     .channel(topic, workspaceRealtimeChannelConfig)
     .on('broadcast', { event: '*' }, (msg: unknown) => {
+      recordRealtimeMessage();
       cb(broadcastPayloadToChangeFromServerMsg<T>(msg));
     })
-    .subscribe();
+    .subscribe((status) => {
+      recordRealtimeStatus(String(status));
+    });
   return () => sb.removeChannel(channel);
 }
 
