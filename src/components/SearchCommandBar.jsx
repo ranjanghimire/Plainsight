@@ -68,11 +68,13 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     boldMode,
     setBoldMode,
     bulletsMode,
+    checklistMode,
     popoverExpanded,
     openPopover,
     closePopover,
     handleTextareaKeyDown,
     applyBulletLineToggle,
+    applyCheckboxLineToggle,
     syncBulletsModeFromCaret,
     resetFormatModes,
   } = useNoteFormatModes({
@@ -389,10 +391,12 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
             boldMode={boldMode}
             onBoldChange={setBoldMode}
             bulletsMode={bulletsMode}
+            checklistMode={checklistMode}
             textareaRef={textareaRef}
             value={value}
             setValue={setValueFromFormat}
             applyBulletLineToggle={applyBulletLineToggle}
+            applyCheckboxLineToggle={applyCheckboxLineToggle}
           />
             </div>
           </div>

@@ -11,6 +11,7 @@ import {
   tagsToTagDraft,
   trimTrailingBlankLines,
 } from '../utils/noteTags';
+import { toggleCheckboxLineInBody } from '../utils/checkboxNoteLines.js';
 import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
 import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js';
 import { NoteFormatPopover, FloatingNoteSubmit } from './noteFormat/NoteFormatPopover.jsx';
@@ -36,6 +37,10 @@ function scrollNoteTextareaCaretIntoView(ta) {
  * later bullet lines align with the first line in display mode.
  */
 function splitFirstLineForBoldDisplay(firstLine) {
+  const checkboxLead = firstLine.match(/^(\s*\[( |x|X)\]\s*)/);
+  if (checkboxLead) {
+    return { lead: checkboxLead[1], bold: firstLine.slice(checkboxLead[1].length) };
+  }
   const bulletLead = firstLine.match(/^(\s*-\s*)/);
   if (bulletLead) {
     return { lead: bulletLead[1], bold: firstLine.slice(bulletLead[1].length) };
@@ -52,8 +57,10 @@ const BULLET_DISPLAY_INDENT = '  ';
  * First bullet line is often stored as "- item" (hyphen at text column 0) while Enter inserts "  - " on
  * the next line — normalize for display so columns line up with existing notes.
  */
-function normalizeBulletDisplayLine(line) {
+function normalizeListDisplayLine(line) {
   const t = line.replace(/\r/g, '');
+  if (/^\s+\[( |x|X)\]\s/.test(t)) return t;
+  if (/^\[( |x|X)\]\s/.test(t)) return `${BULLET_DISPLAY_INDENT}${t}`;
   if (/^\s+-\s/.test(t)) return t;
   if (/^-\s/.test(t)) return `${BULLET_DISPLAY_INDENT}${t}`;
   return t;
@@ -72,9 +79,55 @@ function BulletGlyph({ className }) {
 const BULLET_GLYPH_CLASS =
   'inline-block shrink-0 align-middle h-[0.58em] w-[0.58em] text-stone-400 opacity-75 dark:text-stone-500';
 
+const CHECKBOX_CTRL_CLASS =
+  'inline-flex shrink-0 align-middle h-[0.72em] w-[0.72em] items-center justify-center rounded-[2px] border border-current text-current opacity-90 -my-0.5 mx-px min-h-[1.35rem] min-w-[1.35rem] max-h-[1.35rem] max-w-[1.35rem] touch-manipulation';
+
+function CheckboxDisplayGlyph({ checked, disabled, onToggle }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle();
+      }}
+      className={CHECKBOX_CTRL_CLASS}
+      aria-label={checked ? 'Mark item not done' : 'Mark item done'}
+      aria-pressed={checked}
+    >
+      {checked ? (
+        <svg className="h-[0.55em] w-[0.55em]" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 12.5l4 4L18 8" />
+        </svg>
+      ) : null}
+    </button>
+  );
+}
+
 /** Replace stored `- ` bullet marker with a disc for display only. */
-function renderDisplayLineVisual(line) {
+function renderDisplayLineVisual(line, lineIndex, onCheckboxToggle, checkboxDisabled) {
   if (line.length === 0) return '\u00a0';
+  const cb = line.match(/^(\s*)\[( |x|X)\]\s*(.*)$/);
+  if (cb) {
+    const [, indent, mark, rest] = cb;
+    const checked = mark === 'x' || mark === 'X';
+    return (
+      <>
+        {indent}
+        <CheckboxDisplayGlyph
+          checked={checked}
+          disabled={checkboxDisabled}
+          onToggle={() => onCheckboxToggle?.(lineIndex)}
+        />
+        {rest ? <> {rest}</> : null}
+      </>
+    );
+  }
   const m = line.match(/^(\s*)-\s*(.*)$/);
   if (!m) return line;
   const [, indent, rest] = m;
@@ -87,8 +140,22 @@ function renderDisplayLineVisual(line) {
   );
 }
 
-function renderBoldLeadVisual(lead) {
+function renderBoldLeadVisual(lead, onToggleFirstLineCheckbox, checkboxDisabled) {
   if (!lead) return null;
+  const cb = lead.match(/^(\s*)\[( |x|X)\]\s*$/);
+  if (cb) {
+    const checked = cb[2] === 'x' || cb[2] === 'X';
+    return (
+      <>
+        <span className="font-normal">{cb[1]}</span>
+        <CheckboxDisplayGlyph
+          checked={checked}
+          disabled={checkboxDisabled}
+          onToggle={() => onToggleFirstLineCheckbox?.()}
+        />
+      </>
+    );
+  }
   const m = lead.match(/^(\s*)-\s*$/);
   if (m) {
     return (
@@ -108,12 +175,12 @@ const DISPLAY_LINE_BLOCK =
 /** Extra space under a bold first line before line 2+ (semibold reads cramped without it). */
 const BOLD_FIRST_LINE_AFTER_GAP = 'mb-1.5';
 
-function renderNoteDisplayBody(displayBody, boldFirst) {
+function renderNoteDisplayBody(displayBody, boldFirst, onCheckboxToggle, checkboxDisabled) {
   const lines = displayBody
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .split('\n')
-    .map(normalizeBulletDisplayLine);
+    .map(normalizeListDisplayLine);
   const boldFirstHasMoreLines = Boolean(boldFirst && lines.length > 1);
   return lines.map((line, i) => {
     if (boldFirst && i === 0) {
@@ -123,14 +190,14 @@ function renderNoteDisplayBody(displayBody, boldFirst) {
           key={i}
           className={boldFirstHasMoreLines ? `${DISPLAY_LINE_BLOCK} ${BOLD_FIRST_LINE_AFTER_GAP}` : DISPLAY_LINE_BLOCK}
         >
-          {renderBoldLeadVisual(lead)}
+          {renderBoldLeadVisual(lead, () => onCheckboxToggle?.(0), checkboxDisabled)}
           {bold ? <span className="font-semibold">{bold}</span> : null}
         </span>
       );
     }
     return (
       <span key={i} className={DISPLAY_LINE_BLOCK}>
-        {renderDisplayLineVisual(line)}
+        {renderDisplayLineVisual(line, i, onCheckboxToggle, checkboxDisabled)}
       </span>
     );
   });
@@ -255,11 +322,13 @@ export function NoteCard({
     boldMode,
     setBoldMode,
     bulletsMode,
+    checklistMode,
     popoverExpanded,
     openPopover,
     closePopover,
     handleTextareaKeyDown,
     applyBulletLineToggle,
+    applyCheckboxLineToggle,
     syncBulletsModeFromCaret,
     resetFormatModes,
   } = useNoteFormatModes({
@@ -464,6 +533,33 @@ export function NoteCard({
   const displayBoldFirst = Boolean(note.boldFirstLine);
   const readMoreActive = Boolean(displayBody && displayLineCount > READ_MORE_LINE_THRESHOLD);
 
+  const checkboxToggleDisabled = isDeleting || bulkDissolve;
+
+  const handleDisplayCheckboxToggle = useCallback(
+    (lineIndex) => {
+      if (checkboxToggleDisabled) return;
+      const nextBody = toggleCheckboxLineInBody(displayBody, lineIndex);
+      if (nextBody === displayBody) return;
+      const full = composeNoteWithTags(parsed.tags, nextBody);
+      if (full === note.text) return;
+      if (isArchived) {
+        onArchivedUpdate?.(note.text, { text: full });
+      } else {
+        onUpdate?.(note.id, { text: full });
+      }
+    },
+    [
+      checkboxToggleDisabled,
+      displayBody,
+      isArchived,
+      note.id,
+      note.text,
+      onArchivedUpdate,
+      onUpdate,
+      parsed.tags,
+    ],
+  );
+
   return (
     <div className={outerWrapClass}>
       <div
@@ -591,10 +687,12 @@ export function NoteCard({
                 boldMode={boldMode}
                 onBoldChange={setBoldMode}
                 bulletsMode={bulletsMode}
+                checklistMode={checklistMode}
                 textareaRef={textareaRef}
                 value={editBody}
                 setValue={setEditBodyFromFormat}
                 applyBulletLineToggle={applyBulletLineToggle}
+                applyCheckboxLineToggle={applyCheckboxLineToggle}
               />
             </div>
           </div>
@@ -618,7 +716,12 @@ export function NoteCard({
                   }}
                   className={displayBodyParaClass}
                 >
-                  {renderNoteDisplayBody(displayBody, displayBoldFirst)}
+                  {renderNoteDisplayBody(
+                    displayBody,
+                    displayBoldFirst,
+                    handleDisplayCheckboxToggle,
+                    checkboxToggleDisabled,
+                  )}
                 </div>
                 {!readMoreExpanded ? (
                   <>
@@ -679,7 +782,12 @@ export function NoteCard({
               }}
               className={displayBodyParaClass}
             >
-              {renderNoteDisplayBody(displayBody, displayBoldFirst)}
+              {renderNoteDisplayBody(
+                displayBody,
+                displayBoldFirst,
+                handleDisplayCheckboxToggle,
+                checkboxToggleDisabled,
+              )}
             </div>
           )
         ) : (

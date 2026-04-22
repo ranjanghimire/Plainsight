@@ -48,6 +48,15 @@ function BulletsToggleIcon({ className }) {
   );
 }
 
+/** Checklist toolbar icon (icon-only control). */
+function ChecklistToggleIcon({ className }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="3" strokeWidth={2} />
+    </svg>
+  );
+}
+
 /** Collapse inline tray (chevron points right). */
 function CollapseChevronIcon({ className }) {
   return (
@@ -82,10 +91,12 @@ export function NoteFormatPopover({
   boldMode,
   onBoldChange,
   bulletsMode,
+  checklistMode,
   textareaRef,
   value,
   setValue,
   applyBulletLineToggle,
+  applyCheckboxLineToggle,
 }) {
   return (
     <div
@@ -95,7 +106,7 @@ export function NoteFormatPopover({
     >
       <div
         className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} ${
-          expanded ? 'max-w-[min(100%,22rem)] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
+          expanded ? 'max-w-[min(100%,30rem)] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
         }`}
         aria-hidden={!expanded}
       >
@@ -124,6 +135,20 @@ export function NoteFormatPopover({
         >
           <BulletsToggleIcon className="h-3.5 w-3.5 shrink-0" />
           <span className="whitespace-nowrap">Bullets</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            applyCheckboxLineToggle(textareaRef?.current, value, setValue);
+          }}
+          className={`${inlineBtnBase} shrink-0 px-1.5 ${checklistMode ? inlineOn : inlineOff}`}
+          aria-pressed={checklistMode}
+          aria-label="Checklist"
+          title="Checklist"
+        >
+          <ChecklistToggleIcon className="h-3.5 w-3.5 shrink-0" />
         </button>
         <button
           type="button"

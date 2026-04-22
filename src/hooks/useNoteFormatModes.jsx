@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isCheckboxLine, stripCheckboxMarkFromLine } from '../utils/checkboxNoteLines.js';
 
 const DEFAULT_BULLET_INDENT = '  ';
 
@@ -56,18 +57,23 @@ export function useNoteFormatModes({
 } = {}) {
   const [boldMode, setBoldMode] = useState(false);
   const [bulletsMode, setBulletsMode] = useState(false);
+  const [checklistMode, setChecklistMode] = useState(false);
   const [popoverExpanded, setPopoverExpanded] = useState(defaultPopoverExpanded);
 
   /** Implied whenever First line bold or Bullets is on (multiline); drives Enter → new line + floating send. */
-  const newlineMode = boldMode || bulletsMode;
+  const newlineMode = boldMode || bulletsMode || checklistMode;
 
   const bulletIndentRef = useRef(DEFAULT_BULLET_INDENT);
   /** Enter handling must not rely on stale React state (controlled textarea vs. last render). */
   const bulletsModeRef = useRef(bulletsMode);
+  const checklistModeRef = useRef(checklistMode);
   const newlineModeRef = useRef(newlineMode);
   useEffect(() => {
     bulletsModeRef.current = bulletsMode;
   }, [bulletsMode]);
+  useEffect(() => {
+    checklistModeRef.current = checklistMode;
+  }, [checklistMode]);
   useEffect(() => {
     newlineModeRef.current = newlineMode;
   }, [newlineMode]);
@@ -83,20 +89,26 @@ export function useNoteFormatModes({
   const resetFormatModes = useCallback(() => {
     setBoldMode(false);
     setBulletsMode(false);
+    setChecklistMode(false);
     setPopoverExpanded(defaultPopoverExpanded);
     bulletsModeRef.current = false;
+    checklistModeRef.current = false;
     newlineModeRef.current = false;
     bulletIndentRef.current = DEFAULT_BULLET_INDENT;
   }, [defaultPopoverExpanded]);
 
-  /** Sync “Bullets” toggle highlight from caret line (hyphen bullet vs not). */
+  /** Sync list-format toggles from caret line (checkbox vs hyphen bullet vs plain). */
   const syncBulletsModeFromCaretAt = useCallback((valueStr, caretPos) => {
     const doc = String(valueStr ?? '');
     const safe = Math.max(0, Math.min(caretPos ?? 0, doc.length));
     const { line } = lineBoundsAt(doc, safe);
-    const on = isHyphenBulletLine(line.replace(/\r/g, ''));
-    setBulletsMode(on);
-    bulletsModeRef.current = on;
+    const norm = line.replace(/\r/g, '');
+    const cb = isCheckboxLine(norm);
+    const hy = isHyphenBulletLine(norm);
+    setChecklistMode(cb);
+    checklistModeRef.current = cb;
+    setBulletsMode(hy && !cb);
+    bulletsModeRef.current = hy && !cb;
   }, []);
 
   const syncBulletsModeFromCaret = useCallback(
@@ -114,6 +126,23 @@ export function useNoteFormatModes({
       const start = textarea.selectionStart ?? doc.length;
       const { lineStart, lineEnd, line } = lineBoundsAt(doc, start);
       const lineNorm = line.replace(/\r/g, '');
+
+      if (isCheckboxLine(lineNorm)) {
+        const stripped = stripCheckboxMarkFromLine(lineNorm);
+        const next = doc.slice(0, lineStart) + stripped + doc.slice(lineEnd);
+        setValue(next);
+        const pos = lineStart + stripped.length;
+        requestAnimationFrame(() => {
+          try {
+            textarea.focus();
+            textarea.setSelectionRange(pos, pos);
+            syncBulletsModeFromCaretAt(next, pos);
+          } catch {
+            /* ignore */
+          }
+        });
+        return;
+      }
 
       if (isHyphenBulletLine(lineNorm)) {
         const stripped = stripBulletMarkFromLine(lineNorm);
@@ -150,6 +179,69 @@ export function useNoteFormatModes({
     [syncBulletsModeFromCaretAt],
   );
 
+  const applyCheckboxLineToggle = useCallback(
+    (textarea, value, setValue) => {
+      if (!textarea) return;
+      const doc = String(value ?? '');
+      const start = textarea.selectionStart ?? doc.length;
+      const { lineStart, lineEnd, line } = lineBoundsAt(doc, start);
+      const lineNorm = line.replace(/\r/g, '');
+
+      if (isCheckboxLine(lineNorm)) {
+        const stripped = stripCheckboxMarkFromLine(lineNorm);
+        const next = doc.slice(0, lineStart) + stripped + doc.slice(lineEnd);
+        setValue(next);
+        const pos = lineStart + stripped.length;
+        requestAnimationFrame(() => {
+          try {
+            textarea.focus();
+            textarea.setSelectionRange(pos, pos);
+            syncBulletsModeFromCaretAt(next, pos);
+          } catch {
+            /* ignore */
+          }
+        });
+        return;
+      }
+
+      if (isHyphenBulletLine(lineNorm)) {
+        const hm = lineNorm.match(/^(\s*)-\s*(.*)$/);
+        const indent = hm ? hm[1] || '' : DEFAULT_BULLET_INDENT;
+        const rest = hm ? hm[2] ?? '' : stripBulletMarkFromLine(lineNorm);
+        const newLine = `${indent}[ ] ${rest}`;
+        const next = doc.slice(0, lineStart) + newLine + doc.slice(lineEnd);
+        setValue(next);
+        const pos = lineStart + newLine.length;
+        requestAnimationFrame(() => {
+          try {
+            textarea.focus();
+            textarea.setSelectionRange(pos, pos);
+            syncBulletsModeFromCaretAt(next, pos);
+          } catch {
+            /* ignore */
+          }
+        });
+        return;
+      }
+
+      const body = lineNorm.replace(/^\s+/, '');
+      const newLine = `${DEFAULT_BULLET_INDENT}[ ] ${body}`;
+      const next = doc.slice(0, lineStart) + newLine + doc.slice(lineEnd);
+      setValue(next);
+      const pos = lineStart + newLine.length;
+      requestAnimationFrame(() => {
+        try {
+          textarea.focus();
+          textarea.setSelectionRange(pos, pos);
+          syncBulletsModeFromCaretAt(next, pos);
+        } catch {
+          /* ignore */
+        }
+      });
+    },
+    [syncBulletsModeFromCaretAt],
+  );
+
   const handleTextareaKeyDown = useCallback(
     (e, textarea, value, setValue) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -166,9 +258,15 @@ export function useNoteFormatModes({
         const { lineStart, lineEnd, line } = lineBoundsAt(doc, caret);
         const lineNorm = line.replace(/\r/g, '');
 
-        if (isHyphenBulletLine(lineNorm)) {
+        const runListEnter = (markerSuffix) => {
           e.preventDefault();
-          if (/^\s*-\s*$/.test(lineNorm)) {
+          const emptyRe =
+            markerSuffix === '- '
+              ? /^\s*-\s*$/
+              : markerSuffix === '[ ] '
+                ? /^\s*\[( |x|X)\]\s*$/
+                : null;
+          if (emptyRe && emptyRe.test(lineNorm)) {
             const { next, pos } = mergeAfterRemovingLine(doc, lineStart, lineEnd);
             setValue(next);
             requestAnimationFrame(() => {
@@ -181,13 +279,16 @@ export function useNoteFormatModes({
             });
             return;
           }
-          const indentMatch = line.match(/^(\s*)-\s*/);
+          const indentMatch =
+            markerSuffix === '- '
+              ? line.match(/^(\s*)-\s*/)
+              : line.match(/^(\s*)\[( |x|X)\]\s*/);
           let indent = indentMatch ? indentMatch[1] : bulletIndentRef.current;
           if (!indent || indent.length === 0) {
             indent = bulletIndentRef.current || DEFAULT_BULLET_INDENT;
           }
           bulletIndentRef.current = indent;
-          const markerPrefixLen = indentMatch ? indentMatch[0].length : indent.length + 2;
+          const markerPrefixLen = indentMatch ? indentMatch[0].length : indent.length + markerSuffix.length;
           const singleCaret = caret === selEnd;
           const relInLine = caret - lineStart;
 
@@ -195,9 +296,9 @@ export function useNoteFormatModes({
             const beforeInLine = doc.slice(lineStart, caret);
             const afterInLine = doc.slice(caret, lineEnd);
             const rolled = afterInLine.replace(/^\s+/, '');
-            const secondLine = `${indent}- ${rolled}`;
+            const secondLine = `${indent}${markerSuffix}${rolled}`;
             const next = doc.slice(0, lineStart) + beforeInLine + '\n' + secondLine + doc.slice(lineEnd);
-            const secondLineMarkerLen = indent.length + 2;
+            const secondLineMarkerLen = markerSuffix.length + indent.length;
             const pos = lineStart + beforeInLine.length + 1 + secondLineMarkerLen;
             setValue(next);
             requestAnimationFrame(() => {
@@ -211,10 +312,10 @@ export function useNoteFormatModes({
             return;
           }
 
-          const insert = `\n${indent}- `;
+          const insert = `\n${indent}${markerSuffix}`;
           const next = doc.slice(0, lineEnd) + insert + doc.slice(lineEnd);
-          setValue(next);
           const pos = lineEnd + insert.length;
+          setValue(next);
           requestAnimationFrame(() => {
             try {
               ta?.setSelectionRange(pos, pos);
@@ -223,6 +324,15 @@ export function useNoteFormatModes({
               /* ignore */
             }
           });
+        };
+
+        if (isCheckboxLine(lineNorm)) {
+          runListEnter('[ ] ');
+          return;
+        }
+
+        if (isHyphenBulletLine(lineNorm)) {
+          runListEnter('- ');
           return;
         }
 
@@ -266,6 +376,8 @@ export function useNoteFormatModes({
     setBoldMode,
     bulletsMode,
     setBulletsMode,
+    checklistMode,
+    setChecklistMode,
     newlineMode,
     popoverExpanded,
     setPopoverExpanded,
@@ -273,6 +385,7 @@ export function useNoteFormatModes({
     closePopover,
     handleTextareaKeyDown,
     applyBulletLineToggle,
+    applyCheckboxLineToggle,
     syncBulletsModeFromCaret,
     syncBulletsModeFromCaretAt,
     resetFormatModes,
