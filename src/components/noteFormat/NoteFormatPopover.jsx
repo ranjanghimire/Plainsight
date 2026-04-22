@@ -90,13 +90,13 @@ export function NoteFormatPopover({
 }) {
   return (
     <div
-      className="flex shrink-0 flex-nowrap items-center justify-end gap-0 self-center"
+      className="flex min-w-0 max-w-full shrink items-center justify-end gap-0 self-center"
       role="group"
       aria-label="Note formatting options"
     >
       <div
-        className={`flex min-w-0 flex-nowrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} ${
-          expanded ? 'max-w-[min(100vw,22rem)] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
+        className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} ${
+          expanded ? 'max-w-[min(100%,22rem)] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
         }`}
         aria-hidden={!expanded}
       >

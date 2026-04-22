@@ -428,7 +428,7 @@ export function NoteCard({
       ? 'transition-[opacity,transform] duration-[170ms] ease-out opacity-0 scale-95 pointer-events-none'
       : isDeleting && !isArchived
         ? 'transition-[opacity,transform,max-height] duration-200 ease-out opacity-0 translate-y-[4px] max-h-0 overflow-hidden pointer-events-none'
-        : 'transition-[opacity,transform,max-height] duration-200 ease-out opacity-100 translate-y-0 max-h-[999px] overflow-visible scale-100';
+        : 'min-w-0 max-w-full transition-[opacity,transform,max-height] duration-200 ease-out opacity-100 translate-y-0 max-h-[999px] overflow-visible scale-100';
 
   const handleDeleteActive = () => {
     if (isDeleting || bulkDissolve) return;
@@ -461,17 +461,17 @@ export function NoteCard({
     <div className={outerWrapClass}>
       <div
         ref={cardShellRef}
-        className={`${shellBase} ${shellPad} ${shellTransition} ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
+        className={`${shellBase} ${shellPad} ${shellTransition} min-w-0 max-w-full ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
       >
         {isEditing ? (
           <div
             className={
               isArchived
-                ? 'flex min-w-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 focus-within:border-neutral-300 focus-within:ring-2 focus-within:ring-neutral-300 dark:border-neutral-600 dark:bg-neutral-900 dark:focus-within:border-neutral-500 dark:focus-within:ring-neutral-600'
-                : 'flex min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-stone-50 focus-within:border-stone-300 focus-within:ring-2 focus-within:ring-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:focus-within:border-stone-500 dark:focus-within:ring-stone-600'
+                ? 'flex min-w-0 max-w-full flex-col overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 focus-within:border-neutral-300 focus-within:ring-2 focus-within:ring-neutral-300 dark:border-neutral-600 dark:bg-neutral-900 dark:focus-within:border-neutral-500 dark:focus-within:ring-neutral-600'
+                : 'flex min-w-0 max-w-full flex-col overflow-hidden rounded-lg border border-stone-200 bg-stone-50 focus-within:border-stone-300 focus-within:ring-2 focus-within:ring-stone-300 dark:border-stone-600 dark:bg-stone-800 dark:focus-within:border-stone-500 dark:focus-within:ring-stone-600'
             }
           >
-            <div className="flex min-w-0 items-center gap-2 px-2 pt-1.5">
+            <div className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden px-2 pt-1.5">
               <textarea
                 ref={textareaRef}
                 value={editBody}
@@ -490,8 +490,8 @@ export function NoteCard({
                 }}
                 className={
                   isArchived
-                    ? 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
-                    : 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
+                    ? 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-neutral-800 caret-neutral-900 focus:outline-none focus:ring-0 dark:text-neutral-200 dark:caret-neutral-100'
+                    : 'min-h-[80px] max-h-[min(70vh,32rem)] w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden break-words rounded-none border-0 bg-transparent py-1.5 pb-8 text-base text-stone-800 caret-stone-900 focus:outline-none focus:ring-0 dark:text-stone-200 dark:caret-stone-100'
                 }
                 autoFocus
               />
@@ -516,8 +516,8 @@ export function NoteCard({
             <div
               className={
                 isArchived
-                  ? 'flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-neutral-200 px-2 py-2 text-neutral-500 dark:border-neutral-600 dark:text-neutral-400'
-                  : 'flex min-w-0 items-stretch gap-1.5 overflow-visible border-t border-stone-200 px-2 py-2 text-stone-500 dark:border-stone-600 dark:text-stone-400'
+                  ? 'flex min-w-0 max-w-full items-stretch gap-1.5 overflow-hidden border-t border-neutral-200 px-2 py-2 text-neutral-500 dark:border-neutral-600 dark:text-neutral-400'
+                  : 'flex min-w-0 max-w-full items-stretch gap-1.5 overflow-hidden border-t border-stone-200 px-2 py-2 text-stone-500 dark:border-stone-600 dark:text-stone-400'
               }
             >
               <div className="flex min-h-0 min-w-0 flex-1 items-center gap-0 overflow-hidden">
