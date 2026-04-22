@@ -690,11 +690,12 @@ export function WorkspaceProvider({ children }) {
    */
   useEffect(() => {
     if (!canUseSupabase || !hydrationComplete) return undefined;
-    // Adaptive fallback: back off when realtime is healthy, speed up when unhealthy.
-    // This is intentionally conservative: realtime health is best-effort.
+    // Adaptive fallback: back off when the Realtime socket reports SUBSCRIBED, speed up when not.
+    // Do **not** use “time since last broadcast” as health: shared workspaces can be idle for a long
+    // time with no messages while the connection is perfectly fine; treating silence as “unhealthy”
+    // only forces extra fullSyncs (~30s cadence) and can feel like “slow sync” when a message was missed.
     const HEALTHY_INTERVAL_MS = 5 * 60_000;
-    const UNHEALTHY_INTERVAL_MS = 30_000;
-    const HEALTHY_SILENCE_MS = 45_000;
+    const UNHEALTHY_INTERVAL_MS = 20_000;
 
     let timeoutId = null;
     const schedule = (ms) => {
@@ -709,9 +710,8 @@ export function WorkspaceProvider({ children }) {
 
     const nextInterval = () => {
       try {
-        const { connected, lastMessageAt } = getRealtimeHealthSnapshot();
-        const fresh = lastMessageAt != null && Date.now() - lastMessageAt < HEALTHY_SILENCE_MS;
-        return connected && fresh ? HEALTHY_INTERVAL_MS : UNHEALTHY_INTERVAL_MS;
+        const { connected } = getRealtimeHealthSnapshot();
+        return connected ? HEALTHY_INTERVAL_MS : UNHEALTHY_INTERVAL_MS;
       } catch {
         return UNHEALTHY_INTERVAL_MS;
       }
