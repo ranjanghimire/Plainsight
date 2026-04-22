@@ -660,7 +660,7 @@ export function WorkspaceProvider({ children }) {
     const pullIfVisible = () => {
       if (document.visibilityState === 'visible') void queueFullSync();
     };
-    const intervalId = window.setInterval(pullIfVisible, 4_000);
+    const intervalId = window.setInterval(pullIfVisible, 30_000);
     let debounce = null;
     const schedulePull = () => {
       if (document.visibilityState !== 'visible') return;
