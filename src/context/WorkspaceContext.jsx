@@ -27,6 +27,7 @@ import {
   getWorkspaceIdForStorageKey,
   hiddenWorkspaceSlugFromName,
   isCorruptWorkspaceMenuName,
+  isKeyInVisibleWorkspacesList,
   isUuid,
   removeWorkspaceIdMapping,
   resolveWorkspaceIdForStorageKey,
@@ -1560,10 +1561,16 @@ export function WorkspaceProvider({ children }) {
     workspaceSwitchGeneration,
   ]);
 
+  const activeWorkspaceIsHidden = useMemo(
+    () => !isKeyInVisibleWorkspacesList(activeStorageKey, visibleWorkspaces),
+    [activeStorageKey, visibleWorkspaces],
+  );
+
   const value = {
     currentWorkspace,
     workspaceKey,
     activeStorageKey,
+    activeWorkspaceIsHidden,
     hydrationComplete,
     syncHydrationConnectivityWarning,
     data,

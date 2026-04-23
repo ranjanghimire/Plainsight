@@ -160,10 +160,21 @@ function TagsToggleButton() {
 }
 
 function AppHeader({ onOpenSettings }) {
-  const { currentWorkspace, visibleWorkspaces, getWorkspaceNameById } = useWorkspace();
+  const {
+    currentWorkspace,
+    visibleWorkspaces,
+    getWorkspaceNameById,
+    activeWorkspaceIsHidden,
+  } = useWorkspace();
   const { archiveMode } = useArchiveMode();
   const { isTagsRoute } = useTagsNav();
   const location = useLocation();
+
+  const showHiddenWorkspaceCue =
+    activeWorkspaceIsHidden &&
+    !isTagsRoute &&
+    location.pathname !== '/help' &&
+    location.pathname !== '/manage';
 
   const headerTitle = useMemo(() => {
     if (location.pathname === '/help') return 'Help';
@@ -198,9 +209,19 @@ function AppHeader({ onOpenSettings }) {
 
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">
-      <h1 className="font-header text-2xl font-semibold tracking-widest lowercase pl-1 text-stone-800 dark:text-stone-200">
-        {headerTitle}
-      </h1>
+      <div className="flex min-w-0 items-center gap-2.5 pl-1">
+        <h1 className="font-header min-w-0 truncate text-2xl font-semibold tracking-widest lowercase text-stone-800 dark:text-stone-200">
+          {headerTitle}
+        </h1>
+        {showHiddenWorkspaceCue ? (
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-violet-500/[0.28] ring-1 ring-violet-400/25 dark:bg-violet-300/22 dark:ring-violet-300/18"
+            title="Hidden workspace"
+            aria-label="Hidden workspace (not in menu)"
+            role="img"
+          />
+        ) : null}
+      </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <TagsToggleButton />
         <ArchiveHistoryButton />
