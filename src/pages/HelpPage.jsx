@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const navLinks = [
@@ -30,6 +31,11 @@ function Section({ id, eyebrow, title, children }) {
 
 export function HelpPage() {
   const navigate = useNavigate();
+
+  /** Avoid <a href="#…">: hash changes fire `popstate`, and BackNavigationLock sends that to home. */
+  const jumpToSection = useCallback((id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -75,13 +81,14 @@ export function HelpPage() {
             </p>
             <div className="flex flex-wrap gap-2">
               {navLinks.map(({ id, label }) => (
-                <a
+                <button
                   key={id}
-                  href={`#${id}`}
+                  type="button"
+                  onClick={() => jumpToSection(id)}
                   className="rounded-full border border-stone-200/90 bg-white/80 px-3 py-1 text-xs font-medium text-stone-700 shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900/80 dark:text-stone-200 dark:hover:border-stone-500 dark:hover:bg-stone-800"
                 >
                   {label}
-                </a>
+                </button>
               ))}
             </div>
           </nav>
