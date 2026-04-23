@@ -19,7 +19,12 @@ import { normalizeTagDraftInput, parseTagsFromDraft } from '../utils/noteTags';
 const TEXTAREA_MAX_PX = 280;
 /** Avoid 0px inline height when scrollHeight is 0 (e.g. empty field before layout). */
 const TEXTAREA_MIN_AUTO_PX = 104;
+/** Extra capacity when “taller field” is on (~3 lines at text-base / leading-relaxed, 16px root). */
+const TEXTAREA_TALL_EXTRA_LINES_PX = 78;
 const TAG_LEADING_ICON = '#';
+
+const textareaHeightTransition =
+  'transition-[height] duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0';
 
 function SendNoteIcon({ className = 'w-5 h-5' }) {
   return (
@@ -72,6 +77,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
   const [liveTextScanMessage, setLiveTextScanMessage] = useState('');
   const [masterResetPaywallOpen, setMasterResetPaywallOpen] = useState(false);
   const [masterResetCodeOpen, setMasterResetCodeOpen] = useState(false);
+  const [composerExtraTall, setComposerExtraTall] = useState(false);
   const floatingSubmitTopPx = useFloatingSubmitTopPx();
 
   /** Keep multi-line height while focus is in the tag row or format controls, not only in the textarea. */
@@ -113,8 +119,8 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
 
   useEffect(() => {
     if (searchOnly) {
-      setBarFocused(false);
-      return undefined;
+      const id = requestAnimationFrame(() => setBarFocused(false));
+      return () => cancelAnimationFrame(id);
     }
     const el = rootRef.current;
     if (!el) return undefined;
@@ -138,6 +144,12 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     };
   }, [searchOnly]);
 
+  useEffect(() => {
+    if (composerExpanded || searchOnly) return undefined;
+    const id = requestAnimationFrame(() => setComposerExtraTall(false));
+    return () => cancelAnimationFrame(id);
+  }, [composerExpanded, searchOnly]);
+
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -151,9 +163,15 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       return;
     }
     el.style.height = 'auto';
-    const next = Math.min(Math.max(el.scrollHeight, TEXTAREA_MIN_AUTO_PX), TEXTAREA_MAX_PX);
+    const minPx = composerExtraTall
+      ? TEXTAREA_MIN_AUTO_PX + TEXTAREA_TALL_EXTRA_LINES_PX
+      : TEXTAREA_MIN_AUTO_PX;
+    const maxPx = composerExtraTall
+      ? TEXTAREA_MAX_PX + TEXTAREA_TALL_EXTRA_LINES_PX
+      : TEXTAREA_MAX_PX;
+    const next = Math.min(Math.max(el.scrollHeight, minPx), maxPx);
     el.style.height = `${next}px`;
-  }, [value, searchOnly, composerExpanded]);
+  }, [value, searchOnly, composerExpanded, composerExtraTall]);
 
   useLayoutEffect(() => {
     if (searchOnly) return;
@@ -279,10 +297,16 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     onCreateNote?.(combined, { boldFirstLine: boldMode });
     onChange?.('');
     setTagDraft('');
+    setComposerExtraTall(false);
     resetFormatModes();
   }, [searchOnly, value, applyCommand, onCreateNote, onChange, tags, boldMode, resetFormatModes]);
 
   const canSubmit = !searchOnly && Boolean(value.trim());
+
+  const handleToggleComposerTall = useCallback(() => {
+    setComposerExtraTall((v) => !v);
+    openPopover();
+  }, [openPopover]);
 
   const handleLiveTextScan = useCallback(async () => {
     setLiveTextScanMessage('');
@@ -316,13 +340,15 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       <div className="flex gap-2 items-center">
         <textarea
           ref={textareaRef}
-          rows={searchOnly ? 1 : composerExpanded ? 4 : 1}
+          rows={searchOnly ? 1 : composerExpanded ? (composerExtraTall ? 7 : 4) : 1}
           className={
             searchOnly
               ? 'flex-1 h-10 min-h-10 max-h-10 shrink-0 px-3 py-0 mr-2 text-base leading-10 rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none overflow-y-auto dark:text-stone-200 dark:placeholder-stone-500'
               : composerExpanded
-                ? 'flex-1 min-h-[6.5rem] max-h-80 px-4 py-2.5 text-base leading-relaxed rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500'
-                : 'flex-1 h-10 min-h-10 max-h-10 shrink-0 px-4 py-0 mr-2 text-base leading-10 rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none overflow-y-auto dark:text-stone-200 dark:placeholder-stone-500'
+                ? `flex-1 min-h-[6.5rem] px-4 py-2.5 text-base leading-relaxed rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none dark:text-stone-200 dark:placeholder-stone-500 ${textareaHeightTransition} ${
+                    composerExtraTall ? 'max-h-[23rem]' : 'max-h-80'
+                  }`
+                : `flex-1 h-10 min-h-10 max-h-10 shrink-0 px-4 py-0 mr-2 text-base leading-10 rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none overflow-y-auto dark:text-stone-200 dark:placeholder-stone-500 ${textareaHeightTransition}`
           }
           placeholder={searchOnly ? 'Search archive..' : 'Type here..'}
           value={value}
@@ -439,6 +465,8 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
             setValue={setValueFromFormat}
             applyBulletLineToggle={applyBulletLineToggle}
             applyCheckboxLineToggle={applyCheckboxLineToggle}
+            composerExtraTall={composerExtraTall}
+            onToggleComposerTall={handleToggleComposerTall}
           />
             </div>
           </div>

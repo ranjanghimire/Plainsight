@@ -94,6 +94,25 @@ function CollapseChevronIcon({ className }) {
   );
 }
 
+/** Grow note field by a few lines (corners outward). */
+function ExpandNoteFieldIcon({ className }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7" />
+    </svg>
+  );
+}
+
+/** Return to default expanded height (inward corners). */
+function ShrinkNoteFieldIcon({ className }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 14v4h4M20 10V6h-4M4 10l6-6M20 14l-6 6M14 4h4v4M10 20H6v-4M14 20l6-6M10 4L4 10" />
+    </svg>
+  );
+}
+
 const inlineBtnBase =
   'flex min-w-0 shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors select-none';
 const inlineOff =
@@ -125,6 +144,9 @@ export function NoteFormatPopover({
   setValue,
   applyBulletLineToggle,
   applyCheckboxLineToggle,
+  /** Home composer: extra-tall textarea toggle (optional). */
+  composerExtraTall = false,
+  onToggleComposerTall,
 }) {
   return (
     <div
@@ -179,6 +201,26 @@ export function NoteFormatPopover({
         >
           <ChecklistToggleIcon className="h-3.5 w-3.5 shrink-0" active={checklistMode} />
         </button>
+        {typeof onToggleComposerTall === 'function' ? (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleComposerTall();
+            }}
+            className={`${inlineBtnBase} shrink-0 px-1.5 ${composerExtraTall ? inlineOn : inlineOff}`}
+            aria-pressed={composerExtraTall}
+            aria-label={composerExtraTall ? 'Use shorter note field' : 'Taller note field'}
+            title={composerExtraTall ? 'Shorter field' : 'Taller field'}
+          >
+            {composerExtraTall ? (
+              <ShrinkNoteFieldIcon className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ExpandNoteFieldIcon className="h-3.5 w-3.5 shrink-0" />
+            )}
+          </button>
+        ) : null}
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
