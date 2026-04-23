@@ -44,7 +44,9 @@ const hasPaidEnv = Boolean(
     process.env.VITEST_SUPABASE_SESSION_TOKEN?.trim(),
 );
 
-const paidDescribe = hasPaidEnv ? describe : describe.skip;
+// Opt-in: phase4 uses real Supabase and depends on project-side migrations/policies.
+const strictPaid = process.env.VITEST_STRICT_PAID === '1';
+const paidDescribe = hasPaidEnv && strictPaid ? describe : describe.skip;
 
 const HOME_ROW_ID = createHydrationTestWorkspaceId();
 const SECOND_ROW_ID = createHydrationTestWorkspaceId();

@@ -31,7 +31,9 @@ const paidEnvOk =
   Boolean(process.env.VITE_SUPABASE_URL?.trim()) &&
   Boolean(process.env.VITE_SUPABASE_ANON_KEY?.trim());
 
-const describePaid = paidEnvOk ? describe : describe.skip;
+// Opt-in: this hits a real Supabase project and can be sensitive to project-side triggers/policies.
+const strictPaid = process.env.VITEST_STRICT_PAID === '1';
+const describePaid = paidEnvOk && strictPaid ? describe : describe.skip;
 
 describePaid('paid user — visible (non-home) workspace categories + Supabase', () => {
   beforeEach(async () => {

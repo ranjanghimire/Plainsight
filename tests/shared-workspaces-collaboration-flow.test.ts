@@ -37,7 +37,9 @@ const hasPaidEnv = Boolean(
     process.env.VITEST_SUPABASE_USER_ID?.trim() &&
     process.env.VITEST_SUPABASE_SESSION_TOKEN?.trim(),
 );
-const paidDescribe = hasPaidEnv ? describe : describe.skip;
+// Opt-in: these are end-to-end Supabase collaboration tests and can be flaky across projects.
+const strictPaid = process.env.VITEST_STRICT_PAID === '1';
+const paidDescribe = hasPaidEnv && strictPaid ? describe : describe.skip;
 
 type StorageSnapshot = {
   local: Record<string, string>;

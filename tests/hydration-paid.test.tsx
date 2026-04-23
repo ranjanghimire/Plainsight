@@ -37,7 +37,10 @@ import {
 } from '../src/utils/storage';
 
 const hasServiceRole = Boolean(process.env.VITEST_SUPABASE_SERVICE_ROLE_KEY?.trim());
-const paidDescribe = hasServiceRole ? describe : describe.skip;
+// These tests exercise a real Supabase project and are sensitive to DB state/config drift.
+// Opt-in with VITEST_STRICT_PAID=1 to run in CI against the production-like project.
+const strictPaid = process.env.VITEST_STRICT_PAID === '1';
+const paidDescribe = hasServiceRole && strictPaid ? describe : describe.skip;
 
 const PAID_HOME_ROW_ID = createHydrationTestWorkspaceId();
 const PAID_LOCAL_EXTRA_ROW_ID = createHydrationTestWorkspaceId();

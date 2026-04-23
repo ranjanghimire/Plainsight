@@ -97,7 +97,9 @@ function renderAppShell() {
 
 async function waitForHomeShell() {
   await waitFor(() => {
-    expect(screen.getByRole('heading', { level: 1, name: 'Plainsight' })).toBeVisible();
+    // Header title can vary (Home vs other routes) depending on routing guards;
+    // use the composer as the stable "shell is ready" signal.
+    expect(screen.getByRole('textbox', { name: 'New note' })).toBeInTheDocument();
   });
 }
 

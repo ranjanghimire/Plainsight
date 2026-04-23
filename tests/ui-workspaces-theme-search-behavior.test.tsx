@@ -100,8 +100,17 @@ describe('cold start & routing', () => {
     seedFreshHomeWorkspace();
     renderFullApp(['/w/not-a-real-workspace-slug']);
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: 'Plainsight' })).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'New note' })).toBeInTheDocument();
     });
+    // /w/:slug is a valid legacy hidden workspace route; it should load that hidden workspace.
+    await waitFor(() =>
+      expect(workspaceTestHandlesRef.current?.activeStorageKey).toBe(
+        'workspace_not-a-real-workspace-slug',
+      ),
+    );
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Not-A-Real-Workspace-Slug' }),
+    ).toBeInTheDocument();
   });
 });
 
