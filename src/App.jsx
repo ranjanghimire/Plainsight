@@ -194,17 +194,10 @@ function AppHeader({ onOpenSettings }) {
     location.pathname,
   ]);
 
-  const isPlainsightMark = headerTitle === 'Plainsight';
-
   return (
     <header className="border-b border-stone-200 dark:border-stone-600 py-3 mb-4 flex items-center justify-between gap-4">
-      <h1
-        aria-label={isPlainsightMark ? 'Plainsight' : undefined}
-        className={`font-header text-2xl font-semibold tracking-widest lowercase pl-1 text-stone-800 dark:text-stone-200 ${
-          isPlainsightMark ? 'plainsight-header-mark' : ''
-        }`}
-      >
-        {isPlainsightMark ? 'plainsight' : headerTitle}
+      <h1 className="font-header text-2xl font-semibold tracking-widest lowercase pl-1 text-stone-800 dark:text-stone-200">
+        {headerTitle}
       </h1>
       <div className="flex items-center gap-0.5 shrink-0">
         <TagsToggleButton />

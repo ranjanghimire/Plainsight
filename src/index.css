@@ -7,21 +7,6 @@ html {
   overscroll-behavior-x: none;
 }
 
-@layer components {
-  /**
-   * App header wordmark: only “p” uses Fascinate Inline; rest stays font-header.
-   * Size tuned so cap-height / word rhythm align with text-2xl SF Pro stack.
-   */
-  .plainsight-header-mark::first-letter {
-    font-family: 'Fascinate Inline', cursive;
-    font-weight: 400;
-    font-size: 1.26em;
-    line-height: 1;
-    letter-spacing: 0;
-    margin-right: 0.02em;
-  }
-}
-
 @layer utilities {
   @keyframes plainsight-restore-out {
     to {
