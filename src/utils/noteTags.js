@@ -53,6 +53,8 @@ export function normalizeTagDraftInput(raw) {
   let v = String(raw ?? '');
   v = v.replace(/^#+/, '');
   v = v.replace(/\s+#+/g, ' #');
+  // iOS autocorrect can turn "#tag" into "# tag" mid-typing; normalize back.
+  v = v.replace(/#\s+/g, '#');
   return v;
 }
 
@@ -65,6 +67,7 @@ export function tagDraftToHashtagLine(draft) {
   if (!t) return '';
   t = t.replace(/^#+/, '');
   t = t.replace(/\s+#+/g, ' #');
+  t = t.replace(/#\s+/g, '#');
   t = t.replace(/\s+#\s*$/, '');
   if (!t) return '';
   const segments = t

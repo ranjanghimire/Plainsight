@@ -148,114 +148,112 @@ export function NoteFormatPopover({
   composerExtraTall = false,
   onToggleComposerTall,
 }) {
+  // Avoid opacity/max-width transition layers sitting above the tag input on mobile Safari.
+  // Conditional rendering keeps the tag row readable while collapsed.
   return (
     <div
       className="flex min-w-0 max-w-full shrink items-center justify-end gap-0 self-center"
       role="group"
       aria-label="Note formatting options"
     >
-      <div
-        className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} ${
-          expanded ? 'max-w-[min(100%,30rem)] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
-        }`}
-        aria-hidden={!expanded}
-      >
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onBoldChange(!boldMode);
-          }}
-          className={`${inlineBtnBase} shrink-0 ${boldMode ? inlineOn : inlineOff}`}
-          aria-pressed={boldMode}
+      {expanded ? (
+        <div
+          className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} max-w-[min(100%,30rem)] opacity-100`}
+          aria-hidden={false}
         >
-          <BoldToggleIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-nowrap">First line Bold</span>
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            applyBulletLineToggle(textareaRef?.current, value, setValue);
-          }}
-          className={`${inlineBtnBase} shrink-0 px-1.5 ${bulletsMode ? inlineOn : inlineOff}`}
-          aria-pressed={bulletsMode}
-          aria-label="Bullets"
-          title="Bullets"
-        >
-          <BulletsToggleIcon className="h-3.5 w-3.5 shrink-0" />
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            applyCheckboxLineToggle(textareaRef?.current, value, setValue);
-          }}
-          className={`${inlineBtnBase} shrink-0 px-1.5 ${checklistMode ? inlineOn : inlineOff}`}
-          aria-pressed={checklistMode}
-          aria-label="Checklist"
-          title="Checklist"
-        >
-          <ChecklistToggleIcon className="h-3.5 w-3.5 shrink-0" active={checklistMode} />
-        </button>
-        {typeof onToggleComposerTall === 'function' ? (
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleComposerTall();
+              onBoldChange(!boldMode);
             }}
-            className={`${inlineBtnBase} shrink-0 px-1.5 ${composerExtraTall ? inlineOn : inlineOff}`}
-            aria-pressed={composerExtraTall}
-            aria-label={composerExtraTall ? 'Use shorter note field' : 'Taller note field'}
-            title={composerExtraTall ? 'Shorter field' : 'Taller field'}
+            className={`${inlineBtnBase} shrink-0 ${boldMode ? inlineOn : inlineOff}`}
+            aria-pressed={boldMode}
           >
-            {composerExtraTall ? (
-              <ShrinkNoteFieldIcon className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ExpandNoteFieldIcon className="h-3.5 w-3.5 shrink-0" />
-            )}
+            <BoldToggleIcon className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">First line Bold</span>
           </button>
-        ) : null}
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className={`${collapseTriggerClass} shrink-0`}
-          aria-label="Collapse formatting options"
-          title="Collapse"
-          aria-expanded={expanded}
-        >
-          <CollapseChevronIcon className="h-4 w-4" />
-        </button>
-      </div>
-      <div
-        className={`shrink-0 overflow-hidden ${formatTrayMotion} ${
-          expanded ? 'max-w-0 opacity-0 pointer-events-none' : 'max-w-7 opacity-100'
-        }`}
-        aria-hidden={expanded}
-      >
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
-          className={expandTriggerClass}
-          aria-label="Show note formatting options"
-          aria-expanded={expanded}
-        >
-          <FormatOptionsIcon className="h-3.5 w-3.5" />
-        </button>
-      </div>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              applyBulletLineToggle(textareaRef?.current, value, setValue);
+            }}
+            className={`${inlineBtnBase} shrink-0 px-1.5 ${bulletsMode ? inlineOn : inlineOff}`}
+            aria-pressed={bulletsMode}
+            aria-label="Bullets"
+            title="Bullets"
+          >
+            <BulletsToggleIcon className="h-3.5 w-3.5 shrink-0" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              applyCheckboxLineToggle(textareaRef?.current, value, setValue);
+            }}
+            className={`${inlineBtnBase} shrink-0 px-1.5 ${checklistMode ? inlineOn : inlineOff}`}
+            aria-pressed={checklistMode}
+            aria-label="Checklist"
+            title="Checklist"
+          >
+            <ChecklistToggleIcon className="h-3.5 w-3.5 shrink-0" active={checklistMode} />
+          </button>
+          {typeof onToggleComposerTall === 'function' ? (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleComposerTall();
+              }}
+              className={`${inlineBtnBase} shrink-0 px-1.5 ${composerExtraTall ? inlineOn : inlineOff}`}
+              aria-pressed={composerExtraTall}
+              aria-label={composerExtraTall ? 'Use shorter note field' : 'Taller note field'}
+              title={composerExtraTall ? 'Shorter field' : 'Taller field'}
+            >
+              {composerExtraTall ? (
+                <ShrinkNoteFieldIcon className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ExpandNoteFieldIcon className="h-3.5 w-3.5 shrink-0" />
+              )}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className={`${collapseTriggerClass} shrink-0`}
+            aria-label="Collapse formatting options"
+            title="Collapse"
+            aria-expanded
+          >
+            <CollapseChevronIcon className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className={`shrink-0 overflow-hidden ${formatTrayMotion} max-w-7 opacity-100`} aria-hidden={false}>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+            className={expandTriggerClass}
+            aria-label="Show note formatting options"
+            aria-expanded={false}
+          >
+            <FormatOptionsIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
