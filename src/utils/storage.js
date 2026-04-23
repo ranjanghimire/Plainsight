@@ -259,11 +259,20 @@ export function removeWorkspaceIdMapping(storageKey, workspaceIdArg) {
 
 export function getOrCreateWorkspaceIdForStorageKey(storageKey) {
   const map = readWorkspaceIdMap();
+  // Visible workspace keys embed the UUID (critical for sync + shared ownership).
+  if (typeof storageKey === 'string' && storageKey.startsWith(VISIBLE_WS_PREFIX)) {
+    const embedded = storageKey.slice(VISIBLE_WS_PREFIX.length);
+    if (isUuid(embedded)) {
+      setWorkspaceIdMapping(storageKey, embedded);
+      return embedded;
+    }
+  }
+
   const existing = map[storageKey];
   if (typeof existing === 'string' && existing) return existing;
+
   const id = generateUuid();
-  map[storageKey] = id;
-  writeWorkspaceIdMap(map);
+  setWorkspaceIdMapping(storageKey, id);
   return id;
 }
 
