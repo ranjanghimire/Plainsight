@@ -29,6 +29,7 @@ import { HomePage } from './pages/HomePage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
 import { TagsPage } from './pages/TagsPage';
+import { HelpPage } from './pages/HelpPage';
 import { VISIBLE_WS_PREFIX, isUuid } from './utils/storage';
 
 function RedirectWorkspaceOnLoad() {
@@ -165,6 +166,7 @@ function AppHeader({ onOpenSettings }) {
   const location = useLocation();
 
   const headerTitle = useMemo(() => {
+    if (location.pathname === '/help') return 'Help';
     if (location.pathname === '/manage') return 'Plainsight';
     if (isTagsRoute) return 'Tags';
     if (archiveMode) return 'Archive';
@@ -232,6 +234,7 @@ export function AppRoutes() {
             <Route path="/w/:workspace" element={<WorkspacePage />} />
             <Route path="/ws/:workspace" element={<WorkspacePage />} />
             <Route path="/manage" element={<ManagePage />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="/tags" element={<TagsPage />} />
           </Routes>
         </TagsRouteTransitionShell>

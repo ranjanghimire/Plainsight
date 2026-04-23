@@ -648,17 +648,27 @@ export function MenuPanel({ open, onClose }) {
             </div>
           </div>
 
-          {customAuthSession && authEmail ? (
-            <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
+          <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                navigate('/help');
+              }}
+              className="w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
+            >
+              Help
+            </button>
+            {customAuthSession && authEmail ? (
               <button
                 type="button"
                 onClick={() => setSignOutConfirmOpen(true)}
-                className="w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
+                className="mt-2.5 w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
               >
                 Sign out
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </aside>
 
