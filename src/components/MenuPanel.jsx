@@ -761,7 +761,7 @@ export function MenuPanel({ open, onClose }) {
           if (t?.kind === 'workspace') {
             setWorkspaceRenameTarget(t.entry);
             setWorkspaceRenameDraft(t.entry.name);
-          } else if (t?.kind === 'shared-workspace' && t.row?.isOwner) {
+          } else if (t?.kind === 'shared-workspace') {
             const entry = visibleEntryFromSharedOwnerRow(t.row);
             setWorkspaceRenameTarget(entry);
             setWorkspaceRenameDraft(entry.name);
