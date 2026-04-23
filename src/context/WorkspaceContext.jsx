@@ -946,28 +946,33 @@ export function WorkspaceProvider({ children }) {
       });
     }
 
-    void ensureWorkspaceRow({
-      storageKey: entry.key,
-      name,
-      kind: 'visible',
-    });
-    // Force this rename to win mergeWorkspaces even with device clock skew.
-    // (mergeWorkspaces only pushes when local.updated_at > remote.updated_at)
+    // Persist rename into local workspace rows (used by mergeWorkspaces) before triggering sync.
+    // mergeWorkspaces only pushes when local.updated_at > remote.updated_at, so we bump updated_at
+    // slightly into the future to be resilient to device clock skew and async races.
     void (async () => {
+      const wid2 = extractWorkspaceIdFromVisibleEntry(entry);
+      await ensureWorkspaceRow({
+        storageKey: entry.key,
+        name,
+        kind: 'visible',
+      });
       try {
-        const wid2 = extractWorkspaceIdFromVisibleEntry(entry);
         if (!wid2) return;
         const list = await getLocalWorkspaces();
         const bump = new Date(Date.now() + 2 * 60_000).toISOString();
-        const nextList = (list || []).map((w) =>
-          String(w.id) === String(wid2) ? { ...w, name, updated_at: bump } : w,
-        );
-        await saveLocalWorkspaces(nextList);
+        let changed = false;
+        const nextList = (list || []).map((w) => {
+          if (String(w.id) !== String(wid2)) return w;
+          changed = true;
+          return { ...w, name, updated_at: bump };
+        });
+        if (changed) await saveLocalWorkspaces(nextList);
       } catch {
         /* ignore */
+      } finally {
+        queueFullSync();
       }
     })();
-    queueFullSync();
   }, []);
 
   const deleteVisibleWorkspace = useCallback(
