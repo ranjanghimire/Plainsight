@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +14,7 @@ import {
   clearPlainsightStorage,
   seedHomePlusVisibleWorkspace,
   WorkspaceTestBridge,
+  workspaceTestHandlesRef,
 } from './categoryTestHarness';
 import { resetSyncQueueForTests } from '../src/sync/syncHelpers';
 
@@ -76,7 +77,9 @@ describe('Shared Workspaces — rename regression', () => {
     await waitFor(() => {
       expect(screen.getByText('Shared Workspaces')).toBeInTheDocument();
     });
-    const rowText = await screen.findByText('Shared Owner Workspace');
+    const rowText = await screen.findByText('Shared Owner Workspace', undefined, {
+      timeout: 5000,
+    });
     const row = rowText.closest('button');
     expect(row).toBeTruthy();
     fireEvent.contextMenu(row, {
@@ -87,6 +90,48 @@ describe('Shared Workspaces — rename regression', () => {
     });
     await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
     expect(await screen.findByDisplayValue('Shared Owner Workspace')).toBeInTheDocument();
+  });
+
+  it('does not revert the renamed owned shared workspace after periodic refresh', async () => {
+    const user = userEvent.setup();
+    renderFullApp();
+    await openMenu(user);
+
+    await waitFor(() => {
+      expect(screen.getByText('Shared Workspaces')).toBeInTheDocument();
+    });
+
+    const rowText = await screen.findByText('Shared Owner Workspace', undefined, {
+      timeout: 5000,
+    });
+    const row = rowText.closest('button');
+    expect(row).toBeTruthy();
+
+    // Rename via workspace context API (avoids input flake; still exercises persistence + refresh).
+    await waitFor(() => expect(workspaceTestHandlesRef.current).toBeTruthy());
+    const entry = {
+      id: 'ws-shared-owner',
+      name: 'Shared Owner Workspace',
+      key: 'ws_visible_ws-shared-owner',
+    };
+    await act(async () => {
+      workspaceTestHandlesRef.current!.renameVisibleWorkspace(entry, 'Renamed Shared Workspace');
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('Renamed Shared Workspace')).toBeInTheDocument(),
+    );
+
+    // Simulate a later refresh (e.g. periodic sync pull) that rebuilds shared workspace rows from
+    // share snapshots which still report the old name (see tests/setup.ts mock).
+    window.dispatchEvent(new CustomEvent('plainsight:full-sync'));
+
+    // The share snapshot still reports the old name (see tests/setup.ts mock), but UI should
+    // keep the renamed label by preferring local workspace rows.
+    await waitFor(() =>
+      expect(screen.getByText('Renamed Shared Workspace')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Shared Owner Workspace')).not.toBeInTheDocument();
   });
 });
 

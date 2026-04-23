@@ -302,12 +302,9 @@ export function WorkspaceProvider({ children }) {
         const wid = String(w.id);
         const nm = typeof w.name === 'string' ? w.name.trim() : '';
         if (!nm) continue;
-        const prev = nameById.get(wid);
-        const prevGeneric =
-          !prev ||
-          /^workspace$/i.test(String(prev).trim()) ||
-          String(prev).trim() === 'Workspace';
-        if (!prev || prevGeneric) nameById.set(wid, nm);
+        // Local workspaces represent our current best-known label for a workspace id.
+        // Always prefer them over share snapshots to avoid UI "reverts" after periodic refreshes.
+        nameById.set(wid, nm);
       }
     } catch {
       /* ignore */
