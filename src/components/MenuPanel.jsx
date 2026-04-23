@@ -648,10 +648,7 @@ export function MenuPanel({ open, onClose }) {
             </div>
           </div>
 
-          {authReady &&
-          customAuthSession &&
-          revenueCatReady &&
-          !isSubscriptionStatusPending ? (
+          {customAuthSession && authEmail ? (
             <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
               <button
                 type="button"

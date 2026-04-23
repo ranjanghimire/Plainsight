@@ -733,3 +733,53 @@ export function setOwnerSharedWorkspaceIdsCache(ids) {
     /* ignore */
   }
 }
+
+/** Accepted + pending shared workspace menu rows, keyed by Plainsight user id (OTP session). */
+const SHARED_WS_MENU_CACHE_PREFIX = 'plainsight_shared_ws_menu_v1_';
+
+/**
+ * @param {string} userId
+ * @returns {{ acceptedRows: unknown[]; pendingRows: unknown[] } | null}
+ */
+export function readSharedWorkspaceMenuCache(userId) {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(SHARED_WS_MENU_CACHE_PREFIX + userId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.v !== 1) return null;
+    const acceptedRows = Array.isArray(parsed.acceptedRows) ? parsed.acceptedRows : [];
+    const pendingRows = Array.isArray(parsed.pendingRows) ? parsed.pendingRows : [];
+    return { acceptedRows, pendingRows };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} userId
+ * @param {{ acceptedRows?: unknown[]; pendingRows?: unknown[] }} payload
+ */
+export function writeSharedWorkspaceMenuCache(userId, payload) {
+  if (!userId) return;
+  try {
+    const acceptedRows = Array.isArray(payload?.acceptedRows) ? payload.acceptedRows : [];
+    const pendingRows = Array.isArray(payload?.pendingRows) ? payload.pendingRows : [];
+    localStorage.setItem(
+      SHARED_WS_MENU_CACHE_PREFIX + userId,
+      JSON.stringify({ v: 1, acceptedRows, pendingRows }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+/** @param {string | null | undefined} userId */
+export function clearSharedWorkspaceMenuCache(userId) {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(SHARED_WS_MENU_CACHE_PREFIX + userId);
+  } catch {
+    /* ignore */
+  }
+}

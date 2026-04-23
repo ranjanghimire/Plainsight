@@ -34,6 +34,8 @@ import {
   setOwnerSharedWorkspaceIdsCache,
   slugFromLegacyHiddenStorageKey,
   countHiddenWorkspaceKeys,
+  readSharedWorkspaceMenuCache,
+  writeSharedWorkspaceMenuCache,
 } from '../utils/storage';
 import {
   MAX_ARCHIVED_ITEMS_PER_WORKSPACE,
@@ -46,6 +48,7 @@ import { refreshSupabaseRealtimeJwt, whenRealtimeAuthReady } from '../sync/supab
 import {
   getCanUseSupabase,
   getSyncEntitled,
+  hasCustomAuthSession,
   subscribeSyncGating,
 } from '../sync/syncEnabled';
 import { useSyncEntitlement } from './SyncEntitlementContext';
@@ -181,6 +184,20 @@ function computeSyncPlaceholderState() {
   };
 }
 
+/** Last menu snapshot for drawer; avoids empty “Shared workspaces” while shares refetch after boot. */
+function readInitialSharedMenuFromCacheForSession() {
+  if (!hasCustomAuthSession()) {
+    return { rows: [], pending: [] };
+  }
+  const { userId } = getLocalSession();
+  if (!userId) return { rows: [], pending: [] };
+  const cached = readSharedWorkspaceMenuCache(userId);
+  return {
+    rows: cached?.acceptedRows ?? [],
+    pending: cached?.pendingRows ?? [],
+  };
+}
+
 export function WorkspaceProvider({ children }) {
   const { showToast } = useSyncEntitlement();
   const initialWorkspaceState = useMemo(() => computeSyncPlaceholderState(), []);
@@ -238,10 +255,13 @@ export function WorkspaceProvider({ children }) {
   const [workspaceSwitchGeneration, setWorkspaceSwitchGeneration] = useState(0);
   /** Raw share rows visible to current user (owner/recipient). */
   const [sharedWorkspaceShares, setSharedWorkspaceShares] = useState([]);
+  const initialSharedMenu = useMemo(() => readInitialSharedMenuFromCacheForSession(), []);
   /** Accepted shared workspaces shown in the menu section. */
-  const [sharedWorkspaceRows, setSharedWorkspaceRows] = useState([]);
+  const [sharedWorkspaceRows, setSharedWorkspaceRows] = useState(() => initialSharedMenu.rows);
   /** Pending incoming invites for the signed-in user. */
-  const [pendingSharedInvites, setPendingSharedInvites] = useState([]);
+  const [pendingSharedInvites, setPendingSharedInvites] = useState(
+    () => initialSharedMenu.pending,
+  );
   /** Local / entitled-only: true. When canUseSupabase, false until fullSync notifies. */
   const [canUseSupabase, setCanUseSupabase] = useState(() => getCanUseSupabase());
   const [hydrationComplete, setHydrationComplete] = useState(() => !getCanUseSupabase());
@@ -304,6 +324,13 @@ export function WorkspaceProvider({ children }) {
     setSharedWorkspaceShares(localRows);
     setSharedWorkspaceRows(built.acceptedRows);
     setPendingSharedInvites(built.pendingRows);
+    const cacheUid = getLocalSession().userId;
+    if (cacheUid) {
+      writeSharedWorkspaceMenuCache(cacheUid, {
+        acceptedRows: built.acceptedRows,
+        pendingRows: built.pendingRows,
+      });
+    }
     return { ok: true };
   }, [visibleWorkspaces]);
 
@@ -637,19 +664,6 @@ export function WorkspaceProvider({ children }) {
     window.addEventListener('plainsight:full-sync', onSync);
     return () => window.removeEventListener('plainsight:full-sync', onSync);
   }, [canUseSupabase, activeStorageKey, refreshSharedWorkspaceState]);
-
-  useEffect(() => {
-    if (!canUseSupabase || !hydrationComplete) {
-      if (!canUseSupabase) {
-        setSharedWorkspaceShares([]);
-        setSharedWorkspaceRows([]);
-        setPendingSharedInvites([]);
-      }
-      return undefined;
-    }
-    void refreshSharedWorkspaceState();
-    return undefined;
-  }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
 
   /** Postgres Realtime on workspace_shares: pending invites + accept state without full page refresh. */
   useEffect(() => {
@@ -1463,8 +1477,25 @@ export function WorkspaceProvider({ children }) {
   }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
 
   useEffect(() => {
-    if (!canUseSupabase || !hydrationComplete) return;
+    if (!hasCustomAuthSession()) {
+      setSharedWorkspaceShares([]);
+      setSharedWorkspaceRows([]);
+      setPendingSharedInvites([]);
+      setOwnerSharedWorkspaceIdsCache(new Set());
+      return undefined;
+    }
+    if (!canUseSupabase) {
+      if (hydrationComplete) {
+        setSharedWorkspaceShares([]);
+        setSharedWorkspaceRows([]);
+        setPendingSharedInvites([]);
+        setOwnerSharedWorkspaceIdsCache(new Set());
+      }
+      return undefined;
+    }
+    if (!hydrationComplete) return undefined;
     void refreshSharedWorkspaceState();
+    return undefined;
   }, [
     canUseSupabase,
     hydrationComplete,

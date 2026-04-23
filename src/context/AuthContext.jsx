@@ -31,6 +31,7 @@ import {
 } from '../auth/authDisplayEmail';
 import { SendCodeModal } from '../components/SendCodeModal';
 import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
+import { clearSharedWorkspaceMenuCache } from '../utils/storage';
 
 function isLocalDevSession() {
   const { sessionToken, userId } = getLocalSession();
@@ -124,6 +125,7 @@ export function AuthProvider({ children }) {
         }
         setAuthConnectivityDegraded(false);
         persistLastKnownSyncEntitledForMenu(false);
+        clearSharedWorkspaceMenuCache(getLocalSession().userId);
         clearSession();
         setSyncRemoteActive(false);
         clearAuthDisplayEmailStorage();
@@ -220,6 +222,7 @@ export function AuthProvider({ children }) {
     persistLastKnownSyncEntitledForMenu(null);
     sessionValidationTicketRef.current += 1;
     setAuthConnectivityDegraded(false);
+    clearSharedWorkspaceMenuCache(getLocalSession().userId);
     clearSession();
     setSyncRemoteActive(false);
     clearAuthDisplayEmailStorage();
