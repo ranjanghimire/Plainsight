@@ -158,7 +158,7 @@ export function NoteFormatPopover({
     >
       {expanded ? (
         <div
-          className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-0.5 overflow-hidden ${formatTrayMotion} max-w-[min(100%,30rem)] opacity-100`}
+          className={`flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-0.5 overflow-x-auto overflow-y-hidden ${formatTrayMotion} max-w-[min(100%,30rem)] opacity-100`}
           aria-hidden={false}
         >
           <button
