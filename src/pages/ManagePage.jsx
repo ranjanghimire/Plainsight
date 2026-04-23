@@ -139,20 +139,20 @@ export function ManagePage() {
             : ''
         }
       >
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">
+      <div className="flex items-center justify-between gap-4 pb-5 mb-5 border-b border-stone-200/90 dark:border-stone-600/80">
+        <h2 className="text-xl font-semibold tracking-tight text-stone-800 dark:text-stone-100">
           Hidden Workspaces
         </h2>
         <button
           type="button"
           onClick={goToMainHome}
-          className="text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
+          className="shrink-0 text-sm font-medium text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-200 transition-colors"
         >
           ← Back
         </button>
       </div>
 
-      <ul className="space-y-3">
+      <ul className="space-y-3 sm:space-y-3.5">
         {workspaces.map((entry) => {
           const { storageKey, displayName } = entry;
           const routeSlug = getWorkspaceNameFromKey(storageKey);
@@ -160,7 +160,7 @@ export function ManagePage() {
           return (
             <li
               key={entry.id}
-              className="flex items-center justify-between gap-2 p-3 rounded-lg border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800"
+              className="flex items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border border-stone-200/90 bg-white shadow-sm shadow-stone-900/5 dark:border-stone-600 dark:bg-stone-800/90 dark:shadow-none"
             >
               {isEditing ? (
                 <>
@@ -223,14 +223,16 @@ export function ManagePage() {
       </ul>
 
       {workspaces.length === 0 && (
-        <p className="text-stone-500 dark:text-stone-400 text-sm">No hidden workspaces yet.</p>
+        <p className="py-8 px-1 text-center text-sm text-stone-500 dark:text-stone-400 rounded-xl border border-dashed border-stone-200 dark:border-stone-600 bg-stone-50/80 dark:bg-stone-900/40">
+          No hidden workspaces yet.
+        </p>
       )}
 
-      <div className="pt-4 border-t border-stone-200 dark:border-stone-600">
+      <div className="pt-6 mt-2 border-t border-stone-200 dark:border-stone-600">
         <button
           type="button"
           onClick={() => setResetMasterKeyDialogOpen(true)}
-          className="text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
+          className="text-sm font-medium text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-200 transition-colors"
         >
           Reset master key
         </button>
