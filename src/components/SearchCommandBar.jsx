@@ -2,7 +2,13 @@ import { useCallback, useRef, useLayoutEffect, useMemo, useState, useEffect } fr
 import { Capacitor } from '@capacitor/core';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { getMasterKey, setMasterKey, clearMasterKey } from '../utils/storage';
+import { useSyncEntitlement } from '../context/SyncEntitlementContext';
+import { useAuth } from '../context/AuthContext';
+import { hasCustomAuthSession } from '../sync/syncEnabled';
+import { sendMasterKeyResetEmail } from '../auth/masterKeyReset';
+import { ConfirmDialog } from './ConfirmDialog';
+import { MasterKeyResetCodeModal } from './MasterKeyResetCodeModal';
+import { getMasterKey, setMasterKey } from '../utils/storage';
 import { LiveTextScanner } from '../plugins/liveTextScanner.js';
 import { useNoteFormatModes } from '../hooks/useNoteFormatModes.jsx';
 import { useFloatingSubmitTopPx } from '../hooks/useVisualViewportBottomInset.js';
@@ -54,6 +60,8 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
   const navigate = useNavigate();
   const { switchWorkspace, currentWorkspace, canOpenOrCreateHiddenWorkspace } =
     useWorkspace();
+  const { syncEntitled, beginUpgradeFlow, showToast } = useSyncEntitlement();
+  const { authEmail } = useAuth();
   const textareaRef = useRef(null);
   const rootRef = useRef(null);
   /** True while focus is anywhere inside the bar (textarea, tags, or send). */
@@ -62,6 +70,8 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
   const [tagDraft, setTagDraft] = useState('');
   const [liveTextScanAvailable, setLiveTextScanAvailable] = useState(false);
   const [liveTextScanMessage, setLiveTextScanMessage] = useState('');
+  const [masterResetPaywallOpen, setMasterResetPaywallOpen] = useState(false);
+  const [masterResetCodeOpen, setMasterResetCodeOpen] = useState(false);
   const floatingSubmitTopPx = useFloatingSubmitTopPx();
 
   /** Keep multi-line height while focus is in the tag row or format controls, not only in the textarea. */
@@ -174,6 +184,27 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
     [onChange, searchOnly],
   );
 
+  const runDotResetCommand = useCallback(async () => {
+    if (!hasCustomAuthSession()) {
+      showToast('Sign in with your email to use ..reset.');
+      return;
+    }
+    if (!syncEntitled) {
+      setMasterResetPaywallOpen(true);
+      return;
+    }
+    const res = await sendMasterKeyResetEmail();
+    if (!res.ok) {
+      if (res.notEntitled) {
+        setMasterResetPaywallOpen(true);
+        return;
+      }
+      showToast(res.error);
+      return;
+    }
+    setMasterResetCodeOpen(true);
+  }, [showToast, syncEntitled]);
+
   const applyCommand = useCallback(() => {
     const cmd = value.trim();
     if (!cmd) return;
@@ -186,9 +217,9 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
       return;
     }
     if (cmd.startsWith('..')) {
-      if (cmd === '..reset') {
-        clearMasterKey();
+      if (cmd.toLowerCase() === '..reset') {
         onChange?.('');
+        void runDotResetCommand();
         return;
       }
       const stored = getMasterKey();
@@ -215,7 +246,15 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
         onChange?.('');
       }
     }
-  }, [value, navigate, onChange, switchWorkspace, currentWorkspace, canOpenOrCreateHiddenWorkspace]);
+  }, [
+    value,
+    navigate,
+    onChange,
+    switchWorkspace,
+    currentWorkspace,
+    canOpenOrCreateHiddenWorkspace,
+    runDotResetCommand,
+  ]);
 
   const isCommandText = useMemo(() => {
     if (searchOnly) return false;
@@ -414,6 +453,27 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
           disabled={!canSubmit}
         />
       )}
+
+      <ConfirmDialog
+        open={masterResetPaywallOpen}
+        title="Master key reset"
+        description="The ..reset command is only available with cloud sync. Unlock to recover access when you forget your master key, then use Manage to reset it."
+        confirmLabel="Unlock cloud sync"
+        cancelLabel="Not now"
+        onCancel={() => setMasterResetPaywallOpen(false)}
+        onConfirm={() => {
+          setMasterResetPaywallOpen(false);
+          beginUpgradeFlow();
+        }}
+      />
+      <MasterKeyResetCodeModal
+        open={masterResetCodeOpen}
+        onClose={() => setMasterResetCodeOpen(false)}
+        authEmail={authEmail || 'your account email'}
+        onVerified={() => {
+          navigate('/manage', { state: { fromMasterKeyResetCode: true } });
+        }}
+      />
     </div>
   );
 }

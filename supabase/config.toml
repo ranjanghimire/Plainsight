@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.check-sync-entitlement]
 verify_jwt = false
+
+[functions.auth-master-key-reset]
+verify_jwt = false

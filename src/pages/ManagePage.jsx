@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -24,6 +24,29 @@ export function ManagePage() {
   const [resetMasterKeyDialogOpen, setResetMasterKeyDialogOpen] = useState(false);
   const [pageExiting, setPageExiting] = useState(false);
   const resetExitTimerRef = useRef(null);
+
+  const fromResetCodeVerified = useMemo(
+    () => Boolean(location.state?.fromMasterKeyResetCode),
+    [location.state?.fromMasterKeyResetCode],
+  );
+  const [manageReveal, setManageReveal] = useState(() => !fromResetCodeVerified);
+
+  useEffect(() => {
+    if (!fromResetCodeVerified) {
+      setManageReveal(true);
+      return undefined;
+    }
+    let raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => setManageReveal(true));
+    });
+    const t = window.setTimeout(() => {
+      navigate('/manage', { replace: true, state: {} });
+    }, 520);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+  }, [fromResetCodeVerified, navigate]);
 
   const refreshList = useCallback(() => {
     setWorkspaces(getHiddenWorkspaceManageEntries());
@@ -107,6 +130,15 @@ export function ManagePage() {
         pageExiting ? 'pointer-events-none opacity-0 scale-[0.99]' : 'opacity-100 scale-100'
       }`}
     >
+      <div
+        className={
+          fromResetCodeVerified
+            ? `transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+                manageReveal ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+              }`
+            : ''
+        }
+      >
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">
           Hidden Workspaces
@@ -198,6 +230,7 @@ export function ManagePage() {
         >
           Reset master key
         </button>
+      </div>
       </div>
 
       <ConfirmDialog
