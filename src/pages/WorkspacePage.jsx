@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { NotesView } from '../components/NotesView';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -18,7 +18,7 @@ export function WorkspacePage() {
   const routeLoadEpochRef = useRef(0);
   const hiddenQuotaWarnedForRef = useRef(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!workspace) return undefined;
     const key = getWorkspaceKey(workspace);
     const app = loadAppState();

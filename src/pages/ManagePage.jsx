@@ -187,7 +187,11 @@ export function ManagePage() {
                 <>
                   <button
                     type="button"
-                    onClick={() => navigate(`/ws/${routeSlug}`)}
+                    onClick={() => {
+                      // Apply workspace before route change so NotesView never paints prior notes.
+                      load(routeSlug, null);
+                      navigate(`/ws/${routeSlug}`);
+                    }}
                     className="flex-1 text-left font-medium text-stone-800 dark:text-stone-200 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer py-1 -my-1 rounded focus:outline-none focus:ring-2 focus:ring-stone-300 dark:focus:ring-stone-600"
                   >
                     {displayName}
