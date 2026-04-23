@@ -951,6 +951,22 @@ export function WorkspaceProvider({ children }) {
       name,
       kind: 'visible',
     });
+    // Force this rename to win mergeWorkspaces even with device clock skew.
+    // (mergeWorkspaces only pushes when local.updated_at > remote.updated_at)
+    void (async () => {
+      try {
+        const wid2 = extractWorkspaceIdFromVisibleEntry(entry);
+        if (!wid2) return;
+        const list = await getLocalWorkspaces();
+        const bump = new Date(Date.now() + 2 * 60_000).toISOString();
+        const nextList = (list || []).map((w) =>
+          String(w.id) === String(wid2) ? { ...w, name, updated_at: bump } : w,
+        );
+        await saveLocalWorkspaces(nextList);
+      } catch {
+        /* ignore */
+      }
+    })();
     queueFullSync();
   }, []);
 
