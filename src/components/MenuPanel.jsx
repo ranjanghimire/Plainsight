@@ -596,6 +596,41 @@ export function MenuPanel({ open, onClose }) {
                   {(sharedWorkspaces || []).map((row) => {
                     const active = activeStorageKey === `${VISIBLE_WS_PREFIX}${row.workspaceId}`;
                     const hint = sharedWorkspaceRowHint(row);
+                    const sharedKey = `${VISIBLE_WS_PREFIX}${row.workspaceId}`;
+                    const isRenaming = workspaceRenameTarget?.key === sharedKey;
+                    if (isRenaming) {
+                      return (
+                        <div key={row.workspaceId} className="flex flex-col gap-2 px-1 py-1">
+                          <input
+                            type="text"
+                            value={workspaceRenameDraft}
+                            onChange={(e) => setWorkspaceRenameDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') submitWorkspaceRename();
+                              if (e.key === 'Escape') cancelWorkspaceRename();
+                            }}
+                            className="w-full px-2.5 py-1.5 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              type="button"
+                              onClick={cancelWorkspaceRename}
+                              className="text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={submitWorkspaceRename}
+                              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={row.workspaceId}
