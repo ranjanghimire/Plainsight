@@ -1,11 +1,56 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { verifyMasterKeyResetCode } from '../auth/masterKeyReset';
+
+function readVisualViewportFrame() {
+  if (typeof window === 'undefined') {
+    return { top: 0, left: 0, width: 0, height: 0 };
+  }
+  const vv = window.visualViewport;
+  if (!vv) {
+    return { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
+  }
+  return {
+    top: vv.offsetTop,
+    left: vv.offsetLeft,
+    width: vv.width,
+    height: vv.height,
+  };
+}
+
+/** Pin overlay to the visual viewport so centered modals stay above the iOS keyboard. */
+function useVisualViewportModalFrame(isOpen) {
+  const [frame, setFrame] = useState(readVisualViewportFrame);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined;
+
+    const apply = () => setFrame(readVisualViewportFrame());
+
+    apply();
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', apply);
+      vv.addEventListener('scroll', apply);
+    }
+    window.addEventListener('resize', apply);
+    return () => {
+      if (vv) {
+        vv.removeEventListener('resize', apply);
+        vv.removeEventListener('scroll', apply);
+      }
+      window.removeEventListener('resize', apply);
+    };
+  }, [isOpen]);
+
+  return frame;
+}
 
 export function MasterKeyResetCodeModal({ open, onClose, authEmail, onVerified }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const vvFrame = useVisualViewportModalFrame(open);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -50,12 +95,18 @@ export function MasterKeyResetCodeModal({ open, onClose, authEmail, onVerified }
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
+      className="fixed z-[115] flex min-h-0 items-center justify-center overflow-y-auto overscroll-contain bg-stone-900/50 p-4 dark:bg-black/60"
+      style={{
+        top: vvFrame.top,
+        left: vvFrame.left,
+        width: vvFrame.width,
+        height: vvFrame.height,
+      }}
       role="presentation"
     >
       <button
         type="button"
-        className="absolute inset-0 cursor-default"
+        className="absolute inset-0 min-h-full min-w-full cursor-default"
         aria-label="Dismiss"
         onClick={() => !busy && onClose()}
       />
@@ -63,7 +114,7 @@ export function MasterKeyResetCodeModal({ open, onClose, authEmail, onVerified }
         role="dialog"
         aria-modal="true"
         aria-labelledby="mk-reset-code-title"
-        className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
+        className="relative z-10 my-auto w-full max-h-[min(100%,32rem)] max-w-sm overflow-y-auto rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
         onClick={(ev) => ev.stopPropagation()}
       >
         <h2
