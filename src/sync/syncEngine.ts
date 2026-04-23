@@ -873,17 +873,37 @@ export function subscribeToWorkspacePins(cb: ChangeCallback<WorkspacePin>) {
 
 const FULL_SYNC_MAX_PK_RETRIES = 2;
 
+function ts(s: string | null | undefined): number {
+  if (!s) return 0;
+  const n = Date.parse(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Remote rows take precedence when the same workspace id exists on both sides (hydration merge). */
 export function mergeRemoteAndLocalWorkspaces(
   remote: Workspace[],
   local: Workspace[],
 ): Workspace[] {
-  const localById = new Map(local.map((w) => [w.id, w]));
-  const remoteIdSet = new Set(remote.map((w) => w.id));
-  const merged: Workspace[] = [...remote];
-  for (const [id, lw] of localById.entries()) {
-    if (!remoteIdSet.has(id)) merged.push(lw);
+  const l = new Map((local || []).filter((w) => w?.id).map((w) => [w.id, w]));
+  const r = new Map((remote || []).filter((w) => w?.id).map((w) => [w.id, w]));
+  const allIds = new Set<string>([...l.keys(), ...r.keys()]);
+  const merged: Workspace[] = [];
+
+  for (const id of allIds) {
+    const lv = l.get(id);
+    const rv = r.get(id);
+    if (lv && rv) {
+      // Preserve local edits (e.g. renames) when they are newer.
+      // full sync will push the winner back to Supabase later in the run.
+      merged.push(ts(lv.updated_at) >= ts(rv.updated_at) ? lv : rv);
+    } else if (rv) {
+      merged.push(rv);
+    } else if (lv) {
+      merged.push(lv);
+    }
   }
+
+  merged.sort((a, b) => ts(b.updated_at) - ts(a.updated_at));
   return merged;
 }
 

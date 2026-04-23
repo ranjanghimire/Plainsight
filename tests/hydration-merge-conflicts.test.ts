@@ -1,7 +1,7 @@
 /**
  * Timestamp merge rules used during hydration for notes (via mergeNotes / mergeCategories in fullSync).
- * Workspace *rows* in fullSync use `mergeRemoteAndLocalWorkspaces` (remote snapshot wins on matching id),
- * not `mergeWorkspaces` here — these tests lock last-write-wins for entities that use mergeLogic.
+ * Workspace rows are merged in `syncEngine.mergeRemoteAndLocalWorkspaces` (updated_at-based),
+ * while the pure merge utilities live in `mergeLogic` (these tests cover that shared behavior).
  */
 
 import { describe, expect, it } from 'vitest';

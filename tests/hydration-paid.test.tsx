@@ -308,7 +308,7 @@ const MERGE_REMOTE_ONLY_ID = createHydrationTestWorkspaceId();
 const MERGE_LOCAL_ONLY_ID = createHydrationTestWorkspaceId();
 
 describe('mergeRemoteAndLocalWorkspaces (hydration shape)', () => {
-  it('keeps remote row when both sides share an id', () => {
+  it('keeps remote row when remote updated_at is newer', () => {
     const remote = [
       {
         id: MERGE_SHARED_WS_ID,
@@ -332,6 +332,32 @@ describe('mergeRemoteAndLocalWorkspaces (hydration shape)', () => {
     const m = syncEngine.mergeRemoteAndLocalWorkspaces(remote, local);
     expect(m).toHaveLength(1);
     expect(m[0].name).toBe('Remote');
+  });
+
+  it('keeps local row when local updated_at is newer', () => {
+    const remote = [
+      {
+        id: MERGE_SHARED_WS_ID,
+        owner_id: 'u',
+        name: 'Remote',
+        kind: 'visible' as const,
+        created_at: '2020-01-01T00:00:00.000Z',
+        updated_at: '2020-01-01T00:00:00.000Z',
+      },
+    ];
+    const local = [
+      {
+        id: MERGE_SHARED_WS_ID,
+        owner_id: 'u',
+        name: 'Local wins',
+        kind: 'visible' as const,
+        created_at: '2020-01-01T00:00:00.000Z',
+        updated_at: '2030-01-01T00:00:00.000Z',
+      },
+    ];
+    const m = syncEngine.mergeRemoteAndLocalWorkspaces(remote, local);
+    expect(m).toHaveLength(1);
+    expect(m[0].name).toBe('Local wins');
   });
 
   it('appends local-only ids', () => {
