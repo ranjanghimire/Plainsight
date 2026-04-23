@@ -917,6 +917,20 @@ export function WorkspaceProvider({ children }) {
     const name = (newDisplayName || '').trim();
     if (!name) return;
 
+    // Ensure the storage key resolves to the correct workspace UUID.
+    // Owned shared workspaces can be renamed from the menu without ever being opened, so the
+    // `${VISIBLE_WS_PREFIX}${workspaceId}` key might not be mapped yet. If we don't map it here,
+    // `ensureWorkspaceRow()` can mint a fresh id and the next full sync will "revert" the menu
+    // name back to the server's `workspace_shares.workspace_name`.
+    const wid0 = extractWorkspaceIdFromVisibleEntry(entry);
+    if (wid0 && entry?.key) {
+      try {
+        setWorkspaceIdMapping(String(entry.key), String(wid0));
+      } catch {
+        /* ignore */
+      }
+    }
+
     // Personal visible tabs (WORKSPACES section).
     const prev = loadAppState();
     const next = (prev.visibleWorkspaces || []).map((e) =>
