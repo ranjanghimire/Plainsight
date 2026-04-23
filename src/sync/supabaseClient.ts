@@ -138,8 +138,32 @@ export function getSupabase(): SupabaseClient {
   return cachedClient;
 }
 
+function describeSupabaseError(details: unknown): string {
+  if (!details || typeof details !== 'object') return '';
+  const anyErr = details as Record<string, unknown>;
+  const msg = typeof anyErr.message === 'string' ? anyErr.message.trim() : '';
+  const code = typeof anyErr.code === 'string' ? anyErr.code.trim() : '';
+  const hint = typeof anyErr.hint === 'string' ? anyErr.hint.trim() : '';
+  const status =
+    typeof anyErr.status === 'number'
+      ? String(anyErr.status)
+      : typeof anyErr.status === 'string'
+        ? anyErr.status.trim()
+        : '';
+  const pieces = [msg, code ? `code=${code}` : '', status ? `status=${status}` : '', hint ? `hint=${hint}` : '']
+    .filter(Boolean)
+    .join(' ');
+  return pieces;
+}
+
 function err(message: string, details?: unknown): SyncError {
-  return { message, details };
+  const base = String(message || '').trim();
+  if (base) return { message: base, details };
+  const derived = describeSupabaseError(details);
+  return {
+    message: derived || 'Supabase request failed',
+    details,
+  };
 }
 
 export function getAuthedUserId(): string | null {

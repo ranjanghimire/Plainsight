@@ -76,7 +76,19 @@ import { pruneArchivedNoteRows } from '../utils/archivedPrune';
 import { listWorkspaceShares } from './sharedWorkspaces';
 
 function mkError(message: string, details?: unknown): SyncError {
-  return { message, details };
+  const base = String(message || '').trim();
+  if (base) return { message: base, details };
+  try {
+    if (details && typeof details === 'object') {
+      const anyErr = details as Record<string, unknown>;
+      const msg = typeof anyErr.message === 'string' ? anyErr.message.trim() : '';
+      const code = typeof anyErr.code === 'string' ? anyErr.code.trim() : '';
+      if (msg) return { message: code ? `${msg} (code=${code})` : msg, details };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { message: 'Sync failed', details };
 }
 
 async function getOwnerId(): Promise<string | null> {
