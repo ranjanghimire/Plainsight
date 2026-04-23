@@ -538,9 +538,10 @@ function sanitizeNotesForPush(rows: Note[]): Note[] {
       console.warn('pushNotes: skipping note with invalid workspace_id', row);
       continue;
     }
+    // Some Supabase projects enforce `bold_first_line NOT NULL` (with or without a default).
+    // Always send an explicit boolean to avoid implicit NULL inserts on upsert.
     const { bold_first_line: bfl, ...rest } = row;
-    const cleaned: Note =
-      bfl === true ? { ...rest, bold_first_line: true } : { ...rest };
+    const cleaned: Note = { ...rest, bold_first_line: bfl === true };
     if (!isUuid(row.id || '')) {
       console.warn('pushNotes: regenerating invalid note id', row);
       out.push({ ...cleaned, id: uuidv4() });

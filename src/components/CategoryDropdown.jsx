@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-const MENU_Z = 200;
+const MENU_Z = 1200;
 
 export function CategoryDropdown({
   categories,
@@ -22,7 +22,14 @@ export function CategoryDropdown({
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setMenuPos({ top: r.bottom + 4, left: r.left });
+    const pad = 8;
+    const menuW = 220;
+    const menuH = 220;
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+    const left = Math.min(Math.max(pad, r.left), Math.max(pad, vw - menuW - pad));
+    const top = Math.min(Math.max(pad, r.bottom + 4), Math.max(pad, vh - menuH - pad));
+    setMenuPos({ top, left });
   };
 
   useLayoutEffect(() => {
@@ -71,7 +78,7 @@ export function CategoryDropdown({
   const menuPanel = open ? (
     <div
       ref={menuRef}
-      className="fixed py-1 min-w-[140px] rounded-lg border border-stone-200 bg-white shadow-lg dark:border-stone-600 dark:bg-stone-800"
+      className="fixed py-1 min-w-[180px] max-w-[min(92vw,22rem)] rounded-lg border border-stone-200 bg-white shadow-lg dark:border-stone-600 dark:bg-stone-800"
       style={{
         top: menuPos.top,
         left: menuPos.left,
