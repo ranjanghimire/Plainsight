@@ -916,12 +916,36 @@ export function WorkspaceProvider({ children }) {
   const renameVisibleWorkspace = useCallback((entry, newDisplayName) => {
     const name = (newDisplayName || '').trim();
     if (!name) return;
+
+    // Personal visible tabs (WORKSPACES section).
     const prev = loadAppState();
     const next = (prev.visibleWorkspaces || []).map((e) =>
       e.key === entry.key ? { ...e, name } : e,
     );
     saveAppStatePartial({ visibleWorkspaces: next });
     setVisibleWorkspaces(next);
+
+    // Owned shared workspaces (SHARED WORKSPACES section) reuse the same rename UI, but are
+    // not present in the personal visibleWorkspaces list (they are filtered out to avoid duplicates).
+    const wid = extractWorkspaceIdFromVisibleEntry(entry);
+    if (wid) {
+      setSharedWorkspaceRows((rows) => {
+        const nextRows = (rows || []).map((r) =>
+          String(r.workspaceId) === String(wid) ? { ...r, workspaceName: name } : r,
+        );
+        const cacheUid = getLocalSession().userId;
+        if (cacheUid) {
+          // Preserve pending rows as-is; only patch accepted rows.
+          const cached = readSharedWorkspaceMenuCache(cacheUid);
+          writeSharedWorkspaceMenuCache(cacheUid, {
+            acceptedRows: nextRows,
+            pendingRows: cached?.pendingRows ?? [],
+          });
+        }
+        return nextRows;
+      });
+    }
+
     void ensureWorkspaceRow({
       storageKey: entry.key,
       name,
