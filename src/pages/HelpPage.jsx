@@ -104,8 +104,13 @@ export function HelpPage() {
                 </li>
                 <li>
                   <strong className="font-medium text-stone-800 dark:text-stone-200">See them all:</strong>{' '}
-                  open the menu → <strong>Hidden Workspaces</strong> (manage) to list, rename, or
-                  delete hidden keys.
+                  the <strong>Hidden Workspaces</strong> screen is only opened from the composer—send
+                  one line that starts with{' '}
+                  <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..</code>{' '}
+                  followed by your master key. The <strong>first</strong> time, no key exists yet: whatever
+                  phrase you send <em>becomes</em> your master key and you are taken there. From the{' '}
+                  <strong>second</strong> time onward, that line must <em>match</em> your saved key
+                  exactly—then you can list, rename, or delete hidden workspaces on that page.
                 </li>
                 <li>
                   On the free plan you can keep one hidden workspace without sync; with{' '}
@@ -118,24 +123,29 @@ export function HelpPage() {
             <Section id="master-key" eyebrow="Security" title="Master key & reset">
               <p>
                 Your <strong className="font-medium text-stone-800 dark:text-stone-200">master key</strong>{' '}
-                unlocks the hidden-workspace screen the first time you set it, and later whenever you
-                return to manage those spaces.
+                is the phrase after{' '}
+                <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..</code>{' '}
+                in the composer. It is the <em>only</em> way to reach Hidden Workspaces—there is no menu
+                shortcut.
               </p>
               <ul className="list-disc space-y-2 pl-5 marker:text-stone-400 dark:marker:text-stone-500">
                 <li>
-                  Set it once from the composer with a line that starts with{' '}
-                  <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..</code>{' '}
-                  followed by your chosen phrase, then send.
+                  <strong className="font-medium text-stone-800 dark:text-stone-200">First time:</strong>{' '}
+                  send <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..</code>{' '}
+                  plus any word or phrase you want to use as your key—that phrase is stored and opens
+                  Hidden Workspaces.
                 </li>
                 <li>
-                  To open Manage later, send that same phrase again—it is checked before anything else
-                  runs.
+                  <strong className="font-medium text-stone-800 dark:text-stone-200">After that:</strong>{' '}
+                  send <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..</code>{' '}
+                  followed by the <em>exact</em> same phrase. If it matches, you return to Hidden
+                  Workspaces; it is checked before other double-dot commands run.
                 </li>
                 <li>
                   If you use cloud sync and forget the key, use{' '}
                   <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..reset</code>{' '}
                   (composer) to start the email code flow, then follow the prompts to choose a new key
-                  from Manage.
+                  when you reach Hidden Workspaces again.
                 </li>
               </ul>
             </Section>
