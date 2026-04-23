@@ -44,7 +44,10 @@ export function WorkspacePage() {
     // Legacy hidden keys from /manage are not in the menu list; load immediately to avoid stale notes.
     if (!hydrationComplete && !legacyHidden) return undefined;
     const epoch = ++routeLoadEpochRef.current;
-    load(workspace, 'hidden', {
+    // Delayed `hidden` transition leaves prior workspace data in context while the route already
+    // shows WorkspacePage — brief wrong notes. Dot-commands keep the dip; route loads apply now.
+    const uiTransition = legacyHidden ? null : 'hidden';
+    load(workspace, uiTransition, {
       isCancelled: () => routeLoadEpochRef.current !== epoch,
     });
     return () => {
