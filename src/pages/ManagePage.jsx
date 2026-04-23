@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   getHiddenWorkspaceManageEntries,
   getWorkspaceNameFromKey,
@@ -10,6 +11,8 @@ import {
   clearMasterKey,
 } from '../utils/storage';
 
+const MANAGE_EXIT_MS = 320;
+
 export function ManagePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -18,6 +21,9 @@ export function ManagePage() {
   const [workspaces, setWorkspaces] = useState([]);
   const [editingKey, setEditingKey] = useState(null);
   const [editName, setEditName] = useState('');
+  const [resetMasterKeyDialogOpen, setResetMasterKeyDialogOpen] = useState(false);
+  const [pageExiting, setPageExiting] = useState(false);
+  const resetExitTimerRef = useRef(null);
 
   const refreshList = useCallback(() => {
     setWorkspaces(getHiddenWorkspaceManageEntries());
@@ -38,6 +44,16 @@ export function ManagePage() {
   useEffect(() => {
     refreshList();
   }, [location.pathname, hydrationComplete, workspaceSwitchGeneration, refreshList]);
+
+  useEffect(
+    () => () => {
+      if (resetExitTimerRef.current != null) {
+        window.clearTimeout(resetExitTimerRef.current);
+        resetExitTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   const handleRename = (storageKey, newName) => {
     const slug = newName.trim().toLowerCase().replace(/\s+/g, '_');
@@ -69,13 +85,28 @@ export function ManagePage() {
     }
   };
 
-  const handleResetMasterKey = () => {
+  const finishResetMasterKey = useCallback(() => {
     clearMasterKey();
-    goToMainHome();
-  };
+    load('home');
+    navigate('/', { state: { fromMasterKeyReset: true } });
+  }, [load, navigate]);
+
+  const handleConfirmResetMasterKey = useCallback(() => {
+    setResetMasterKeyDialogOpen(false);
+    setPageExiting(true);
+    if (resetExitTimerRef.current != null) window.clearTimeout(resetExitTimerRef.current);
+    resetExitTimerRef.current = window.setTimeout(() => {
+      resetExitTimerRef.current = null;
+      finishResetMasterKey();
+    }, MANAGE_EXIT_MS);
+  }, [finishResetMasterKey]);
 
   return (
-    <div className="space-y-6">
+    <div
+      className={`space-y-6 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+        pageExiting ? 'pointer-events-none opacity-0 scale-[0.99]' : 'opacity-100 scale-100'
+      }`}
+    >
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium text-stone-800 dark:text-stone-200">
           Hidden Workspaces
@@ -162,12 +193,23 @@ export function ManagePage() {
       <div className="pt-4 border-t border-stone-200 dark:border-stone-600">
         <button
           type="button"
-          onClick={handleResetMasterKey}
+          onClick={() => setResetMasterKeyDialogOpen(true)}
           className="text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
         >
           Reset master key
         </button>
       </div>
+
+      <ConfirmDialog
+        open={resetMasterKeyDialogOpen}
+        title="Reset master key?"
+        description="This removes the saved master key on this device. You will return to Home and can set a new key when you next need protected access."
+        confirmLabel="Reset and go home"
+        cancelLabel="Cancel"
+        destructive
+        onCancel={() => setResetMasterKeyDialogOpen(false)}
+        onConfirm={handleConfirmResetMasterKey}
+      />
     </div>
   );
 }
