@@ -330,6 +330,7 @@ export function NoteCard({
   onPermanentDeleteArchived,
   archiveAnimating = false,
   bulkDissolve = false,
+  tagPeekHighlight = false,
 }) {
   const location = useLocation();
   const { openTagsPage } = useTagsNav();
@@ -608,12 +609,23 @@ export function NoteCard({
     ],
   );
 
+  const noteCardDomId =
+    !isArchived && note?.id != null && String(note.id).trim() !== ''
+      ? { 'data-note-card-id': String(note.id) }
+      : {};
+
   return (
-    <div className={outerWrapClass}>
+    <div className={outerWrapClass} {...noteCardDomId}>
       <div
         ref={cardShellRef}
-        className={`${shellBase} ${shellPad} ${shellTransition} min-w-0 max-w-full ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
+        className={`${shellBase} ${shellPad} ${shellTransition} relative min-w-0 max-w-full ${archiveAnimating ? 'animate-plainsight-restore-out' : ''}`}
       >
+        {tagPeekHighlight && !isArchived ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[1] rounded-lg border border-neutral-200/95 bg-neutral-100/92 shadow-[inset_0_0_0_2px_rgba(251,191,36,0.42)] dark:border-neutral-600 dark:bg-neutral-800/92 dark:shadow-[inset_0_0_0_2px_rgba(251,191,36,0.32)] motion-safe:animate-plainsight-tag-peek-fade motion-reduce:animate-none motion-reduce:opacity-0"
+          />
+        ) : null}
         {isEditing ? (
           <div
             className={

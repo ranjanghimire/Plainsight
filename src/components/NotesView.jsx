@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { peekTagJumpIntent, clearTagJumpIntent } from '../utils/tagJumpIntent';
 import { useArchiveMode } from '../context/ArchiveModeContext';
 import { useCategorySwipeNavigation } from '../hooks/useCategorySwipeNavigation';
 import { useSearch } from '../hooks/useSearch';
@@ -127,6 +128,8 @@ export function NotesView() {
     permanentlyDeleteArchived,
     removeArchivedByTextKeys,
     workspaceSwitchGeneration,
+    activeStorageKey,
+    workspaceContentTransitioning,
   } = useWorkspace();
 
   const { archiveMode, archiveViewTransitioning } = useArchiveMode();
@@ -148,6 +151,9 @@ export function NotesView() {
   const [showInlineAddCategory, setShowInlineAddCategory] = useState(false);
   const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
   const [restoringKeys, setRestoringKeys] = useState({});
+  const [tagPeekHighlightId, setTagPeekHighlightId] = useState(null);
+  const pendingTagJumpRef = useRef(null);
+  const tagJumpScrollDoneRef = useRef(null);
   const notes = useMemo(() => data.notes || [], [data.notes]);
   const categories = useMemo(() => data.categories || [], [data.categories]);
   const archivedNotesMap = useMemo(
@@ -565,6 +571,7 @@ export function NotesView() {
         onUpdate={updateNote}
         onDelete={deleteNote}
         onAddCategory={addCategory}
+        tagPeekHighlight={String(note.id) === tagPeekHighlightId}
       />
     ));
 
@@ -593,6 +600,9 @@ export function NotesView() {
 
   useEffect(() => {
     const t = window.setTimeout(() => {
+      pendingTagJumpRef.current = null;
+      tagJumpScrollDoneRef.current = null;
+      setTagPeekHighlightId(null);
       setCategoryFilter(null);
       setCategoryListPhase('idle');
       categoryListLockRef.current = false;
@@ -610,6 +620,100 @@ export function NotesView() {
     }, 0);
     return () => window.clearTimeout(t);
   }, [workspaceSwitchGeneration]);
+
+  useEffect(() => {
+    const pending = pendingTagJumpRef.current;
+    if (pending && pending.storageKey !== activeStorageKey) {
+      pendingTagJumpRef.current = null;
+      tagJumpScrollDoneRef.current = null;
+      setTagPeekHighlightId(null);
+    }
+  }, [activeStorageKey]);
+
+  /** Tags page → note: load intent after workspace shell settles, clear filters for visibility. */
+  useEffect(() => {
+    if (archiveMode || workspaceContentTransitioning) return undefined;
+    const intent = peekTagJumpIntent();
+    if (!intent || intent.storageKey !== activeStorageKey) return undefined;
+    clearTagJumpIntent();
+    pendingTagJumpRef.current = intent;
+    tagJumpScrollDoneRef.current = null;
+    setTagPeekHighlightId(null);
+    flushSync(() => {
+      setCategoryFilter(null);
+      setInputValue('');
+    });
+    return undefined;
+  }, [archiveMode, workspaceContentTransitioning, activeStorageKey, workspaceSwitchGeneration]);
+
+  /** When the note row is on-screen, smooth-scroll and start peek highlight (archive-style fade). */
+  useEffect(() => {
+    if (archiveMode || workspaceContentTransitioning) return undefined;
+    const pending = pendingTagJumpRef.current;
+    if (!pending || pending.storageKey !== activeStorageKey) return undefined;
+    const noteId = pending.noteId;
+    if (!(data.notes || []).some((n) => String(n.id) === noteId)) {
+      pendingTagJumpRef.current = null;
+      tagJumpScrollDoneRef.current = null;
+      return undefined;
+    }
+    if (!filteredNotes.some((n) => String(n.id) === noteId)) return undefined;
+    if (tagJumpScrollDoneRef.current === noteId) return undefined;
+
+    let cancelled = false;
+    const highlightClearRef = { id: null };
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const scrollBehavior = reduceMotion ? 'auto' : 'smooth';
+
+    const runScroll = () => {
+      if (cancelled) return;
+      let el = null;
+      try {
+        el = document.querySelector(`[data-note-card-id="${CSS.escape(noteId)}"]`);
+      } catch {
+        el = document.querySelector(`[data-note-card-id="${noteId}"]`);
+      }
+      if (!el) return false;
+      el.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
+      tagJumpScrollDoneRef.current = noteId;
+      pendingTagJumpRef.current = null;
+      setTagPeekHighlightId(noteId);
+      if (highlightClearRef.id != null) window.clearTimeout(highlightClearRef.id);
+      highlightClearRef.id = window.setTimeout(() => {
+        highlightClearRef.id = null;
+        setTagPeekHighlightId((cur) => (cur === noteId ? null : cur));
+      }, 5200);
+      return true;
+    };
+
+    const startAfter = reduceMotion ? 80 : 320;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      if (runScroll()) return;
+      let attempts = 0;
+      const poll = () => {
+        if (cancelled || attempts > 48) return;
+        attempts += 1;
+        if (runScroll()) return;
+        requestAnimationFrame(poll);
+      };
+      requestAnimationFrame(poll);
+    }, startAfter);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (highlightClearRef.id != null) window.clearTimeout(highlightClearRef.id);
+    };
+  }, [
+    archiveMode,
+    workspaceContentTransitioning,
+    activeStorageKey,
+    filteredNotes,
+    data.notes,
+  ]);
 
   useEffect(() => {
     if (archiveMode) return undefined;

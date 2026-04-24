@@ -17,6 +17,19 @@ html {
   .animate-plainsight-restore-out {
     animation: plainsight-restore-out 0.2s ease-out forwards;
   }
+
+  /** Tags page → note: archive-like tint + ring, fades over 5s (see NoteCard). */
+  @keyframes plainsight-tag-peek-fade {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  .animate-plainsight-tag-peek-fade {
+    animation: plainsight-tag-peek-fade 5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
 }
 
 /*

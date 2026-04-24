@@ -25,6 +25,7 @@ import {
   applyTagRemovalAcrossAllWorkspaces,
   applyTagRenameAcrossAllWorkspaces,
 } from '../utils/tagWorkspaceMutate';
+import { writeTagJumpIntent } from '../utils/tagJumpIntent';
 
 function notifyWorkspaceStorageMutated() {
   try {
@@ -336,6 +337,10 @@ export function TagsPage() {
   const showTagCountLine = !selectedTag && (tags.length > 0 || filterTrim.length > 0);
 
   const openWorkspaceForNote = (note) => {
+    writeTagJumpIntent({
+      storageKey: note.workspaceKey,
+      noteId: String(note.id),
+    });
     const app = loadAppState();
     const visibleList = app.visibleWorkspaces || visibleWorkspaces || [];
     const visibleEntry = visibleList.find((e) => e.key === note.workspaceKey);
