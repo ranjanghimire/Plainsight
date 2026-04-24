@@ -45,6 +45,7 @@ import {
   MAX_FREE_VISIBLE_WORKSPACES,
 } from '../constants/workspaceLimits';
 import { pruneArchivedNotesUi } from '../utils/archivedPrune';
+import { stabilizeWorkspaceNotesOrder } from '../utils/noteDisplayOrder';
 import { firstWordsNotePreview } from '../utils/activityLogPreview';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
 import { refreshSupabaseRealtimeJwt, whenRealtimeAuthReady } from '../sync/supabaseClient';
@@ -274,7 +275,14 @@ export function WorkspaceProvider({ children }) {
   const [supabaseRealtimeBindingEpoch, setSupabaseRealtimeBindingEpoch] = useState(0);
   const hydrationRetryTimerRef = useRef(null);
   const hydrationWarningRef = useRef(false);
+  /** Last rendered note id order per workspace; used to avoid reordering after local save + storage reload. */
+  const noteOrderSnapshotRef = useRef({ key: '', ids: [] });
   const workspaceKey = activeStorageKey;
+
+  useEffect(() => {
+    const ids = Array.isArray(data.notes) ? data.notes.map((n) => String(n.id)) : [];
+    noteOrderSnapshotRef.current = { key: activeStorageKey, ids };
+  }, [activeStorageKey, data.notes]);
 
   useEffect(() => {
     hydrationWarningRef.current = syncHydrationConnectivityWarning;
@@ -436,6 +444,17 @@ export function WorkspaceProvider({ children }) {
     saveWorkspace(activeStorageKey, data);
   }, [activeStorageKey, data]);
 
+  const applyLoadedWorkspaceData = useCallback((incoming) => {
+    if (!incoming || typeof incoming !== 'object') return;
+    const snap = noteOrderSnapshotRef.current;
+    const prevIds = snap.key === activeStorageKey && Array.isArray(snap.ids) ? snap.ids : [];
+    const nextNotes = stabilizeWorkspaceNotesOrder(prevIds, incoming.notes || []);
+    setData({
+      ...incoming,
+      notes: nextNotes,
+    });
+  }, [activeStorageKey]);
+
   /** Persist before paint so a same-tick `queueFullSync` never reads stale workspace JSON from storage. */
   useLayoutEffect(() => {
     save();
@@ -444,7 +463,7 @@ export function WorkspaceProvider({ children }) {
   useEffect(() => {
     const onStorageMutated = () => {
       try {
-        setData(loadWorkspace(activeStorageKey));
+        applyLoadedWorkspaceData(loadWorkspace(activeStorageKey));
       } catch {
         /* ignore */
       }
@@ -452,7 +471,7 @@ export function WorkspaceProvider({ children }) {
     window.addEventListener('plainsight:workspace-storage-mutated', onStorageMutated);
     return () =>
       window.removeEventListener('plainsight:workspace-storage-mutated', onStorageMutated);
-  }, [activeStorageKey]);
+  }, [activeStorageKey, applyLoadedWorkspaceData]);
 
   useEffect(() => {
     if (!canUseSupabase) {
@@ -657,13 +676,13 @@ export function WorkspaceProvider({ children }) {
     const onSync = () => {
       const app = loadAppState();
       setVisibleWorkspaces(app.visibleWorkspaces);
-      setData(loadWorkspace(activeStorageKey));
+      applyLoadedWorkspaceData(loadWorkspace(activeStorageKey));
       void refreshSharedWorkspaceState();
       setSupabaseRealtimeBindingEpoch((n) => n + 1);
     };
     window.addEventListener('plainsight:full-sync', onSync);
     return () => window.removeEventListener('plainsight:full-sync', onSync);
-  }, [canUseSupabase, activeStorageKey, refreshSharedWorkspaceState]);
+  }, [canUseSupabase, activeStorageKey, refreshSharedWorkspaceState, applyLoadedWorkspaceData]);
 
   /** Postgres Realtime on workspace_shares: pending invites + accept state without full page refresh. */
   useEffect(() => {
