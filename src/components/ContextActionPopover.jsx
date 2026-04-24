@@ -9,16 +9,19 @@ export function ContextActionPopover({
   showDelete,
   showShare = false,
   showLogs = false,
+  showInfo = false,
   showMakePrivate = false,
   renameLabel = 'Rename',
   deleteLabel = 'Delete',
   shareLabel = 'Share',
   logsLabel = 'Logs',
+  infoLabel = 'Info',
   makePrivateLabel = 'Make private',
   onRename,
   onDelete,
   onShare,
   onLogs,
+  onInfo,
   onMakePrivate,
   onDismiss,
 }) {
@@ -80,6 +83,19 @@ export function ContextActionPopover({
             }}
           >
             {logsLabel}
+          </button>
+        ) : null}
+        {showInfo ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full text-left px-3 py-2 text-sm text-stone-800 hover:bg-stone-100 dark:text-stone-100 dark:hover:bg-stone-700/80"
+            onClick={() => {
+              onInfo?.();
+              onDismiss();
+            }}
+          >
+            {infoLabel}
           </button>
         ) : null}
         {showMakePrivate ? (

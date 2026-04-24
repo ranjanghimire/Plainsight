@@ -1,5 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { firstWordsNotePreview } from '../utils/activityLogPreview';
+
+function normalizeLogDetails(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw);
+      return p && typeof p === 'object' && !Array.isArray(p) ? p : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  return {};
+}
+
+function activityLogNoteSnippet(log) {
+  const d = normalizeLogDetails(log.details);
+  if (typeof d.preview === 'string' && d.preview.trim()) return d.preview.trim();
+  if (typeof d.text === 'string' && d.text.trim()) return firstWordsNotePreview(d.text);
+  return '';
+}
 
 function formatWhen(iso) {
   if (!iso) return '';
@@ -113,12 +135,20 @@ export function WorkspaceActivityLogDialog({
           </p>
         ) : (
           <div className="max-h-[min(62vh,34rem)] space-y-2 overflow-y-auto pr-1">
-            {logs.map((l) => (
+            {logs.map((l) => {
+              const snippet = activityLogNoteSnippet(l);
+              return (
               <div
                 key={l.id}
                 className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 dark:border-stone-600 dark:bg-stone-900"
               >
                 <p className="text-sm text-stone-800 dark:text-stone-200">{l.summary}</p>
+                {snippet ? (
+                  <p className="mt-1 text-xs leading-snug text-stone-500 line-clamp-2 dark:text-stone-400">
+                    <span className="text-stone-400 dark:text-stone-500">Note: </span>
+                    {snippet}
+                  </p>
+                ) : null}
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
                   <span>{l.actor_email || 'Unknown user'}</span>
                   <span aria-hidden>•</span>
@@ -131,7 +161,8 @@ export function WorkspaceActivityLogDialog({
                   ) : null}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

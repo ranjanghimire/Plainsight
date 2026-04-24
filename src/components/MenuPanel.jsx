@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -157,6 +158,7 @@ export function MenuPanel({ open, onClose }) {
   const [pendingDeleteWorkspace, setPendingDeleteWorkspace] = useState(null);
   const [pendingMakePrivateWorkspace, setPendingMakePrivateWorkspace] = useState(null);
   const [logsWorkspaceTarget, setLogsWorkspaceTarget] = useState(null);
+  const [sharedWorkspaceInfoRow, setSharedWorkspaceInfoRow] = useState(null);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const wsMenu = useItemContextMenu();
 
@@ -198,12 +200,13 @@ export function MenuPanel({ open, onClose }) {
     if (!mounted) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
-      if (wsMenu.menu.open) wsMenu.closeMenu();
+      if (sharedWorkspaceInfoRow) setSharedWorkspaceInfoRow(null);
+      else if (wsMenu.menu.open) wsMenu.closeMenu();
       else onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mounted, onClose, wsMenu.menu.open, wsMenu.closeMenu]);
+  }, [mounted, onClose, sharedWorkspaceInfoRow, wsMenu.menu.open, wsMenu.closeMenu]);
 
   const handlePickWorkspace = (entry) => {
     switchVisibleWorkspace(entry);
@@ -747,6 +750,11 @@ export function MenuPanel({ open, onClose }) {
               wsMenu.menu.target.row?.isOwner))
         }
         showLogs={wsMenu.menu.target?.kind === 'shared-workspace'}
+        showInfo={
+          wsMenu.menu.target?.kind === 'shared-workspace' &&
+          !wsMenu.menu.target.row?.isOwner &&
+          Boolean(String(wsMenu.menu.target.row?.ownerEmail || '').trim())
+        }
         showMakePrivate={
           wsMenu.menu.target?.kind === 'shared-workspace' &&
           wsMenu.menu.target.row.canManage
@@ -782,6 +790,10 @@ export function MenuPanel({ open, onClose }) {
           if (t?.kind === 'shared-workspace') {
             setLogsWorkspaceTarget(t.row);
           }
+        }}
+        onInfo={() => {
+          const t = wsMenu.menu.target;
+          if (t?.kind === 'shared-workspace') setSharedWorkspaceInfoRow(t.row);
         }}
         onMakePrivate={() => {
           const t = wsMenu.menu.target;
@@ -873,6 +885,67 @@ export function MenuPanel({ open, onClose }) {
         fetchLogs={fetchWorkspaceActivityLog}
         onClose={() => setLogsWorkspaceTarget(null)}
       />
+
+      {sharedWorkspaceInfoRow && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-stone-900/50 dark:bg-black/60"
+              role="presentation"
+            >
+              <button
+                type="button"
+                className="absolute inset-0 cursor-default"
+                aria-label="Dismiss"
+                onClick={() => setSharedWorkspaceInfoRow(null)}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Shared workspace"
+                className="relative z-10 w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-base font-medium text-stone-900 dark:text-stone-100">
+                    Shared workspace
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setSharedWorkspaceInfoRow(null)}
+                    className="rounded-md p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 dark:text-stone-400 dark:hover:bg-stone-700 dark:hover:text-stone-200"
+                    aria-label="Close"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-300">
+                  This workspace was shared to you by{' '}
+                  <span className="font-medium text-stone-900 dark:text-stone-100">
+                    {String(sharedWorkspaceInfoRow.ownerEmail || '').trim()}
+                  </span>
+                  .
+                </p>
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSharedWorkspaceInfoRow(null)}
+                    className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-white"
+                  >
+                    OK
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

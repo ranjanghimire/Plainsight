@@ -45,6 +45,7 @@ import {
   MAX_FREE_VISIBLE_WORKSPACES,
 } from '../constants/workspaceLimits';
 import { pruneArchivedNotesUi } from '../utils/archivedPrune';
+import { firstWordsNotePreview } from '../utils/activityLogPreview';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
 import { refreshSupabaseRealtimeJwt, whenRealtimeAuthReady } from '../sync/supabaseClient';
 import {
@@ -1299,30 +1300,45 @@ export function WorkspaceProvider({ children }) {
     void logWorkspaceEditActivity('note_added', 'Added note', {
       note_id: id,
       category: category ?? null,
+      preview: firstWordsNotePreview(text),
     });
     return id;
   }, [logWorkspaceEditActivity]);
 
-  const updateNote = useCallback((id, updates) => {
-    const now = new Date().toISOString();
-    setData((prev) => ({
-      ...prev,
-      notes: (prev.notes || []).map((n) =>
-        n.id === id ? { ...n, ...updates, updatedAt: now } : n,
-      ),
-    }));
-    queueFullSync();
-    void logWorkspaceEditActivity('note_updated', 'Updated note', {
-      note_id: id,
-      fields: Object.keys(updates || {}),
-    });
-  }, [logWorkspaceEditActivity]);
+  const updateNote = useCallback(
+    (id, updates) => {
+      const now = new Date().toISOString();
+      const cur = (data.notes || []).find((n) => n.id === id);
+      const mergedText =
+        cur && (updates.text !== undefined ? updates.text : cur.text);
+      const previewForLog = mergedText ? firstWordsNotePreview(mergedText) : '';
+      setData((prev) => {
+        const cur2 = (prev.notes || []).find((n) => n.id === id);
+        if (!cur2) return prev;
+        return {
+          ...prev,
+          notes: (prev.notes || []).map((n) =>
+            n.id === id ? { ...n, ...updates, updatedAt: now } : n,
+          ),
+        };
+      });
+      queueFullSync();
+      void logWorkspaceEditActivity('note_updated', 'Updated note', {
+        note_id: id,
+        fields: Object.keys(updates || {}),
+        ...(previewForLog ? { preview: previewForLog } : {}),
+      });
+    },
+    [data.notes, logWorkspaceEditActivity],
+  );
 
   const deleteNote = useCallback((id) => {
+    const n = (data.notes || []).find((x) => x.id === id);
+    const previewForLog = n ? firstWordsNotePreview(n.text) : '';
     setData((prev) => {
-      const n = (prev.notes || []).find((x) => x.id === id);
-      if (!n) return prev;
-      const textKey = n.text;
+      const n2 = (prev.notes || []).find((x) => x.id === id);
+      if (!n2) return prev;
+      const textKey = n2.text;
       const now = Date.now();
       const arch = { ...(prev.archivedNotes || {}) };
       const existing = arch[textKey];
@@ -1330,9 +1346,9 @@ export function WorkspaceProvider({ children }) {
         arch[textKey] = { ...existing, lastDeletedAt: now };
       } else {
         const cat =
-          n.category === undefined || n.category === null || n.category === ''
+          n2.category === undefined || n2.category === null || n2.category === ''
             ? undefined
-            : n.category;
+            : n2.category;
         arch[textKey] = { text: textKey, category: cat, lastDeletedAt: now };
       }
       const pruned = pruneArchivedNotesUi(arch, MAX_ARCHIVED_ITEMS_PER_WORKSPACE);
@@ -1385,9 +1401,10 @@ export function WorkspaceProvider({ children }) {
       }
       void logWorkspaceEditActivity('note_deleted', 'Deleted note to archive', {
         note_id: id,
+        ...(previewForLog ? { preview: previewForLog } : {}),
       });
     })();
-  }, [activeStorageKey, logWorkspaceEditActivity]);
+  }, [activeStorageKey, data.notes, logWorkspaceEditActivity]);
 
   const restoreArchivedNote = useCallback((textKey, resolvedCategory) => {
     setData((prev) => {
@@ -1417,6 +1434,7 @@ export function WorkspaceProvider({ children }) {
     void logWorkspaceEditActivity('note_restored', 'Restored archived note', {
       text: textKey,
       category: resolvedCategory ?? null,
+      preview: firstWordsNotePreview(textKey),
     });
   }, [logWorkspaceEditActivity]);
 
@@ -1448,6 +1466,9 @@ export function WorkspaceProvider({ children }) {
     void logWorkspaceEditActivity('archived_note_updated', 'Updated archived note', {
       text: textKey,
       fields: Object.keys(updates || {}),
+      preview: firstWordsNotePreview(
+        updates.text !== undefined ? updates.text : textKey,
+      ),
     });
   }, [logWorkspaceEditActivity]);
 
@@ -1478,7 +1499,7 @@ export function WorkspaceProvider({ children }) {
     void logWorkspaceEditActivity(
       'archived_note_deleted_permanently',
       'Permanently deleted archived note',
-      { text: textKey },
+      { text: textKey, preview: firstWordsNotePreview(textKey) },
     );
   }, [activeStorageKey, logWorkspaceEditActivity]);
 
