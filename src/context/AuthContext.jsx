@@ -32,6 +32,7 @@ import {
 import { SendCodeModal } from '../components/SendCodeModal';
 import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import { clearSharedWorkspaceMenuCache } from '../utils/storage';
+import { clearAllLocalClientState } from '../utils/clearAllLocalClientState';
 
 function isLocalDevSession() {
   const { sessionToken, userId } = getLocalSession();
@@ -218,15 +219,17 @@ export function AuthProvider({ children }) {
     return { ok: true };
   }, [closeSendCodeModal]);
 
-  const signOut = useCallback(() => {
-    persistLastKnownSyncEntitledForMenu(null);
+  const signOut = useCallback(async () => {
+    const uid = getLocalSession().userId;
     sessionValidationTicketRef.current += 1;
     setAuthConnectivityDegraded(false);
-    clearSharedWorkspaceMenuCache(getLocalSession().userId);
-    clearSession();
+    clearSharedWorkspaceMenuCache(uid);
+    await clearAllLocalClientState('logout');
+    persistLastKnownSyncEntitledForMenu(null);
     setSyncRemoteActive(false);
     clearAuthDisplayEmailStorage();
     setAuthEmail(null);
+    window.location.assign('/');
   }, []);
 
   const value = {

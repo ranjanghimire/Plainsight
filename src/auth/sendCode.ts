@@ -5,7 +5,7 @@
 import { invokeEdgeFunction } from './functionsInvoke';
 
 export type SendCodeResult =
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; accountExists: boolean }
   | { ok: false; error: string };
 
 export async function sendCode(email: string): Promise<SendCodeResult> {
@@ -23,6 +23,7 @@ export async function sendCode(email: string): Promise<SendCodeResult> {
   const { data, error } = await invokeEdgeFunction<{
     success?: boolean;
     userId?: string;
+    accountExists?: boolean;
   }>('auth-send-code', {
     body: { email: trimmed },
   });
@@ -35,5 +36,9 @@ export async function sendCode(email: string): Promise<SendCodeResult> {
     return { ok: false, error: 'Unexpected response from server.' };
   }
 
-  return { ok: true, userId: data.userId };
+  return {
+    ok: true,
+    userId: data.userId,
+    accountExists: data.accountExists === true,
+  };
 }

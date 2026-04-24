@@ -22,6 +22,7 @@ describe('SendCodeModal', () => {
     vi.mocked(sendCodeModule.sendCode).mockResolvedValue({
       ok: true,
       userId: 'aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee',
+      accountExists: false,
     });
     const user = userEvent.setup();
     const onClose = vi.fn();

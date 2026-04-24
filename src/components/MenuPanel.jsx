@@ -20,6 +20,7 @@ import {
 } from '../hooks/useItemContextMenu';
 import { ContextActionPopover } from './ContextActionPopover';
 import { ConfirmDialog } from './ConfirmDialog';
+import { SignOutDataLossDialog } from './SignOutDataLossDialog';
 import { ShareWorkspaceDialog } from './ShareWorkspaceDialog';
 import { WorkspaceActivityLogDialog } from './WorkspaceActivityLogDialog';
 
@@ -710,19 +711,14 @@ export function MenuPanel({ open, onClose }) {
         </div>
       </aside>
 
-      <ConfirmDialog
+      <SignOutDataLossDialog
         open={signOutConfirmOpen}
-        title="Sign out?"
-        description="You will be signed out on this device. Cloud sync will stop until you sign in again and turn sync back on."
-        confirmLabel="Sign out"
-        cancelLabel="Stay signed in"
-        destructive
         onCancel={() => setSignOutConfirmOpen(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           setSignOutConfirmOpen(false);
-          signOut();
-          showToast('Signed out');
           onClose();
+          showToast('Signing out…');
+          await signOut();
         }}
       />
 

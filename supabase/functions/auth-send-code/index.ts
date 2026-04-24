@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
     });
 
     let userId: string;
+    let accountExists = false;
     const { data: existing, error: selErr } = await supabase
       .from('users')
       .select('id')
@@ -101,6 +102,7 @@ Deno.serve(async (req) => {
     }
 
     if (existing?.id) {
+      accountExists = true;
       userId = existing.id as string;
     } else {
       const { data: inserted, error: insErr } = await supabase
@@ -142,7 +144,7 @@ Deno.serve(async (req) => {
       console.log(`auth-send-code: OTP for ${email} (no Resend): ${code}`);
     }
 
-    return new Response(JSON.stringify({ success: true, userId }), {
+    return new Response(JSON.stringify({ success: true, userId, accountExists }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

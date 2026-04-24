@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-ro
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { SyncEntitlementProvider } from './context/SyncEntitlementContext';
 import { AuthProvider } from './context/AuthContext';
+import { ClientLogoutBroadcastListener } from './components/ClientLogoutBroadcastListener';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
 import { TagsNavProvider, useTagsNav } from './context/TagsNavContext';
@@ -346,6 +347,7 @@ export default function App() {
     <ThemeProvider>
       <div className="flex min-h-0 flex-1 flex-col">
         <AuthProvider>
+          <ClientLogoutBroadcastListener />
           <SyncEntitlementProvider>
             <WorkspaceProvider>
               <BrowserRouter>
