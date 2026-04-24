@@ -1443,11 +1443,18 @@ export function WorkspaceProvider({ children }) {
         createdAt: now,
         updatedAt: now,
       };
-      return {
+      const next = {
         ...prev,
         archivedNotes: arch,
         notes: [note, ...(prev.notes || [])],
       };
+      // Persist before debounced fullSync so flushWorkspaceUiIntoLocalDb never reads a stale blob.
+      try {
+        saveWorkspace(activeStorageKey, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
     });
     queueFullSync();
     void logWorkspaceEditActivity('note_restored', 'Restored archived note', {
@@ -1455,7 +1462,7 @@ export function WorkspaceProvider({ children }) {
       category: resolvedCategory ?? null,
       preview: firstWordsNotePreview(textKey),
     });
-  }, [logWorkspaceEditActivity]);
+  }, [activeStorageKey, logWorkspaceEditActivity]);
 
   const updateArchivedNote = useCallback((textKey, updates) => {
     setData((prev) => {

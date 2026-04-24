@@ -1,5 +1,6 @@
 import type { ArchivedNote, Category, Note, NoteTombstone } from './types';
 import {
+  getLocalArchivedNoteTombstones,
   getLocalArchivedNotes,
   getLocalCategories,
   getLocalNotes,
@@ -138,13 +139,30 @@ export async function applyRealtimeArchivedNoteChange(
   return enqueueWorkspace(workspaceId, async () => {
     await flushWorkspaceUiIntoLocalDb(workspaceId);
     const rows = await getLocalArchivedNotes(workspaceId);
+    const archTombs = await getLocalArchivedNoteTombstones(workspaceId);
     let nextRows = rows;
     if (payload.event === 'DELETE') {
       const id = payload.oldRow?.id;
       if (id) nextRows = removeById(rows, id);
     } else {
       const row = payload.newRow;
-      if (row?.id) nextRows = upsertById(rows, row);
+      if (row?.id) {
+        // Flush may have dropped this row + tombstoned it (e.g. user restored). A stale
+        // broadcast INSERT/UPDATE can otherwise re-insert before pushArchivedDeletes lands.
+        const tomb = archTombs.find((t) => t.id === row.id) || null;
+        const tombTs = tomb ? ts(tomb.deleted_at) : Number.NaN;
+        const incomingTs = ts(row.last_deleted_at);
+        if (
+          tomb &&
+          Number.isFinite(tombTs) &&
+          Number.isFinite(incomingTs) &&
+          tombTs >= incomingTs
+        ) {
+          // tombstone wins — do not resurrect
+        } else {
+          nextRows = upsertById(rows, row);
+        }
+      }
     }
     await saveLocalArchivedNotes(workspaceId, nextRows);
     await saveLocalArchivedNoteTags(workspaceId, archivedNoteTagRowsFromArchived(nextRows));
