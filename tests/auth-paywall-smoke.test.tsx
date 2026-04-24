@@ -13,6 +13,8 @@ vi.mock('../src/auth/sendCode', () => ({
   sendCode: vi.fn(),
 }));
 
+const noopOAuth = vi.fn().mockResolvedValue({ ok: true });
+
 describe('SendCodeModal', () => {
   beforeEach(() => {
     vi.mocked(sendCodeModule.sendCode).mockReset();
@@ -27,14 +29,19 @@ describe('SendCodeModal', () => {
     const onClose = vi.fn();
     const loginWithCode = vi.fn().mockResolvedValue({ ok: true });
     render(
-      <SendCodeModal open onClose={onClose} loginWithCode={loginWithCode} />,
+      <SendCodeModal
+        open
+        onClose={onClose}
+        loginWithCode={loginWithCode}
+        startOAuthSignIn={noopOAuth}
+      />,
     );
     await user.type(screen.getByPlaceholderText('you@example.com'), 'reader@example.com');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Enter the code' })).toBeInTheDocument();
     });
-    expect(screen.getByText(/We sent a code to/i)).toBeInTheDocument();
+    expect(screen.getByText(/We sent a 6-digit code to/i)).toBeInTheDocument();
     expect(sendCodeModule.sendCode).toHaveBeenCalledWith('reader@example.com');
   });
 
@@ -49,6 +56,7 @@ describe('SendCodeModal', () => {
         open
         onClose={() => {}}
         loginWithCode={vi.fn().mockResolvedValue({ ok: true })}
+        startOAuthSignIn={noopOAuth}
       />,
     );
     await user.type(screen.getByPlaceholderText('you@example.com'), 'bad@example.com');

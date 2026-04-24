@@ -32,6 +32,8 @@ import {
 import { SendCodeModal } from '../components/SendCodeModal';
 import { sendClientErrorReport } from '../telemetry/clientErrorReporter';
 import { clearSharedWorkspaceMenuCache } from '../utils/storage';
+import { clearOAuthBrowserSession, getOAuthBrowserSupabase } from '../auth/oauthBrowserSupabase';
+import { establishPlainsightSessionFromSupabaseAccessToken } from '../auth/oauthPlainsightSession';
 
 function isLocalDevSession() {
   const { sessionToken, userId } = getLocalSession();
@@ -197,6 +199,75 @@ export function AuthProvider({ children }) {
   const openSendCodeModal = useCallback(() => setSendCodeOpen(true), []);
   const closeSendCodeModal = useCallback(() => setSendCodeOpen(false), []);
 
+  const finalizeOAuthRedirect = useCallback(async () => {
+    const oauth = getOAuthBrowserSupabase();
+    if (!oauth) {
+      return { ok: false, error: 'Sync is not configured (missing Supabase URL or key).' };
+    }
+
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    if (code) {
+      const usedKey = `plainsight_oauth_pkce_used:${code}`;
+      if (!sessionStorage.getItem(usedKey)) {
+        const { error: exErr } = await oauth.auth.exchangeCodeForSession(code);
+        if (exErr) {
+          return { ok: false, error: exErr.message || 'Could not complete sign-in.' };
+        }
+        sessionStorage.setItem(usedKey, '1');
+      }
+      window.history.replaceState({}, '', `${url.origin}/auth/callback`);
+    }
+
+    const {
+      data: { session },
+    } = await oauth.auth.getSession();
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      await clearOAuthBrowserSession();
+      return { ok: false, error: 'No OAuth session found. Try signing in again.' };
+    }
+
+    const res = await establishPlainsightSessionFromSupabaseAccessToken(accessToken);
+    await clearOAuthBrowserSession();
+
+    if (!res.ok) {
+      return { ok: false, error: res.error };
+    }
+
+    setAuthEmail(res.email || null);
+    await new Promise((resolve) => {
+      enqueueOtpSessionProcessing({
+        userId: res.userId,
+        email: res.email,
+        source: 'verify',
+        done: resolve,
+      });
+    });
+
+    closeSendCodeModal();
+    return { ok: true };
+  }, [closeSendCodeModal]);
+
+  const startOAuthSignIn = useCallback(async (provider) => {
+    const oauth = getOAuthBrowserSupabase();
+    if (!oauth) {
+      return { ok: false, error: 'Sync is not configured (missing Supabase URL or key).' };
+    }
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    const { error } = await oauth.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo,
+        skipBrowserRedirect: false,
+      },
+    });
+    if (error) {
+      return { ok: false, error: error.message || 'Could not start sign-in.' };
+    }
+    return { ok: true };
+  }, []);
+
   const loginWithCode = useCallback(async (email, code) => {
     const result = await verifyCode(email, code);
     if (!result.ok) {
@@ -223,6 +294,7 @@ export function AuthProvider({ children }) {
     sessionValidationTicketRef.current += 1;
     setAuthConnectivityDegraded(false);
     clearSharedWorkspaceMenuCache(getLocalSession().userId);
+    void clearOAuthBrowserSession();
     clearSession();
     setSyncRemoteActive(false);
     clearAuthDisplayEmailStorage();
@@ -238,6 +310,8 @@ export function AuthProvider({ children }) {
     restoreLocalSession,
     openSendCodeModal,
     verifyCodeLogin: loginWithCode,
+    finalizeOAuthRedirect,
+    startOAuthSignIn,
     signOut,
   };
 
@@ -248,6 +322,7 @@ export function AuthProvider({ children }) {
         open={sendCodeOpen}
         onClose={closeSendCodeModal}
         loginWithCode={loginWithCode}
+        startOAuthSignIn={startOAuthSignIn}
       />
     </AuthContext.Provider>
   );

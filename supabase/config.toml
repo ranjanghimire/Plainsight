@@ -7,6 +7,9 @@ verify_jwt = false
 [functions.auth-verify-code]
 verify_jwt = false
 
+[functions.auth-oauth-session]
+verify_jwt = false
+
 [functions.auth-session-user]
 verify_jwt = false
 

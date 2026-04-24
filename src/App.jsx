@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useDrawerGestures } from './hooks/useDrawerGestures';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
-import { SyncEntitlementProvider } from './context/SyncEntitlementContext';
+import { SyncEntitlementProvider, useSyncEntitlement } from './context/SyncEntitlementContext';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ArchiveModeProvider, useArchiveMode } from './context/ArchiveModeContext';
@@ -30,7 +30,27 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { ManagePage } from './pages/ManagePage';
 import { TagsPage } from './pages/TagsPage';
 import { HelpPage } from './pages/HelpPage';
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
 import { VISIBLE_WS_PREFIX, isUuid } from './utils/storage';
+
+/** Surfaces OAuth failures returned via `navigate('/', { state: { oauthError } })` after callback. */
+function OAuthErrorToastBridge() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { showToast } = useSyncEntitlement();
+
+  useEffect(() => {
+    const err =
+      location.state && typeof location.state.oauthError === 'string'
+        ? location.state.oauthError.trim()
+        : '';
+    if (!err) return;
+    showToast(err);
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+  }, [location.pathname, location.search, location.state, navigate, showToast]);
+
+  return null;
+}
 
 function RedirectWorkspaceOnLoad() {
   const navigate = useNavigate();
@@ -249,8 +269,10 @@ export function AppRoutes() {
       <AppHeader onOpenSettings={openDrawer} />
       <MenuPanel open={settingsOpen} onClose={closeDrawer} />
       <WorkspaceContentShell>
+        <OAuthErrorToastBridge />
         <TagsRouteTransitionShell>
           <Routes>
+            <Route path="/auth/callback" element={<OAuthCallbackPage />} />
             <Route path="/" element={<HomePage />} />
             <Route path="/w/:workspace" element={<WorkspacePage />} />
             <Route path="/ws/:workspace" element={<WorkspacePage />} />
