@@ -176,6 +176,8 @@ function AppHeader({ onOpenSettings }) {
     location.pathname !== '/help' &&
     location.pathname !== '/manage';
 
+  const isManageRoute = location.pathname === '/manage';
+
   const headerTitle = useMemo(() => {
     if (location.pathname === '/help') return 'Help';
     if (location.pathname === '/manage') return 'Plainsight';
@@ -223,8 +225,8 @@ function AppHeader({ onOpenSettings }) {
         ) : null}
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
-        <TagsToggleButton />
-        <ArchiveHistoryButton />
+        {!isManageRoute ? <TagsToggleButton /> : null}
+        {!isManageRoute ? <ArchiveHistoryButton /> : null}
         <MenuButton onOpen={onOpenSettings} />
       </div>
     </header>
