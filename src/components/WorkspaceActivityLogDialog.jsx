@@ -144,8 +144,13 @@ export function WorkspaceActivityLogDialog({
               >
                 <p className="text-sm text-stone-800 dark:text-stone-200">{l.summary}</p>
                 {snippet ? (
-                  <p className="mt-1 text-xs leading-snug text-stone-500 line-clamp-2 dark:text-stone-400">
-                    <span className="text-stone-400 dark:text-stone-500">Note: </span>
+                  <p
+                    className="mt-1 border-l-2 border-stone-300 pl-2 text-xs leading-snug text-stone-600 line-clamp-2 dark:border-stone-600 dark:text-stone-300"
+                    title={snippet}
+                  >
+                    <span className="font-medium text-stone-500 dark:text-stone-400">
+                      Preview:{' '}
+                    </span>
                     {snippet}
                   </p>
                 ) : null}
