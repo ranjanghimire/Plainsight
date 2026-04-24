@@ -1,7 +1,24 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 
-const MENU_Z = 1200;
+/** Above note chrome / context menus; aligned with NoteFormatPopover stack. */
+const MENU_Z = 10000;
+
+function getVisualBounds() {
+  if (typeof window === 'undefined') {
+    return { top: 0, left: 0, width: 0, height: 0 };
+  }
+  const vv = window.visualViewport;
+  if (!vv) {
+    return { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
+  }
+  return {
+    top: vv.offsetTop,
+    left: vv.offsetLeft,
+    width: vv.width,
+    height: vv.height,
+  };
+}
 
 export function CategoryDropdown({
   categories,
@@ -17,32 +34,84 @@ export function CategoryDropdown({
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
+  const repositionRef = useRef(() => {});
 
-  const updateMenuPosition = () => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const pad = 8;
-    const menuW = 220;
-    const menuH = 220;
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
-    const left = Math.min(Math.max(pad, r.left), Math.max(pad, vw - menuW - pad));
-    const top = Math.min(Math.max(pad, r.bottom + 4), Math.max(pad, vh - menuH - pad));
-    setMenuPos({ top, left });
-  };
+  const categorySig = useMemo(
+    () => `${categories?.length ?? 0}:${(categories || []).join('\0')}`,
+    [categories],
+  );
 
   useLayoutEffect(() => {
     if (!open) return undefined;
-    updateMenuPosition();
-    const onScrollOrResize = () => updateMenuPosition();
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
-    return () => {
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+
+    let cancelled = false;
+    const reposition = () => {
+      if (cancelled) return;
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      const menuEl = menuRef.current;
+      const menuW = Math.max(menuEl?.offsetWidth ?? 200, 180);
+      const menuH = Math.max(menuEl?.offsetHeight ?? 200, 120);
+
+      const { top: vTop, left: vLeft, width: vW, height: vH } = getVisualBounds();
+      const visTop = vTop + pad;
+      const visBottom = vTop + vH - pad;
+      const visLeft = vLeft + pad;
+      const visRight = vLeft + vW - pad;
+
+      let left = Math.min(Math.max(visLeft, r.left), Math.max(visLeft, visRight - menuW));
+      let top = r.bottom + 4;
+
+      if (top + menuH > visBottom) {
+        const above = r.top - menuH - 4;
+        if (above >= visTop) {
+          top = above;
+        } else {
+          top = Math.max(visTop, visBottom - menuH);
+        }
+      }
+
+      top = Math.max(visTop, Math.min(top, visBottom - menuH));
+      left = Math.max(visLeft, Math.min(left, visRight - menuW));
+
+      setMenuPos({ top, left });
     };
-  }, [open]);
+
+    repositionRef.current = reposition;
+    reposition();
+    const raf1 = requestAnimationFrame(() => {
+      reposition();
+      requestAnimationFrame(reposition);
+    });
+
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', reposition);
+      vv.addEventListener('scroll', reposition);
+    }
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+
+    const t1 = window.setTimeout(reposition, 120);
+    const t2 = window.setTimeout(reposition, 320);
+    const t3 = window.setTimeout(reposition, 520);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      if (vv) {
+        vv.removeEventListener('resize', reposition);
+        vv.removeEventListener('scroll', reposition);
+      }
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open, showNewInput, categorySig]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -78,7 +147,7 @@ export function CategoryDropdown({
   const menuPanel = open ? (
     <div
       ref={menuRef}
-      className="fixed py-1 min-w-[180px] max-w-[min(92vw,22rem)] rounded-lg border border-stone-200 bg-white shadow-lg dark:border-stone-600 dark:bg-stone-800"
+      className="fixed max-h-[min(72dvh,85svh)] min-w-[180px] max-w-[min(92vw,22rem)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-lg border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-600 dark:bg-stone-800"
       style={{
         top: menuPos.top,
         left: menuPos.left,
@@ -104,6 +173,12 @@ export function CategoryDropdown({
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleAddNew();
               if (e.key === 'Escape') setShowNewInput(false);
+            }}
+            onFocus={() => {
+              const nudge = () => repositionRef.current();
+              requestAnimationFrame(nudge);
+              window.setTimeout(nudge, 80);
+              window.setTimeout(nudge, 200);
             }}
             placeholder="New category"
             className="flex-1 px-2 py-1 text-base rounded border border-stone-200 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-200"
