@@ -225,8 +225,8 @@ describe('hidden workspace manage page', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       expect(localStorage.getItem('workspace_toad')).toBeTruthy();
+      expect(localStorage.getItem('workspace_frog')).toBeNull();
     });
-    expect(localStorage.getItem('workspace_frog')).toBeNull();
   });
 
   it('delete removes hidden workspace blob after confirm', async () => {

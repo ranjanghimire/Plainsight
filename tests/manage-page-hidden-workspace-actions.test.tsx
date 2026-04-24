@@ -99,7 +99,9 @@ describe('ManagePage — hidden workspace actions', () => {
     await user.click(within(li!).getByRole('button', { name: 'Save' }));
 
     const nextKey = 'workspace_renamed_hidden';
-    expect(loadWorkspace(nextKey).notes?.[0]?.text).toBe('kept through rename');
+    await waitFor(() => {
+      expect(loadWorkspace(nextKey).notes?.[0]?.text).toBe('kept through rename');
+    });
   });
 
   it('delete in ManagePage removes the hidden workspace entry', async () => {

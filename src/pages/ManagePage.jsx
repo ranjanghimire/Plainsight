@@ -2,14 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import {
-  getHiddenWorkspaceManageEntries,
-  getWorkspaceNameFromKey,
-  loadWorkspace,
-  saveWorkspace,
-  deleteWorkspace,
-  clearMasterKey,
-} from '../utils/storage';
+import { getHiddenWorkspaceManageEntries, getWorkspaceNameFromKey, clearMasterKey } from '../utils/storage';
 
 const MANAGE_EXIT_MS = 320;
 
@@ -79,8 +72,13 @@ const iconBtnBase =
 export function ManagePage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { load, deleteHiddenWorkspace, hydrationComplete, workspaceSwitchGeneration } =
-    useWorkspace();
+  const {
+    load,
+    deleteHiddenWorkspace,
+    renameHiddenWorkspaceManage,
+    hydrationComplete,
+    workspaceSwitchGeneration,
+  } = useWorkspace();
   const [workspaces, setWorkspaces] = useState([]);
   const [editingKey, setEditingKey] = useState(null);
   const [editName, setEditName] = useState('');
@@ -142,8 +140,8 @@ export function ManagePage() {
     [],
   );
 
-  const handleRename = (storageKey, newName) => {
-    const slug = newName.trim().toLowerCase().replace(/\s+/g, '_');
+  const handleRename = async (storageKey, newName) => {
+    const slug = newName.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     if (!slug) return;
     const newKey =
       storageKey === 'workspace_home' ? 'workspace_home' : `workspace_${slug}`;
@@ -151,13 +149,11 @@ export function ManagePage() {
       setEditingKey(null);
       return;
     }
-    const data = loadWorkspace(storageKey);
-    saveWorkspace(newKey, data);
-    deleteWorkspace(storageKey);
-    setWorkspaces((prev) =>
-      prev.map((e) => (e.storageKey === storageKey ? { ...e, storageKey: newKey } : e)),
-    );
-    setEditingKey(null);
+    const ok = await renameHiddenWorkspaceManage(storageKey, newName.trim());
+    if (ok) {
+      refreshList();
+      setEditingKey(null);
+    }
   };
 
   const handleConfirmDeleteWorkspace = useCallback(async () => {

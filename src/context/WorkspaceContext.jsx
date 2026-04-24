@@ -31,6 +31,7 @@ import {
   isUuid,
   removeWorkspaceIdMapping,
   resolveWorkspaceIdForStorageKey,
+  bindMergedWorkspacesToStorageKeys,
   setWorkspaceIdMapping,
   setOwnerSharedWorkspaceIdsCache,
   slugFromLegacyHiddenStorageKey,
@@ -1159,6 +1160,73 @@ export function WorkspaceProvider({ children }) {
     [activeStorageKey, bumpWorkspaceSwitch],
   );
 
+  /**
+   * /manage rename: move the localStorage blob, keep the same workspace UUID, update merged
+   * `plainsight_local_workspaces` name + bump updated_at, rebind id map — otherwise the list
+   * briefly shows both old and new keys until fullSync.
+   */
+  const renameHiddenWorkspaceManage = useCallback(
+    async (storageKey, newDisplayNameRaw) => {
+      const name = String(newDisplayNameRaw || '').trim();
+      if (!name || storageKey === 'workspace_home') return false;
+
+      const slug = hiddenWorkspaceSlugFromName(name);
+      if (!slug) return false;
+      const newKey =
+        storageKey === 'workspace_home' ? 'workspace_home' : `workspace_${slug}`;
+      if (newKey === storageKey) return true;
+
+      let list = [];
+      try {
+        list = await getLocalWorkspaces();
+      } catch {
+        /* ignore */
+      }
+
+      const workspaceId =
+        getWorkspaceIdForStorageKey(storageKey) ||
+        resolveWorkspaceIdForStorageKey(storageKey, list) ||
+        getOrCreateWorkspaceIdForStorageKey(storageKey);
+      if (!workspaceId) return false;
+
+      const occupantOfNewKey = getWorkspaceIdForStorageKey(newKey);
+      if (occupantOfNewKey && String(occupantOfNewKey) !== String(workspaceId)) {
+        return false;
+      }
+
+      const data = loadWorkspace(storageKey);
+      saveWorkspace(newKey, data);
+      deleteWorkspace(storageKey);
+      setWorkspaceIdMapping(newKey, workspaceId);
+
+      if (activeStorageKey === storageKey) {
+        setActiveStorageKey(newKey);
+        saveAppStatePartial({ lastActiveStorageKey: newKey });
+      }
+
+      await ensureWorkspaceRow({ storageKey: newKey, name, kind: 'hidden' });
+      try {
+        const listAfter = await getLocalWorkspaces();
+        const bump = new Date(Date.now() + 2 * 60_000).toISOString();
+        let changed = false;
+        const nextList = (listAfter || []).map((w) => {
+          if (String(w?.id) !== String(workspaceId)) return w;
+          changed = true;
+          return { ...w, name, updated_at: bump };
+        });
+        if (changed) await saveLocalWorkspaces(nextList);
+        bindMergedWorkspacesToStorageKeys(await getLocalWorkspaces());
+      } catch {
+        /* ignore */
+      }
+
+      bumpWorkspaceSwitch();
+      void queueFullSync();
+      return true;
+    },
+    [activeStorageKey, bumpWorkspaceSwitch],
+  );
+
   const shareVisibleWorkspace = useCallback(
     async (entry, recipientEmail) => {
       const workspaceId = getWorkspaceIdByVisibleEntry(entry);
@@ -1599,6 +1667,7 @@ export function WorkspaceProvider({ children }) {
     logWorkspaceEditActivity,
     deleteVisibleWorkspace,
     deleteHiddenWorkspace,
+    renameHiddenWorkspaceManage,
     addNote,
     updateNote,
     deleteNote,
