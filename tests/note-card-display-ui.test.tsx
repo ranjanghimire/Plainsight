@@ -9,9 +9,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { NoteCard } from '../src/components/NoteCard';
 import { TagsNavProvider } from '../src/context/TagsNavContext';
+import { formatNoteDate } from '../src/utils/formatDate';
 
 function bodyWithLineCount(n: number): string {
   return Array.from({ length: n }, (_, i) => `line-${i + 1}`).join('\n');
+}
+
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
 }
 
 function renderNoteCard(note: {
@@ -20,6 +25,7 @@ function renderNoteCard(note: {
   category: string | null;
   createdAt?: string;
   boldFirstLine?: boolean;
+  lastDeletedAt?: number;
 }) {
   return render(
     <MemoryRouter initialEntries={['/']}>
@@ -30,7 +36,7 @@ function renderNoteCard(note: {
             <TagsNavProvider>
               <NoteCard
                 note={note}
-                categories={[]}
+                categories={['Work', 'Home']}
                 onUpdate={vi.fn()}
                 onDelete={vi.fn()}
                 onAddCategory={vi.fn()}
@@ -137,5 +143,101 @@ describe('NoteCard display — bold first line spacing', () => {
     });
     const first = screen.getByText('First');
     expect(first.closest('[class*="mb-1.5"]')).toBeNull();
+  });
+});
+
+describe('NoteCard display — metadata + checkbox interactions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows edit/delete/date/category/tags after clicking the note card in display mode', async () => {
+    const user = userEvent.setup();
+    const createdAt = '2026-01-02T03:04:05.000Z';
+    renderNoteCard({
+      id: 'n-meta',
+      text: '#alpha #beta\nhello meta',
+      category: 'Work',
+      createdAt,
+    });
+
+    await user.click(screen.getByText('hello meta'));
+    await sleep(320);
+
+    expect(screen.getByRole('button', { name: 'Edit note' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete note' })).toBeInTheDocument();
+    expect(screen.getByText(formatNoteDate(createdAt))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Work' })).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: 'Open tags for alpha' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open tags for beta' })).toBeInTheDocument();
+  });
+
+  it('renders the first line in display mode as bold when boldFirstLine is set', () => {
+    renderNoteCard({
+      id: 'n-bold-visual',
+      text: 'Bold title\nsecond line',
+      category: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      boldFirstLine: true,
+    });
+    const title = screen.getByText('Bold title');
+    expect(title).toHaveClass('font-semibold');
+  });
+
+  it('allows checking/unchecking a checkbox in display mode without entering edit mode', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    const note = { id: 'n-cb', text: '[ ] task one', category: null, createdAt: '2026-01-01T00:00:00.000Z' };
+    const view = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <TagsNavProvider>
+                <NoteCard
+                  note={note}
+                  categories={[]}
+                  onUpdate={onUpdate}
+                  onDelete={vi.fn()}
+                  onAddCategory={vi.fn()}
+                />
+              </TagsNavProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Mark item done' }));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0]?.[0]).toBe('n-cb');
+    expect(onUpdate.mock.calls[0]?.[1]?.text).toMatch(/\[x\]\s+task one/i);
+
+    // Toggle back
+    view.rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <TagsNavProvider>
+                <NoteCard
+                  note={{ ...note, text: '[x] task one' }}
+                  categories={[]}
+                  onUpdate={onUpdate}
+                  onDelete={vi.fn()}
+                  onAddCategory={vi.fn()}
+                />
+              </TagsNavProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Mark item not done' }));
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    expect(onUpdate.mock.calls[1]?.[1]?.text).toMatch(/\[\s\]\s+task one/i);
   });
 });

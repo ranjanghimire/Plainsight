@@ -75,6 +75,10 @@ describe('dot-commands + master key manage entry', () => {
       expect(Array.isArray(d.notes)).toBe(true);
       expect(d.notes.length).toBe(0);
     });
+
+    expect(
+      screen.getByRole('img', { name: 'Hidden workspace (not in menu)' }),
+    ).toBeInTheDocument();
   });
 
   it('first-time double-dot sets master key and navigates to /manage', async () => {
