@@ -58,23 +58,25 @@ function mergeLocalNotesWithUiNotes(localNotes: Note[], uiNoteRows: Note[]): Not
   });
 }
 
-function mergeArchivedById(a: ArchivedNote[], b: ArchivedNote[]): ArchivedNote[] {
-  const map = new Map<string, ArchivedNote>();
-  for (const n of a) map.set(n.id, n);
-  for (const n of b) {
-    const o = map.get(n.id);
-    if (!o) {
-      map.set(n.id, n);
-      continue;
-    }
-    const ot = Date.parse(o.last_deleted_at);
-    const nt = Date.parse(n.last_deleted_at);
+/**
+ * UI localStorage is authoritative for which archived rows exist (same pattern as
+ * `mergeLocalNotesWithUiNotes`). Rows present only in `localArch` are treated as
+ * removed in the UI (e.g. restore) and must not survive flush or they reappear after sync.
+ */
+export function mergeLocalArchivedWithUiArchived(
+  localArch: ArchivedNote[],
+  uiArch: ArchivedNote[],
+): ArchivedNote[] {
+  const localById = new Map(localArch.map((n) => [n.id, n]));
+  return uiArch.map((ui) => {
+    const ln = localById.get(ui.id);
+    if (!ln) return ui;
+    const ot = Date.parse(ln.last_deleted_at);
+    const nt = Date.parse(ui.last_deleted_at);
     const oOk = Number.isFinite(ot);
     const nOk = Number.isFinite(nt);
-    const winner = !oOk ? n : !nOk ? o : nt >= ot ? n : o;
-    map.set(n.id, winner);
-  }
-  return [...map.values()];
+    return !nOk ? ln : !oOk ? ui : nt >= ot ? ui : ln;
+  });
 }
 
 export type FlushWorkspaceUiOpts = {
@@ -231,16 +233,25 @@ export async function flushWorkspaceUiIntoLocalDb(
       };
     },
   );
-  const mergedArch = mergeArchivedById(localArch, uiArch);
+  const mergedArch = mergeLocalArchivedWithUiArchived(localArch, uiArch);
+  const uiArchIdSet = new Set(uiArch.map((r) => r.id));
+  const droppedLocal = localArch.filter((r) => !uiArchIdSet.has(r.id));
+
   const { kept: archKept, removed: archRemoved } = pruneArchivedNoteRows(mergedArch);
   await saveLocalArchivedNotes(workspaceId, archKept);
   await saveLocalArchivedNoteTags(workspaceId, archivedNoteTagRowsFromArchived(archKept));
-  if (archRemoved.length > 0) {
+
+  const tombCandidates = [...archRemoved, ...droppedLocal];
+  if (tombCandidates.length > 0) {
     const deletedAt = new Date().toISOString();
-    const removedIds = new Set(archRemoved.map((r) => r.id));
+    const byTombId = new Map<string, ArchivedNote>();
+    for (const r of tombCandidates) {
+      if (r?.id) byTombId.set(r.id, r);
+    }
+    const removedIds = new Set(byTombId.keys());
     const existingTombs = await getLocalArchivedNoteTombstones(workspaceId);
-    const newTombs = archRemoved.map((r) => ({
-      id: r.id,
+    const newTombs = [...removedIds].map((id) => ({
+      id,
       workspace_id: workspaceId,
       deleted_at: deletedAt,
     }));
