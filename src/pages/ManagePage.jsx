@@ -210,7 +210,7 @@ export function ManagePage() {
             : ''
         }`}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-stone-200/80 pb-5 dark:border-stone-700/80">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-5 dark:border-stone-700/80">
           <button
             type="button"
             onClick={goToMainHome}
@@ -220,13 +220,18 @@ export function ManagePage() {
             <ChevronLeftIcon className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" aria-hidden />
             <span>Back</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setResetMasterKeyDialogOpen(true)}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300/90 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 shadow-sm transition hover:border-stone-400 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:border-stone-500 dark:hover:bg-stone-700/90"
+          >
+            <KeyIcon className="h-4 w-4 text-amber-700 dark:text-amber-400/90" />
+            Reset master key
+          </button>
         </div>
 
         <header className="pt-8 pb-2 sm:pt-10">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400 dark:text-stone-500">
-            Security
-          </p>
-          <h2 className="font-header mt-2 text-xl font-medium tracking-[0.06em] text-stone-800 dark:text-stone-100 sm:text-2xl">
+          <h2 className="font-header text-xl font-medium tracking-[0.06em] text-stone-800 dark:text-stone-100 sm:text-2xl">
             Hidden Workspaces
           </h2>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-stone-500 dark:text-stone-400">
@@ -338,23 +343,11 @@ export function ManagePage() {
         )}
 
         <section className="mt-12 rounded-2xl border border-amber-200/60 bg-gradient-to-b from-amber-50/50 to-stone-50/30 p-5 dark:border-amber-900/35 dark:from-amber-950/25 dark:to-stone-900/20">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-100">Master key</h3>
-              <p className="mt-1 text-xs leading-relaxed text-stone-600 dark:text-stone-400">
-                Clears the saved master key on this device only. You will return home and can set a new phrase when you
-                next open protected areas.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setResetMasterKeyDialogOpen(true)}
-              className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-stone-300/90 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 shadow-sm transition hover:border-stone-400 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:border-stone-500 dark:hover:bg-stone-700/90 sm:self-center"
-            >
-              <KeyIcon className="h-4 w-4 text-amber-700 dark:text-amber-400/90" />
-              Reset master key
-            </button>
-          </div>
+          <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-100">Master key</h3>
+          <p className="mt-1 text-xs leading-relaxed text-stone-600 dark:text-stone-400">
+            Clears the saved master key on this device only. You will return home and can set a new phrase when you next
+            open protected areas.
+          </p>
         </section>
       </div>
 
