@@ -108,13 +108,15 @@ describe('ManagePage — hidden workspace actions', () => {
       ...loadWorkspace(hiddenKey),
       notes: [{ id: 'n1', text: 'to be deleted', category: null }],
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     const user = userEvent.setup();
     renderFullApp(['/manage']);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /deleteme/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    const rowButton = await screen.findByRole('button', { name: /deleteme/i });
+    const li = rowButton.closest('li');
+    expect(li).toBeTruthy();
+    await user.click(within(li!).getByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete workspace' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /deleteme/i })).not.toBeInTheDocument();

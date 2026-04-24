@@ -85,6 +85,7 @@ export function ManagePage() {
   const [editingKey, setEditingKey] = useState(null);
   const [editName, setEditName] = useState('');
   const [resetMasterKeyDialogOpen, setResetMasterKeyDialogOpen] = useState(false);
+  const [workspaceDeleteTarget, setWorkspaceDeleteTarget] = useState(null);
   const [pageExiting, setPageExiting] = useState(false);
   const resetExitTimerRef = useRef(null);
 
@@ -159,9 +160,11 @@ export function ManagePage() {
     setEditingKey(null);
   };
 
-  const handleDelete = async (storageKey) => {
-    if (!confirm('Delete this workspace? This cannot be undone.')) return;
-    const ok = await deleteHiddenWorkspace(storageKey);
+  const handleConfirmDeleteWorkspace = useCallback(async () => {
+    const target = workspaceDeleteTarget;
+    setWorkspaceDeleteTarget(null);
+    if (!target) return;
+    const ok = await deleteHiddenWorkspace(target.storageKey);
     if (ok) {
       refreshList();
     } else {
@@ -169,7 +172,7 @@ export function ManagePage() {
         'Could not delete this workspace. If you use cloud sync, check your connection and try again. If the problem continues, the database may need related notes removed first.',
       );
     }
-  };
+  }, [workspaceDeleteTarget, deleteHiddenWorkspace, refreshList]);
 
   const finishResetMasterKey = useCallback(() => {
     clearMasterKey();
@@ -314,7 +317,7 @@ export function ManagePage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(storageKey)}
+                          onClick={() => setWorkspaceDeleteTarget({ storageKey, displayName })}
                           title="Delete workspace"
                           aria-label="Delete"
                           className={`${iconBtnBase} h-10 w-10 border-red-200/80 bg-white text-red-600 hover:border-red-300 hover:bg-red-50 focus-visible:ring-red-400/35 dark:border-red-900/50 dark:bg-stone-800/80 dark:text-red-400 dark:hover:border-red-800/60 dark:hover:bg-red-950/35`}
@@ -341,15 +344,22 @@ export function ManagePage() {
             </p>
           </div>
         )}
-
-        <section className="mt-12 rounded-2xl border border-amber-200/60 bg-gradient-to-b from-amber-50/50 to-stone-50/30 p-5 dark:border-amber-900/35 dark:from-amber-950/25 dark:to-stone-900/20">
-          <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-100">Master key</h3>
-          <p className="mt-1 text-xs leading-relaxed text-stone-600 dark:text-stone-400">
-            Clears the saved master key on this device only. You will return home and can set a new phrase when you next
-            open protected areas.
-          </p>
-        </section>
       </div>
+
+      <ConfirmDialog
+        open={workspaceDeleteTarget != null}
+        title="Delete this workspace?"
+        description={
+          workspaceDeleteTarget
+            ? `“${workspaceDeleteTarget.displayName}” will be removed from this device. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete workspace"
+        cancelLabel="Cancel"
+        destructive
+        onCancel={() => setWorkspaceDeleteTarget(null)}
+        onConfirm={() => void handleConfirmDeleteWorkspace()}
+      />
 
       <ConfirmDialog
         open={resetMasterKeyDialogOpen}

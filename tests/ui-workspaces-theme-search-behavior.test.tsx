@@ -3,7 +3,7 @@
  */
 
 import React, { useState } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -231,15 +231,17 @@ describe('hidden workspace manage page', () => {
 
   it('delete removes hidden workspace blob after confirm', async () => {
     const { hiddenKey } = seedHomePlusHiddenWorkspace('zap');
-    vi.stubGlobal('confirm', vi.fn(() => true));
     const user = userEvent.setup();
     renderFullApp(['/manage']);
-    await screen.findByText('zap');
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    const rowButton = await screen.findByRole('button', { name: /zap/i });
+    const li = rowButton.closest('li');
+    expect(li).toBeTruthy();
+    await user.click(within(li!).getByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete workspace' }));
     await waitFor(() => {
       expect(localStorage.getItem(hiddenKey)).toBeNull();
     });
-    expect(globalThis.confirm).toHaveBeenCalled();
   });
 });
 

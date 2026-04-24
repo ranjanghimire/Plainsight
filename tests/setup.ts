@@ -213,26 +213,44 @@ vi.mock('../src/sync/sharedWorkspaces', async () => {
 vi.mock('../src/components/ConfirmDialog.jsx', () => ({
   ConfirmDialog: ({
     open,
+    title,
+    description,
+    confirmLabel = 'Confirm',
+    cancelLabel = 'Cancel',
     onConfirm,
     onCancel,
   }: {
     open: boolean;
+    title?: React.ReactNode;
+    description?: React.ReactNode;
+    confirmLabel?: string;
+    cancelLabel?: string;
     onConfirm: () => void;
     onCancel: () => void;
   }) => {
     if (!open) return null;
     return React.createElement(
       'div',
-      { 'data-testid': 'mock-confirm-dialog' },
+      {
+        role: 'dialog',
+        'aria-modal': 'true',
+        'data-testid': 'mock-confirm-dialog',
+      },
+      title != null ? React.createElement('h2', null, title) : null,
+      description != null ? React.createElement('p', null, description) : null,
       React.createElement(
-        'button',
-        { type: 'button', 'data-testid': 'mock-confirm-ok', onClick: onConfirm },
-        'OK',
-      ),
-      React.createElement(
-        'button',
-        { type: 'button', 'data-testid': 'mock-confirm-cancel', onClick: onCancel },
-        'Cancel',
+        'div',
+        null,
+        React.createElement(
+          'button',
+          { type: 'button', 'data-testid': 'mock-confirm-cancel', onClick: onCancel },
+          cancelLabel,
+        ),
+        React.createElement(
+          'button',
+          { type: 'button', 'data-testid': 'mock-confirm-ok', onClick: onConfirm },
+          confirmLabel,
+        ),
       ),
     );
   },
