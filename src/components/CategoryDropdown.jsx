@@ -133,14 +133,29 @@ export function CategoryDropdown({
   ) : null;
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative min-w-0 max-w-full ${className}`}>
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-sm border border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100 dark:border-stone-600 dark:bg-stone-700 dark:text-stone-300 dark:hover:bg-stone-600"
+        className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-stone-200/80 bg-white/90 px-2.5 py-1.5 text-left text-xs font-medium text-stone-700 shadow-sm shadow-stone-900/[0.04] ring-1 ring-stone-900/[0.03] transition-[border-color,background-color,box-shadow,ring-color] hover:border-stone-300 hover:bg-white hover:shadow-md hover:shadow-stone-900/[0.06] dark:border-stone-600/70 dark:bg-stone-800/90 dark:text-stone-200 dark:shadow-none dark:ring-white/[0.04] dark:hover:border-stone-500 dark:hover:bg-stone-800"
       >
-        {currentCategory || triggerLabel}
+        <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-stone-400 dark:text-stone-500" aria-hidden>
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M4 6a2 2 0 012-2h2l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"
+            />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1 truncate">{currentCategory || triggerLabel}</span>
+        <span className="inline-flex shrink-0 text-stone-400 dark:text-stone-500" aria-hidden>
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
       </button>
       {typeof document !== 'undefined' && menuPanel
         ? createPortal(menuPanel, document.body)

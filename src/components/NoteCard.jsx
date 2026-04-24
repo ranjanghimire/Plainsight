@@ -883,70 +883,102 @@ export function NoteCard({
         >
           <div className={`min-h-0 ${showMetaRow ? 'overflow-visible' : 'overflow-hidden'}`}>
             <div
-              className={`flex items-center justify-between gap-2 pt-2 transition-opacity duration-150 ease-out ${
+              className={`pt-2 transition-opacity duration-150 ease-out ${
                 showMetaRow ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
               }`}
             >
-              <div className="min-w-0 flex-1">
-                {isArchived ? (
-                  note.category ? (
-                    <span className="block truncate text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                      {note.category}
-                    </span>
-                  ) : null
-                ) : (
-                  <CategoryDropdown
-                    categories={categories}
-                    currentCategory={note.category}
-                    onSelect={(cat) => onUpdate(note.id, { category: cat })}
-                    onAddNew={onAddCategory}
-                    triggerLabel="+ Category"
-                  />
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {isArchived && deletedAtIso ? (
-                  <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
-                    {formatNoteDate(deletedAtIso)}
-                  </span>
-                ) : null}
-                {!isArchived && note.createdAt ? (
-                  <span className="text-xs text-stone-400 dark:text-stone-500 shrink-0">
-                    {formatNoteDate(note.createdAt)}
-                  </span>
-                ) : null}
-                {isArchived ? (
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onRestore?.(note.text)}
-                      disabled={bulkDissolve || isDeleting}
-                      className="p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 disabled:opacity-40"
-                      aria-label="Restore note"
+              <div
+                className={
+                  isArchived
+                    ? 'flex items-center justify-between gap-2 rounded-xl border border-neutral-200/75 bg-neutral-50/90 px-2 py-1.5 shadow-sm shadow-neutral-900/[0.03] ring-1 ring-neutral-900/[0.02] dark:border-neutral-700/65 dark:bg-neutral-900/45 dark:shadow-none dark:ring-white/[0.04] sm:px-2.5 sm:py-2'
+                    : 'flex items-center justify-between gap-2 rounded-xl border border-stone-200/80 bg-gradient-to-b from-white to-stone-50/95 px-2 py-1.5 shadow-sm shadow-stone-900/[0.04] ring-1 ring-stone-900/[0.025] dark:border-stone-600/60 dark:from-stone-900/80 dark:to-stone-900/55 dark:shadow-none dark:ring-white/[0.05] sm:px-2.5 sm:py-2'
+                }
+              >
+                <div className="min-w-0 flex-1">
+                  {isArchived ? (
+                    note.category ? (
+                      <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white/80 px-2.5 py-1.5 text-xs font-medium text-neutral-700 shadow-sm dark:border-neutral-600/60 dark:bg-neutral-800/80 dark:text-neutral-200">
+                        <span className="text-neutral-400 dark:text-neutral-500" aria-hidden>
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.75}
+                              d="M4 6a2 2 0 012-2h2l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"
+                            />
+                          </svg>
+                        </span>
+                        <span className="truncate">{note.category}</span>
+                      </span>
+                    ) : null
+                  ) : (
+                    <CategoryDropdown
+                      categories={categories}
+                      currentCategory={note.category}
+                      onSelect={(cat) => onUpdate(note.id, { category: cat })}
+                      onAddNew={onAddCategory}
+                      triggerLabel="+ Category"
+                    />
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+                  {isArchived && deletedAtIso ? (
+                    <time
+                      dateTime={deletedAtIso}
+                      className="min-w-0 max-w-[6.5rem] shrink truncate text-[11px] font-medium tabular-nums text-neutral-500 sm:max-w-[9rem] dark:text-neutral-400"
                     >
-                      <RestoreIcon />
-                    </button>
+                      {formatNoteDate(deletedAtIso)}
+                    </time>
+                  ) : null}
+                  {!isArchived && note.createdAt ? (
+                    <time
+                      dateTime={note.createdAt}
+                      className="min-w-0 max-w-[6.5rem] shrink truncate text-[11px] font-medium tabular-nums text-stone-500 sm:max-w-[9rem] dark:text-stone-400"
+                    >
+                      {formatNoteDate(note.createdAt)}
+                    </time>
+                  ) : null}
+                  {(isArchived && deletedAtIso) || (!isArchived && note.createdAt) ? (
+                    <span
+                      className={`h-4 w-px shrink-0 ${
+                        isArchived ? 'bg-neutral-200 dark:bg-neutral-600' : 'bg-stone-200 dark:bg-stone-600'
+                      }`}
+                      aria-hidden
+                    />
+                  ) : null}
+                  {isArchived ? (
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onRestore?.(note.text)}
+                        disabled={bulkDissolve || isDeleting}
+                        className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-neutral-200/80 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-700/60 dark:hover:text-neutral-100"
+                        aria-label="Restore note"
+                      >
+                        <RestoreIcon />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePermanentDeleteArchived}
+                        disabled={bulkDissolve || isDeleting}
+                        className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:pointer-events-none disabled:opacity-40 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                        aria-label="Delete archived note permanently"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      onClick={handlePermanentDeleteArchived}
-                      disabled={bulkDissolve || isDeleting}
-                      className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
-                      aria-label="Delete archived note permanently"
+                      onClick={handleDeleteActive}
+                      disabled={isDeleting}
+                      className="rounded-lg p-2 text-stone-400 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:pointer-events-none disabled:opacity-40 dark:text-stone-500 dark:hover:bg-red-950/35 dark:hover:text-red-400"
+                      aria-label="Delete note"
                     >
                       <TrashIcon />
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleDeleteActive}
-                    disabled={isDeleting}
-                    className="p-1.5 text-stone-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40"
-                    aria-label="Delete note"
-                  >
-                    <TrashIcon />
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
