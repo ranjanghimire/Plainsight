@@ -17,6 +17,10 @@ function chipTone(selected, motionClass) {
 
 const CHIP_PAD = 'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-sm';
 
+/** Fixed track height so “+ Add category” / rename inline never changes row layout. */
+const CHIP_ROW_MIN_H = 'min-h-10';
+const CHIP_INLINE_CTRL_H = 'h-8 min-h-0';
+
 /** Stable `data-testid` segment for a category label (home page tests). */
 export function categoryChipTestIdSlug(name) {
   const s = String(name || '')
@@ -126,7 +130,7 @@ export function CategoryChips({
       <div className="w-full min-w-0 -mx-0.5">
         <div
           data-testid="category-chips-row"
-          className="flex flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain py-0.5 pl-0.5 pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(120,113,108,0.35)_transparent] dark:[scrollbar-color:rgba(168,162,158,0.3)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/45 dark:[&::-webkit-scrollbar-thumb]:bg-stone-500/40"
+          className={`flex flex-nowrap items-center gap-x-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain py-0.5 pl-0.5 pr-1 ${CHIP_ROW_MIN_H} [scrollbar-width:thin] [scrollbar-color:rgba(120,113,108,0.35)_transparent] dark:[scrollbar-color:rgba(168,162,158,0.3)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-300/45 dark:[&::-webkit-scrollbar-thumb]:bg-stone-500/40`}
           style={{ WebkitOverflowScrolling: 'touch', scrollPaddingInlineEnd: '0.5rem' }}
         >
           <button
@@ -140,7 +144,7 @@ export function CategoryChips({
           </button>
           {categories.map((cat) =>
             categoryEditKey === cat ? (
-              <span key={cat} className="inline-flex shrink-0 items-center gap-1">
+              <span key={cat} className="inline-flex h-10 shrink-0 items-center gap-1">
                 <input
                   type="text"
                   value={categoryEditDraft}
@@ -149,20 +153,20 @@ export function CategoryChips({
                     if (e.key === 'Enter') commitCategoryRename(cat);
                     if (e.key === 'Escape') cancelCategoryEdit();
                   }}
-                  className="w-28 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
+                  className={`${CHIP_INLINE_CTRL_H} w-28 box-border px-2 text-base leading-none rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200`}
                   autoFocus
                 />
                 <button
                   type="button"
                   onClick={() => commitCategoryRename(cat)}
-                  className="px-2 py-1 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200"
+                  className={`${CHIP_INLINE_CTRL_H} inline-flex items-center justify-center px-2 text-sm rounded-md bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-200`}
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={cancelCategoryEdit}
-                  className="px-2 py-1 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
+                  className={`${CHIP_INLINE_CTRL_H} inline-flex items-center justify-center px-2 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700`}
                 >
                   Cancel
                 </button>
@@ -197,7 +201,7 @@ export function CategoryChips({
           {showInlineAddCategory ? (
             <span
               ref={inlineAddAnchorRef}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-200/90 bg-white/95 px-1.5 py-1 shadow-sm ring-1 ring-stone-200/40 dark:border-stone-600 dark:bg-stone-900/95 dark:ring-stone-700/50"
+              className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg border border-stone-200/90 bg-white/95 px-1.5 shadow-sm ring-1 ring-stone-200/40 dark:border-stone-600 dark:bg-stone-900/95 dark:ring-stone-700/50"
             >
               <input
                 type="text"
@@ -212,14 +216,14 @@ export function CategoryChips({
                   }
                 }}
                 placeholder="New category"
-                className="min-w-[7.5rem] max-w-[40vw] flex-1 px-2 py-1 text-base rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 sm:max-w-none sm:flex-none sm:w-32"
+                className={`${CHIP_INLINE_CTRL_H} min-w-[7.5rem] max-w-[40vw] flex-1 box-border px-2 text-base leading-none rounded-md border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 sm:max-w-none sm:flex-none sm:w-32`}
                 autoFocus
               />
               <button
                 type="button"
                 data-testid="category-inline-submit"
                 onClick={handleInlineAddCategory}
-                className="shrink-0 px-2.5 py-1.5 text-sm font-medium rounded-md bg-stone-200 text-stone-800 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-100 dark:hover:bg-stone-500"
+                className={`${CHIP_INLINE_CTRL_H} inline-flex shrink-0 items-center justify-center px-2.5 text-sm font-medium rounded-md bg-stone-200 text-stone-800 hover:bg-stone-300 dark:bg-stone-600 dark:text-stone-100 dark:hover:bg-stone-500`}
               >
                 Add
               </button>
@@ -229,7 +233,7 @@ export function CategoryChips({
                   setInlineNewCategoryName('');
                   setShowInlineAddCategory(false);
                 }}
-                className="shrink-0 px-2.5 py-1.5 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700"
+                className={`${CHIP_INLINE_CTRL_H} inline-flex shrink-0 items-center justify-center px-2.5 text-sm rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-400 dark:hover:bg-stone-700`}
               >
                 Cancel
               </button>
