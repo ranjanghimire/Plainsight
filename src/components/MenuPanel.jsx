@@ -760,8 +760,13 @@ export function MenuPanel({ open, onClose }) {
                   <span className={MENU_FOOTER_ICON} aria-hidden>
                     <SignOutMenuGlyph className="h-4 w-4" />
                   </span>
-                  <span className="min-w-0 flex-1 text-sm font-medium leading-none tracking-tight text-stone-800 dark:text-stone-100">
-                    Sign out
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium tracking-tight text-stone-800 dark:text-stone-100">
+                      Sign out
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-normal leading-snug text-stone-500 dark:text-stone-400">
+                      Leave this account on this device
+                    </span>
                   </span>
                 </button>
               ) : null}
