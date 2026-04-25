@@ -311,6 +311,10 @@ export function WorkspaceProvider({ children }) {
       return null;
     }
   }, [activeStorageKey]);
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  useEffect(() => {
+    activeWorkspaceIdRef.current = activeWorkspaceId;
+  }, [activeWorkspaceId]);
 
   const sharedWorkspaceIdSet = useMemo(() => {
     const set = new Set();
@@ -773,7 +777,8 @@ export function WorkspaceProvider({ children }) {
             subscribeToNotes(w.id, (payload) => {
               void applyRealtimeNoteChange(w.id, payload).then(() => {
                 const wid = String(w.id);
-                if (!activeWorkspaceId || wid !== String(activeWorkspaceId)) {
+                const activeId = activeWorkspaceIdRef.current;
+                if (!activeId || wid !== String(activeId)) {
                   markSharedWorkspaceUnread(wid);
                 } else {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
@@ -785,7 +790,8 @@ export function WorkspaceProvider({ children }) {
             subscribeToCategories(w.id, (payload) => {
               void applyRealtimeCategoryChange(w.id, payload).then(() => {
                 const wid = String(w.id);
-                if (!activeWorkspaceId || wid !== String(activeWorkspaceId)) {
+                const activeId = activeWorkspaceIdRef.current;
+                if (!activeId || wid !== String(activeId)) {
                   markSharedWorkspaceUnread(wid);
                 } else {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
@@ -797,7 +803,8 @@ export function WorkspaceProvider({ children }) {
             subscribeToArchivedNotes(w.id, (payload) => {
               void applyRealtimeArchivedNoteChange(w.id, payload).then(() => {
                 const wid = String(w.id);
-                if (!activeWorkspaceId || wid !== String(activeWorkspaceId)) {
+                const activeId = activeWorkspaceIdRef.current;
+                if (!activeId || wid !== String(activeId)) {
                   markSharedWorkspaceUnread(wid);
                 } else {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
