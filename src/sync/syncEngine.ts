@@ -1332,9 +1332,7 @@ export async function fullSync(
       mergedNotes[wid] = mergeNotes(localNotes[wid] || [], remoteNotes[wid] || [], {
         remoteIdsEverConfirmed: lastKnownRemoteNoteIdsByWid[wid],
       });
-      mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || [], {
-        remoteIdsEverConfirmed: lastKnownRemoteArchivedNoteIdsByWid[wid],
-      });
+      mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || []);
     }
 
     // Apply tombstones: locally deleted notes must not be resurrected by remote merges.

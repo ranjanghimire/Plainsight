@@ -127,26 +127,18 @@ export function mergeNotes(
   return { merged, toPush, toPull };
 }
 
-export type MergeArchivedNotesOptions = {
-  /**
-   * Archived note ids we have previously confirmed on the server (after a successful sync).
-   * If a row appears locally but not in the current remote snapshot, and its id is in this set,
-   * treat it as deleted remotely (e.g. another collaborator cleared archive) and omit it
-   * instead of re-upserting from a stale UI/local merge.
-   */
-  remoteIdsEverConfirmed?: Set<string> | null;
-};
-
 /**
  * archived_notes has no updated_at in the schema, so we treat last_deleted_at
  * as the last-write field for conflict resolution.
+ *
+ * Note: archived row ids are deterministic from workspace + note text. The same text
+ * archived again reuses the same id, so we must not drop local-only rows just because an
+ * id appears in a "last seen on server" cache while the remote pull is empty — that is
+ * often a fresh delete-to-archive before the new row is pushed. Stale UI rows are stripped
+ * in flushWorkspaceUiIntoLocalDb (remoteArchivedIdsEverConfirmed + remoteArchivedIdsThisPull)
+ * and tombstones handle explicit permanent deletes.
  */
-export function mergeArchivedNotes(
-  local: ArchivedNote[],
-  remote: ArchivedNote[],
-  options?: MergeArchivedNotesOptions | null,
-): MergeResult<ArchivedNote> {
-  const confirmed = options?.remoteIdsEverConfirmed;
+export function mergeArchivedNotes(local: ArchivedNote[], remote: ArchivedNote[]): MergeResult<ArchivedNote> {
   const l = new Map(local.map((x) => [x.id, x]));
   const r = new Map(remote.map((x) => [x.id, x]));
   const allIds = new Set([...l.keys(), ...r.keys()]);
@@ -165,10 +157,6 @@ export function mergeArchivedNotes(
       if (winner === lv && lt > rt) toPush.push(lv);
       if (winner === rv && rt > lt) toPull.push(rv);
     } else if (lv) {
-      if (confirmed?.has(id)) {
-        // Was on server before; pull no longer lists it — remote delete, do not resurrect.
-        continue;
-      }
       merged.push(lv);
       toPush.push(lv);
     } else if (rv) {

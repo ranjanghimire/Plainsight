@@ -84,7 +84,7 @@ describe('archive clear — tombstones before queueFullSync', () => {
         created_at: '2020-01-01T00:00:00.000Z',
       },
     ];
-    const merged = mergeArchivedNotes([], remote, { remoteIdsEverConfirmed: new Set([id]) });
+    const merged = mergeArchivedNotes([], remote);
     const tombIds = new Set(tombs.map((t) => t.id));
     const after = merged.merged.filter((n) => !tombIds.has(n.id));
     expect(after).toHaveLength(0);
