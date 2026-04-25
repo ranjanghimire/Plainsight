@@ -108,6 +108,16 @@ vi.mock('../src/sync/sharedWorkspaces', async () => {
   );
 
   const normalize = (v: unknown) => String(v || '').trim().toLowerCase();
+  const activityLogSubscribers = new Map<
+    string,
+    Set<
+      (payload: {
+        event: 'INSERT' | 'UPDATE' | 'DELETE';
+        newRow: any | null;
+        oldRow: any | null;
+      }) => void
+    >
+  >();
 
   const listWorkspaceShares = vi.fn(async () => {
     if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
@@ -199,6 +209,33 @@ vi.mock('../src/sync/sharedWorkspaces', async () => {
     return { ok: true };
   });
 
+  const subscribeToWorkspaceActivityLogs = vi.fn((workspaceId: string, onChange: any) => {
+    if (globalThis.__PS_TEST_FLAGS__?.useRealSharedWorkspaces) {
+      return actual.subscribeToWorkspaceActivityLogs(workspaceId, onChange);
+    }
+    const wid = String(workspaceId || '').trim();
+    if (!wid) return () => {};
+    if (!activityLogSubscribers.has(wid)) activityLogSubscribers.set(wid, new Set());
+    activityLogSubscribers.get(wid)!.add(onChange);
+    return () => {
+      activityLogSubscribers.get(wid)?.delete(onChange);
+    };
+  });
+
+  const __emitWorkspaceActivityLog = (workspaceId: string, payload: any) => {
+    const wid = String(workspaceId || '').trim();
+    if (!wid) return;
+    const subs = activityLogSubscribers.get(wid);
+    if (!subs) return;
+    for (const cb of subs) {
+      try {
+        cb(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   return {
     ...actual,
     listWorkspaceShares,
@@ -207,6 +244,8 @@ vi.mock('../src/sync/sharedWorkspaces', async () => {
     makeWorkspacePrivate,
     fetchWorkspaceActivityLogs,
     logWorkspaceActivity,
+    subscribeToWorkspaceActivityLogs,
+    __emitWorkspaceActivityLog,
   };
 });
 

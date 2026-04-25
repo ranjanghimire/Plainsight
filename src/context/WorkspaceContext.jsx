@@ -845,7 +845,7 @@ export function WorkspaceProvider({ children }) {
     const rows = Array.isArray(sharedWorkspaceRows) ? sharedWorkspaceRows : [];
     if (rows.length === 0) return undefined;
 
-    const unsubs: Array<() => void> = [];
+    const unsubs = [];
     for (const r of rows) {
       const wid = String(r?.workspaceId || '').trim();
       if (!wid) continue;
