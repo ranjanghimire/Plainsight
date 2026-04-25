@@ -281,7 +281,6 @@ export function WorkspaceProvider({ children }) {
   const [supabaseRealtimeBindingEpoch, setSupabaseRealtimeBindingEpoch] = useState(0);
   const hydrationRetryTimerRef = useRef(null);
   const hydrationWarningRef = useRef(false);
-  const hiddenDupeDebugShownRef = useRef(false);
   /** Last rendered note id order per workspace; used to avoid reordering after local save + storage reload. */
   const noteOrderSnapshotRef = useRef({ key: '', ids: [] });
   const workspaceKey = activeStorageKey;
@@ -897,82 +896,6 @@ export function WorkspaceProvider({ children }) {
       cancelled = true;
     };
   }, [canUseSupabase, hydrationComplete]);
-
-  /**
-   * Debug (one-time banner):
-   * If hidden duplicates keep reappearing after sign-out, they are likely coming from Supabase.
-   * Show the exact offending rows so we can inspect the root cause (ids/kinds/names/slugs).
-   */
-  useEffect(() => {
-    if (!canUseSupabase || !hydrationComplete) return undefined;
-    if (hiddenDupeDebugShownRef.current) return undefined;
-    let cancelled = false;
-    const startedAt = Date.now();
-    const SAMPLE_WINDOW_MS = 20_000;
-    const interval = window.setInterval(() => {
-      if (cancelled) return;
-      // Stop sampling after window.
-      if (Date.now() - startedAt > SAMPLE_WINDOW_MS) {
-        window.clearInterval(interval);
-        return;
-      }
-      try {
-        // Use the same sources as /manage (localStorage mirror + legacy workspace keys).
-        const hiddenEntries = getHiddenWorkspaceManageEntries();
-        const legacy = (hiddenEntries || []).filter(
-          (e) => typeof e?.storageKey === 'string' && e.storageKey.startsWith('workspace_') && e.storageKey !== 'workspace_home',
-        );
-        if (legacy.length === 0) return;
-
-        hiddenDupeDebugShownRef.current = true;
-        window.clearInterval(interval);
-
-        const blobKeys = enumerateWorkspaceBlobStorageKeys();
-        const visibleBlobs = blobKeys.filter((k) => String(k).startsWith(VISIBLE_WS_PREFIX));
-        const legacyBlobs = blobKeys.filter(
-          (k) => String(k).startsWith('workspace_') && String(k) !== 'workspace_home',
-        );
-
-        const payload = {
-          ts: new Date().toISOString(),
-          userId: String(getLocalSession().userId || ''),
-          hiddenManageEntries: legacy.slice(0, 12).map((e) => ({
-            storageKey: String(e.storageKey),
-            id: String(e.id),
-            displayName: String(e.displayName || ''),
-            slug: hiddenWorkspaceSlugFromName(String(e.displayName || '')),
-          })),
-          blobKeys: {
-            visibleCount: visibleBlobs.length,
-            legacyCount: legacyBlobs.length,
-            legacySample: legacyBlobs.slice(0, 12),
-          },
-          syncDebug: (() => {
-            try {
-              const raw = localStorage.getItem('plainsight_debug_prune_hidden_dupes_v1');
-              return raw ? JSON.parse(raw) : null;
-            } catch {
-              return null;
-            }
-          })(),
-        };
-
-        showToast(
-          `Debug: hidden workspace entries detected (from /manage sources).\n` +
-            `Please screenshot and send:\n` +
-            `${JSON.stringify(payload, null, 2)}`,
-          { persistent: true },
-        );
-      } catch {
-        /* ignore */
-      }
-    }, 1200);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [canUseSupabase, hydrationComplete, showToast]);
 
   /**
    * Keep shared-workspace invites/snaps fresh even when Realtime is "healthy".

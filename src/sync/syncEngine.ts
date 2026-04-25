@@ -965,7 +965,6 @@ export async function fullSync(
   let syncSucceeded = false;
   let hydrationFailure: SyncError | null = null;
   let step = 'start';
-  let debugPruneHiddenDupes: Record<string, unknown> | null = null;
 
   const fail = (error: SyncError) => {
     const wrapped = mkError(`[fullSync:${step}] ${error?.message || 'sync failed'}`, {
@@ -1143,7 +1142,6 @@ export async function fullSync(
       if (hiddenDupes.length > 0) {
         step = 'pruneHiddenDuplicates';
         const removed = new Set<string>();
-        const attempts: { id: string; name: string; slug: string; ok: boolean; error?: unknown }[] = [];
         for (const w of hiddenDupes) {
           const nm = String(w.name || '').trim();
           const slug = hiddenWorkspaceSlugFromName(nm);
@@ -1151,50 +1149,17 @@ export async function fullSync(
             allowZeroRows: true,
             cascadeChildren: true,
           });
-          attempts.push({
-            id: String(w.id),
-            name: nm,
-            slug,
-            ok: del.ok === true,
-            ...(del.ok ? null : { error: del.error }),
-          });
           if (del.ok) {
             removed.add(String(w.id));
             await purgeWorkspaceClientSide(String(w.id));
           }
         }
-        debugPruneHiddenDupes = {
-          ts: new Date().toISOString(),
-          ownerId,
-          collisionSlugsSample: [...collisionSlugs].slice(0, 30),
-          candidates: hiddenDupes.map((w) => ({
-            id: String(w.id),
-            name: String(w.name || '').trim(),
-            owner_id: String(w.owner_id || ''),
-            kind: String(w.kind || ''),
-            updated_at: String(w.updated_at || ''),
-          })),
-          attempts,
-          removed: [...removed],
-        };
         if (removed.size > 0) {
           mergedWorkspacesWithOwner = mergedWorkspacesWithOwner.filter(
             (w) => !removed.has(String(w.id)),
           );
         }
       }
-    }
-
-    // Persist debug snapshot for client-side inspection (optional; best-effort).
-    try {
-      if (debugPruneHiddenDupes) {
-        localStorage.setItem(
-          'plainsight_debug_prune_hidden_dupes_v1',
-          JSON.stringify(debugPruneHiddenDupes),
-        );
-      }
-    } catch {
-      /* ignore */
     }
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
