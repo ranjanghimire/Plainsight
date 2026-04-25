@@ -852,6 +852,14 @@ export function WorkspaceProvider({ children }) {
             legacyCount: legacyBlobs.length,
             legacySample: legacyBlobs.slice(0, 12),
           },
+          syncDebug: (() => {
+            try {
+              const raw = localStorage.getItem('plainsight_debug_prune_hidden_dupes_v1');
+              return raw ? JSON.parse(raw) : null;
+            } catch {
+              return null;
+            }
+          })(),
         };
 
         showToast(
