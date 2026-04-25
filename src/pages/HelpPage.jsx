@@ -2,14 +2,15 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const navLinks = [
+  { id: 'composer', label: 'Search & new notes' },
   { id: 'hidden-workspaces', label: 'Hidden workspaces' },
   { id: 'master-key', label: 'Master key' },
-  { id: 'composer', label: 'Composer & popover' },
   { id: 'tags-categories', label: 'Tags & categories' },
   { id: 'sharing', label: 'Sharing' },
   { id: 'renaming', label: 'Renaming' },
   { id: 'activity-logs', label: 'Activity logs' },
   { id: 'archive', label: 'Archive' },
+  { id: 'signing-out', label: 'Signing out' },
 ];
 
 function Section({ id, eyebrow, title, children }) {
@@ -94,6 +95,59 @@ export function HelpPage() {
           </nav>
 
           <div className="space-y-8 sm:space-y-10">
+            <Section id="composer" eyebrow="Capture" title="One search bar: filter the list or add a note">
+              <p>
+                At the top of your workspace, Plainsight uses a{' '}
+                <strong className="font-medium text-stone-800 dark:text-stone-200">single field</strong> for
+                two jobs at once: it <strong className="font-medium text-stone-800 dark:text-stone-200">filters</strong>{' '}
+                the notes below as you type, and—when you are ready—it becomes the{' '}
+                <strong className="font-medium text-stone-800 dark:text-stone-200">body of the next note</strong>{' '}
+                you publish with the send control.
+              </p>
+              <p>
+                Tap the field to expand the composer. What you type narrows the board in real time so you can
+                scan what you already have; use the{' '}
+                <strong className="font-medium text-stone-800 dark:text-stone-200">paper plane</strong> (or the
+                matching floating send when the field is tall) to commit the same text as a new card. Special
+                single-line commands that start with{' '}
+                <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">.</code> or{' '}
+                <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..</code> are
+                handled as workspace or master-key actions instead of becoming a note—everything else, including
+                multiple lines, is treated as normal capture.
+              </p>
+              <p>
+                When the composer is open, a thin row under the text holds{' '}
+                <strong className="font-medium text-stone-800 dark:text-stone-200">tags</strong> on the left
+                (the <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">#</code>{' '}
+                strip) and <strong className="font-medium text-stone-800 dark:text-stone-200">formatting</strong>{' '}
+                on the right. Tags you set there ride along with the next send; they do not change how search
+                filtering works for the draft you are typing.
+              </p>
+              <ul className="list-disc space-y-2 pl-5 marker:text-stone-400 dark:marker:text-stone-500">
+                <li>
+                  Tap the small <strong className="font-medium text-stone-800 dark:text-stone-200">paragraph mark</strong>{' '}
+                  icon to open the format tray: <strong>First line bold</strong>, <strong>bullets</strong>, and{' '}
+                  <strong>checkboxes</strong> work together on the{' '}
+                  <strong className="font-medium text-stone-800 dark:text-stone-200">line where your cursor sits</strong>
+                  —toggles apply to that line, and the choice is honored when you send so the new note opens with the
+                  right structure (bold opener, list markers, or checklist rows) without leaving the bar.
+                </li>
+                <li>
+                  Bullets and checklist modes stay in sync with the text as you move the caret, so the tray reflects
+                  what the current line already is before you change it.
+                </li>
+                <li>
+                  The <strong className="font-medium text-stone-800 dark:text-stone-200">corner arrows</strong> grow the
+                  writing area by a few extra lines when you want more room, then tuck back when you are done—search
+                  filtering still applies to the same text.
+                </li>
+                <li>
+                  In <strong className="font-medium text-stone-800 dark:text-stone-200">archive</strong> mode the bar
+                  switches to search-only for history, so filtering stays familiar without creating new notes there.
+                </li>
+              </ul>
+            </Section>
+
             <Section
               id="hidden-workspaces"
               eyebrow="Spaces"
@@ -153,30 +207,6 @@ export function HelpPage() {
                   <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">..reset</code>{' '}
                   (composer) to start the email code flow, then follow the prompts to choose a new key
                   when you reach Hidden Workspaces again.
-                </li>
-              </ul>
-            </Section>
-
-            <Section id="composer" eyebrow="Writing" title="Composer & format popover">
-              <p>
-                Tap the composer to focus it. When it expands, a thin row under the field holds tags
-                on the left and formatting on the right.
-              </p>
-              <ul className="list-disc space-y-2 pl-5 marker:text-stone-400 dark:marker:text-stone-500">
-                <li>
-                  Tap the small <strong className="font-medium text-stone-800 dark:text-stone-200">paragraph mark</strong>{' '}
-                  icon to reveal the tray: <strong>First line bold</strong>,{' '}
-                  <strong>bullets</strong>, and <strong>checklist</strong> toggles apply to the line
-                  your cursor is on.
-                </li>
-                <li>
-                  The <strong className="font-medium text-stone-800 dark:text-stone-200">corner arrows</strong>{' '}
-                  control a taller writing area—three extra lines of comfortable height—without leaving
-                  the note flow. Tap again to tuck it back to the default expanded size.
-                </li>
-                <li>
-                  Send with the inline paper plane or the floating one when the composer is tall—both
-                  publish the same way.
                 </li>
               </ul>
             </Section>
@@ -247,6 +277,14 @@ export function HelpPage() {
                 When something should come back, use <strong className="font-medium text-stone-800 dark:text-stone-200">Restore</strong>{' '}
                 on the card—Plainsight returns it to the active list with its categories intact. Exit
                 archive from the same header control when you are done.
+              </p>
+            </Section>
+
+            <Section id="signing-out" eyebrow="Account" title="Signing out on this device">
+              <p>
+                When you <strong className="font-medium text-stone-800 dark:text-stone-200">sign out</strong>, Plainsight
+                removes your workspace data from this device. Nothing stays in the local app until you sign in again;
+                after you do, your account and workspaces load from the server as usual.
               </p>
             </Section>
 
