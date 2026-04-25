@@ -55,6 +55,7 @@ import { pruneArchivedNotesUi } from '../utils/archivedPrune';
 import { stabilizeWorkspaceNotesOrder } from '../utils/noteDisplayOrder';
 import { firstWordsNotePreview } from '../utils/activityLogPreview';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
+import { scheduleFullSyncAfterArchivedBulkDeletes } from '../sync/persistArchivedBulkDeleteTombstones';
 import { refreshSupabaseRealtimeJwt, whenRealtimeAuthReady } from '../sync/supabaseClient';
 import {
   getCanUseSupabase,
@@ -1935,29 +1936,27 @@ export function WorkspaceProvider({ children }) {
   }, [logWorkspaceEditActivity]);
 
   const permanentlyDeleteArchived = useCallback((textKey) => {
+    let workspaceId;
+    try {
+      workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+    } catch {
+      return;
+    }
     setData((prev) => {
       const arch = { ...(prev.archivedNotes || {}) };
       if (!arch[textKey]) return prev;
       delete arch[textKey];
-      return { ...prev, archivedNotes: arch };
+      const next = { ...prev, archivedNotes: arch };
+      try {
+        saveWorkspace(activeStorageKey, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
     });
-    // Record a tombstone so sync can delete the Supabase row.
-    try {
-      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
-      const deletedAt = new Date().toISOString();
-      const id = archivedRowIdForText(workspaceId, textKey);
-      void (async () => {
-        const existing = await getLocalArchivedNoteTombstones(workspaceId);
-        const next = [
-          { id, workspace_id: workspaceId, deleted_at: deletedAt },
-          ...existing.filter((t) => t.id !== id),
-        ];
-        await saveLocalArchivedNoteTombstones(workspaceId, next);
-      })();
-    } catch {
-      /* ignore */
-    }
-    queueFullSync();
+    void scheduleFullSyncAfterArchivedBulkDeletes(workspaceId, [textKey]).catch(() => {
+      queueFullSync();
+    });
     void logWorkspaceEditActivity(
       'archived_note_deleted_permanently',
       'Permanently deleted archived note',
@@ -1967,30 +1966,28 @@ export function WorkspaceProvider({ children }) {
 
   const removeArchivedByTextKeys = useCallback((textKeys) => {
     if (!textKeys?.length) return;
+    let workspaceId;
+    try {
+      workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+    } catch {
+      return;
+    }
     setData((prev) => {
       const arch = { ...(prev.archivedNotes || {}) };
       for (const k of textKeys) {
         delete arch[k];
       }
-      return { ...prev, archivedNotes: arch };
+      const next = { ...prev, archivedNotes: arch };
+      try {
+        saveWorkspace(activeStorageKey, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
     });
-    // Record tombstones so sync can delete the Supabase rows.
-    try {
-      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
-      const deletedAt = new Date().toISOString();
-      const ids = textKeys.map((t) => archivedRowIdForText(workspaceId, t));
-      void (async () => {
-        const existing = await getLocalArchivedNoteTombstones(workspaceId);
-        const next = [
-          ...ids.map((id) => ({ id, workspace_id: workspaceId, deleted_at: deletedAt })),
-          ...existing.filter((t) => !ids.includes(t.id)),
-        ];
-        await saveLocalArchivedNoteTombstones(workspaceId, next);
-      })();
-    } catch {
-      /* ignore */
-    }
-    queueFullSync();
+    void scheduleFullSyncAfterArchivedBulkDeletes(workspaceId, textKeys).catch(() => {
+      queueFullSync();
+    });
     void logWorkspaceEditActivity('archived_notes_bulk_deleted', 'Cleared archived notes', {
       count: textKeys.length,
     });
