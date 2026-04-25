@@ -762,15 +762,21 @@ export function WorkspaceProvider({ children }) {
     if (canUseSupabase && !hydrationComplete) return;
     const key = activeStorageKey;
     const isHome = key === 'workspace_home';
+    const isVisibleKey = typeof key === 'string' && key.startsWith(VISIBLE_WS_PREFIX);
     const visibleEntry = visibleWorkspaces.find((e) => e.key === key);
+    const visibleKeyId = isVisibleKey ? key.slice(VISIBLE_WS_PREFIX.length) : '';
     const name = isHome
       ? 'Home'
       : visibleEntry
         ? visibleEntry.name
-        : getWorkspaceDisplayLabelFromStorageKey(key);
-    const kind = visibleEntry ? 'visible' : isHome ? 'visible' : 'hidden';
+        : isVisibleKey
+          ? getWorkspaceNameById(visibleKeyId) || getWorkspaceDisplayLabelFromStorageKey(key)
+          : getWorkspaceDisplayLabelFromStorageKey(key);
+    // Shared workspaces use `ws_visible_<uuid>` keys but are intentionally absent from personal
+    // visibleWorkspaces; they must still persist as kind=visible so they don't appear in /manage.
+    const kind = visibleEntry || isHome || isVisibleKey ? 'visible' : 'hidden';
     void ensureWorkspaceRow({ storageKey: key, name, kind });
-  }, [canUseSupabase, hydrationComplete, activeStorageKey, visibleWorkspaces]);
+  }, [canUseSupabase, hydrationComplete, activeStorageKey, visibleWorkspaces, getWorkspaceNameById]);
 
   useEffect(() => {
     if (!canUseSupabase) return undefined;
