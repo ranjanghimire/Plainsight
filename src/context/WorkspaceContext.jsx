@@ -112,6 +112,8 @@ import {
   markSharedWorkspaceUnread as persistMarkSharedWorkspaceUnread,
   clearSharedWorkspaceUnread as persistClearSharedWorkspaceUnread,
   hasAnySharedWorkspaceUnread as computeHasAnySharedWorkspaceUnread,
+  markSharedWorkspaceViewed,
+  getSharedWorkspaceLastViewed,
 } from '../sync/sharedWorkspaceUnread';
 
 /**
@@ -328,6 +330,9 @@ export function WorkspaceProvider({ children }) {
     const wid = String(workspaceId || '').trim();
     if (!wid) return;
     if (!sharedWorkspaceIdSet.has(wid)) return;
+    // If we just viewed this workspace, suppress "unread" re-marking from late realtime events.
+    const lastViewed = getSharedWorkspaceLastViewed(wid);
+    if (lastViewed && Date.now() - lastViewed < 2500) return;
     const next = persistMarkSharedWorkspaceUnread(wid);
     setSharedWorkspaceUnread(next);
   }, [sharedWorkspaceIdSet]);
@@ -349,6 +354,7 @@ export function WorkspaceProvider({ children }) {
     if (!activeWorkspaceId) return;
     if (!sharedWorkspaceIdSet.has(String(activeWorkspaceId))) return;
     clearSharedWorkspaceUnread(activeWorkspaceId);
+    markSharedWorkspaceViewed(activeWorkspaceId);
   }, [activeWorkspaceId, clearSharedWorkspaceUnread, sharedWorkspaceIdSet]);
 
   useEffect(() => {
@@ -1124,6 +1130,7 @@ export function WorkspaceProvider({ children }) {
       setData(nextData);
       setCurrentWorkspace(`visible:${wid}`);
       clearSharedWorkspaceUnread(wid);
+      markSharedWorkspaceViewed(wid);
       // Do not append to visibleWorkspaces: collaborators only list shared tabs under “Shared Workspaces”.
       saveAppStatePartial({ lastActiveStorageKey: key });
       bumpWorkspaceSwitch();
