@@ -1747,6 +1747,75 @@ export function WorkspaceProvider({ children }) {
     [activeStorageKey],
   );
 
+  /**
+   * Repair past bug fallout:
+   * If a shared workspace name was ever opened as a dot/hidden workspace on this device
+   * (`workspace_<slug>`), we may have a duplicate merged workspace row with `kind: 'hidden'`
+   * using the same slug as an existing visible/shared workspace row.
+   *
+   * That duplicate makes the shared workspace show up under Hidden Workspaces indefinitely.
+   * Safely remove only the hidden duplicates when a visible workspace with the same slug exists.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const all = await getLocalWorkspaces();
+        if (cancelled) return;
+        const rows = Array.isArray(all) ? all : [];
+        const visibleBySlug = new Map();
+        for (const w of rows) {
+          if (!w?.id) continue;
+          if (w.kind !== 'visible') continue;
+          const nm = typeof w.name === 'string' ? w.name.trim() : '';
+          if (!nm) continue;
+          visibleBySlug.set(hiddenWorkspaceSlugFromName(nm), String(w.id));
+        }
+        const hiddenDupes = rows.filter((w) => {
+          if (!w?.id) return false;
+          if (w.kind !== 'hidden') return false;
+          const nm = typeof w.name === 'string' ? w.name.trim() : '';
+          if (!nm) return false;
+          const slug = hiddenWorkspaceSlugFromName(nm);
+          const visId = visibleBySlug.get(slug);
+          return Boolean(visId && String(visId) !== String(w.id));
+        });
+        if (hiddenDupes.length === 0) return;
+
+        const removeIdSet = new Set(hiddenDupes.map((w) => String(w.id)));
+        await saveLocalWorkspaces(rows.filter((w) => !removeIdSet.has(String(w?.id || ''))));
+
+        for (const w of hiddenDupes) {
+          const wid = String(w.id);
+          const nm = typeof w.name === 'string' ? w.name.trim() : '';
+          const slug = hiddenWorkspaceSlugFromName(nm);
+          const legacyKey = `workspace_${slug}`;
+          try {
+            removeWorkspaceIdMapping(legacyKey, wid);
+          } catch {
+            /* ignore */
+          }
+          try {
+            deleteWorkspace(legacyKey);
+          } catch {
+            /* ignore */
+          }
+          try {
+            await clearLocalWorkspaceData(wid);
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseSupabase, hydrationComplete]);
+
   const value = {
     currentWorkspace,
     workspaceKey,
