@@ -312,9 +312,9 @@ export function WorkspaceProvider({ children }) {
     }
   }, [activeStorageKey]);
   const activeWorkspaceIdRef = useRef(activeWorkspaceId);
-  useEffect(() => {
-    activeWorkspaceIdRef.current = activeWorkspaceId;
-  }, [activeWorkspaceId]);
+  // Keep this ref hot *synchronously* so realtime callbacks never see a stale active id
+  // during the render→effect gap after workspace switches.
+  activeWorkspaceIdRef.current = activeWorkspaceId;
 
   const sharedWorkspaceIdSet = useMemo(() => {
     const set = new Set();
