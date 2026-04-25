@@ -30,6 +30,8 @@ import {
   isCorruptWorkspaceMenuName,
   isKeyInVisibleWorkspacesList,
   isUuid,
+  getHiddenWorkspaceManageEntries,
+  enumerateWorkspaceBlobStorageKeys,
   collectMergedWorkspaceStorageKeys,
   purgeOrphanWorkspaceBlobsFromLocalStorage,
   removeWorkspaceIdMapping,
@@ -810,57 +812,62 @@ export function WorkspaceProvider({ children }) {
     if (!canUseSupabase || !hydrationComplete) return undefined;
     if (hiddenDupeDebugShownRef.current) return undefined;
     let cancelled = false;
-    void (async () => {
+    const startedAt = Date.now();
+    const SAMPLE_WINDOW_MS = 20_000;
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      // Stop sampling after window.
+      if (Date.now() - startedAt > SAMPLE_WINDOW_MS) {
+        window.clearInterval(interval);
+        return;
+      }
       try {
-        const uid = String(getLocalSession().userId || '').trim();
-        if (!uid) return;
-        const rows = await getLocalWorkspaces();
-        if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : [];
-        const visibleSlugs = new Set();
-        for (const w of list) {
-          if (!w?.id) continue;
-          if (w.kind !== 'visible') continue;
-          const nm = typeof w.name === 'string' ? w.name.trim() : '';
-          if (!nm) continue;
-          visibleSlugs.add(hiddenWorkspaceSlugFromName(nm));
-        }
-        const offenders = list
-          .filter((w) => {
-            if (!w?.id) return false;
-            if (w.kind !== 'hidden') return false;
-            if (String(w.owner_id || '') !== uid) return false;
-            const nm = typeof w.name === 'string' ? w.name.trim() : '';
-            if (!nm) return true; // corrupt hidden name, still worth surfacing
-            return visibleSlugs.has(hiddenWorkspaceSlugFromName(nm));
-          })
-          .slice(0, 8)
-          .map((w) => {
-            const nm = typeof w?.name === 'string' ? w.name.trim() : '';
-            return {
-              id: String(w.id),
-              owner_id: String(w.owner_id || ''),
-              kind: String(w.kind || ''),
-              name: nm || '(empty)',
-              slug: nm ? hiddenWorkspaceSlugFromName(nm) : '(empty)',
-              updated_at: String(w.updated_at || ''),
-              created_at: String(w.created_at || ''),
-            };
-          });
-        if (offenders.length === 0) return;
+        // Use the same sources as /manage (localStorage mirror + legacy workspace keys).
+        const hiddenEntries = getHiddenWorkspaceManageEntries();
+        const legacy = (hiddenEntries || []).filter(
+          (e) => typeof e?.storageKey === 'string' && e.storageKey.startsWith('workspace_') && e.storageKey !== 'workspace_home',
+        );
+        if (legacy.length === 0) return;
+
         hiddenDupeDebugShownRef.current = true;
+        window.clearInterval(interval);
+
+        const blobKeys = enumerateWorkspaceBlobStorageKeys();
+        const visibleBlobs = blobKeys.filter((k) => String(k).startsWith(VISIBLE_WS_PREFIX));
+        const legacyBlobs = blobKeys.filter(
+          (k) => String(k).startsWith('workspace_') && String(k) !== 'workspace_home',
+        );
+
+        const payload = {
+          ts: new Date().toISOString(),
+          userId: String(getLocalSession().userId || ''),
+          hiddenManageEntries: legacy.slice(0, 12).map((e) => ({
+            storageKey: String(e.storageKey),
+            id: String(e.id),
+            displayName: String(e.displayName || ''),
+            slug: hiddenWorkspaceSlugFromName(String(e.displayName || '')),
+          })),
+          blobKeys: {
+            visibleCount: visibleBlobs.length,
+            legacyCount: legacyBlobs.length,
+            legacySample: legacyBlobs.slice(0, 12),
+          },
+        };
+
         showToast(
-          `Debug: hidden workspaces colliding with visible/shared slugs (first ${offenders.length}).\n` +
+          `Debug: hidden workspace entries detected (from /manage sources).\n` +
             `Please screenshot and send:\n` +
-            `${JSON.stringify(offenders, null, 2)}`,
+            `${JSON.stringify(payload, null, 2)}`,
           { persistent: true },
         );
       } catch {
         /* ignore */
       }
-    })();
+    }, 1200);
+
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
     };
   }, [canUseSupabase, hydrationComplete, showToast]);
 
