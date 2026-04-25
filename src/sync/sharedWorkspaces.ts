@@ -144,6 +144,31 @@ export async function makeWorkspacePrivate(workspaceId: string) {
   }
 }
 
+/**
+ * `workspace_shares.workspace_name` is a snapshot used for menu display on new devices.
+ * Keep it in sync when the owner renames a workspace, so share menus don't briefly show
+ * an older name before workspace rows hydrate.
+ */
+export async function updateSharedWorkspaceNameSnapshot(
+  workspaceId: string,
+  workspaceName: string,
+) {
+  if (!hasPaidSyncSession()) return { ok: true };
+  const wid = String(workspaceId || '').trim();
+  const name = String(workspaceName || '').trim();
+  if (!wid || !name) return { ok: true };
+  try {
+    const { error } = await getSupabase()
+      .from('workspace_shares')
+      .update({ workspace_name: name })
+      .eq('workspace_id', wid);
+    if (error) return { ok: false, error: err(error.message, error) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: err('Failed to update shared workspace name', e) };
+  }
+}
+
 export async function fetchWorkspaceActivityLogs(
   workspaceId: string,
   limit = 60,

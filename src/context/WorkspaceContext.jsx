@@ -100,6 +100,7 @@ import {
   makeWorkspacePrivate,
   shareWorkspaceByEmail,
   subscribeToWorkspaceShares,
+  updateSharedWorkspaceNameSnapshot,
 } from '../sync/sharedWorkspaces';
 
 /**
@@ -1000,6 +1001,11 @@ export function WorkspaceProvider({ children }) {
           return { ...w, name, updated_at: bump };
         });
         if (changed) await saveLocalWorkspaces(nextList);
+
+        // Keep `workspace_shares.workspace_name` aligned for this workspace so a new device
+        // doesn't briefly render an older snapshot name in the shared-workspace menu.
+        // (RLS should allow owners to update their own shares; failures are non-fatal.)
+        await updateSharedWorkspaceNameSnapshot(String(wid2), name);
       } catch {
         /* ignore */
       } finally {
