@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isCheckboxLine, stripCheckboxMarkFromLine } from '../utils/checkboxNoteLines.js';
+import { nudgeIosKeyboardAfterListContinuation } from '../utils/iosTextareaListAutocapitalize.js';
 
 const DEFAULT_BULLET_INDENT = '  ';
 
@@ -258,6 +259,18 @@ export function useNoteFormatModes({
         const { lineStart, lineEnd, line } = lineBoundsAt(doc, caret);
         const lineNorm = line.replace(/\r/g, '');
 
+        const applyCaretAfterNewListLine = (next, pos) => {
+          requestAnimationFrame(() => {
+            try {
+              ta?.setSelectionRange(pos, pos);
+              syncBulletsModeFromCaretAt(next, pos);
+              nudgeIosKeyboardAfterListContinuation(ta);
+            } catch {
+              /* ignore */
+            }
+          });
+        };
+
         const runListEnter = (markerSuffix) => {
           e.preventDefault();
           const emptyRe =
@@ -301,14 +314,7 @@ export function useNoteFormatModes({
             const secondLineMarkerLen = markerSuffix.length + indent.length;
             const pos = lineStart + beforeInLine.length + 1 + secondLineMarkerLen;
             setValue(next);
-            requestAnimationFrame(() => {
-              try {
-                ta?.setSelectionRange(pos, pos);
-                syncBulletsModeFromCaretAt(next, pos);
-              } catch {
-                /* ignore */
-              }
-            });
+            applyCaretAfterNewListLine(next, pos);
             return;
           }
 
@@ -316,14 +322,7 @@ export function useNoteFormatModes({
           const next = doc.slice(0, lineEnd) + insert + doc.slice(lineEnd);
           const pos = lineEnd + insert.length;
           setValue(next);
-          requestAnimationFrame(() => {
-            try {
-              ta?.setSelectionRange(pos, pos);
-              syncBulletsModeFromCaretAt(next, pos);
-            } catch {
-              /* ignore */
-            }
-          });
+          applyCaretAfterNewListLine(next, pos);
         };
 
         if (isCheckboxLine(lineNorm)) {

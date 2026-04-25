@@ -341,6 +341,7 @@ export function SearchCommandBar({ value, onChange, onCreateNote, searchOnly = f
         <textarea
           ref={textareaRef}
           rows={searchOnly ? 1 : composerExpanded ? (composerExtraTall ? 7 : 4) : 1}
+          autoCapitalize="sentences"
           className={
             searchOnly
               ? 'flex-1 h-10 min-h-10 max-h-10 shrink-0 px-3 py-0 mr-2 text-base leading-10 rounded-lg border-0 bg-transparent text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-0 resize-none overflow-y-auto dark:text-stone-200 dark:placeholder-stone-500'
