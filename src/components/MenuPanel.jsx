@@ -43,6 +43,46 @@ function MenuIcon({ className = '' }) {
   );
 }
 
+/** Book / guide — menu footer Help row */
+function HelpMenuGlyph({ className = '' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+      />
+    </svg>
+  );
+}
+
+/** Leave session — menu footer Sign out row */
+function SignOutMenuGlyph({ className = '' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+      />
+    </svg>
+  );
+}
+
+const MENU_FOOTER_ROW =
+  'group flex w-full items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-left transition-all duration-200 ease-out active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-50 dark:focus-visible:ring-stone-500/40 dark:focus-visible:ring-offset-stone-900';
+
+const MENU_FOOTER_ROW_HELP =
+  `${MENU_FOOTER_ROW} text-stone-700 hover:border-stone-200/90 hover:bg-white/85 hover:shadow-[0_1px_0_rgba(15,23,42,0.04),0_3px_10px_rgba(15,23,42,0.05)] dark:text-stone-200 dark:hover:border-stone-600/70 dark:hover:bg-stone-800/55 dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_6px_16px_rgba(0,0,0,0.18)]`;
+
+const MENU_FOOTER_ROW_SIGNOUT =
+  `${MENU_FOOTER_ROW} text-stone-600 hover:border-stone-200/80 hover:bg-stone-50/90 hover:shadow-[0_1px_0_rgba(15,23,42,0.03),0_2px_8px_rgba(15,23,42,0.04)] dark:text-stone-300 dark:hover:border-stone-600/60 dark:hover:bg-stone-800/40 dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_4px_12px_rgba(0,0,0,0.15)]`;
+
+const MENU_FOOTER_ICON =
+  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200/60 bg-gradient-to-b from-white to-stone-50/90 text-stone-500 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-[border-color,box-shadow,color,background] duration-200 group-hover:border-stone-300/80 group-hover:from-stone-50 group-hover:to-stone-100/95 group-hover:text-stone-700 group-hover:shadow-[0_1px_2px_rgba(15,23,42,0.06)] dark:border-stone-600/50 dark:from-stone-800/90 dark:to-stone-900/80 dark:text-stone-400 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:group-hover:border-stone-500/60 dark:group-hover:from-stone-700/80 dark:group-hover:to-stone-800/90 dark:group-hover:text-stone-200';
+
 export function MenuButton({ onOpen }) {
   return (
     <button
@@ -687,26 +727,50 @@ export function MenuPanel({ open, onClose }) {
             </div>
           </div>
 
-          <div className="mt-6 border-t border-stone-200 dark:border-stone-600 pt-3 px-1">
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                navigate('/help');
-              }}
-              className="w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
-            >
-              Help
-            </button>
-            {customAuthSession && authEmail ? (
+          <div className="mt-6 border-t border-stone-200/90 pt-4 dark:border-stone-600/80">
+            <div className="flex flex-col gap-1.5 px-0.5">
               <button
                 type="button"
-                onClick={() => setSignOutConfirmOpen(true)}
-                className="mt-2.5 w-full text-left text-sm font-medium text-stone-600 dark:text-stone-300 hover:underline"
+                aria-label="Help"
+                onClick={() => {
+                  onClose();
+                  navigate('/help');
+                }}
+                className={MENU_FOOTER_ROW_HELP}
               >
-                Sign out
+                <span className={MENU_FOOTER_ICON} aria-hidden>
+                  <HelpMenuGlyph className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium tracking-tight text-stone-800 dark:text-stone-100">
+                    Help
+                  </span>
+                  <span className="mt-0.5 block text-[11px] font-normal leading-snug text-stone-500 dark:text-stone-400">
+                    Guide &amp; how Plainsight works
+                  </span>
+                </span>
               </button>
-            ) : null}
+              {customAuthSession && authEmail ? (
+                <button
+                  type="button"
+                  aria-label="Sign out"
+                  onClick={() => setSignOutConfirmOpen(true)}
+                  className={MENU_FOOTER_ROW_SIGNOUT}
+                >
+                  <span className={MENU_FOOTER_ICON} aria-hidden>
+                    <SignOutMenuGlyph className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium tracking-tight text-stone-800 dark:text-stone-100">
+                      Sign out
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-normal leading-snug text-stone-500 dark:text-stone-400">
+                      Leave this account on this device
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </aside>
