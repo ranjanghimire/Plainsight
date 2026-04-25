@@ -61,6 +61,7 @@ import {
   getOrCreateWorkspaceIdForStorageKey,
   getStorageKeyForWorkspaceId,
   isUuid,
+  hiddenWorkspaceSlugFromName,
   loadAppState,
   collectMergedWorkspaceStorageKeys,
   purgeOrphanWorkspaceBlobsFromLocalStorage,
@@ -1092,6 +1093,54 @@ export async function fullSync(
       mergedWorkspacesWithOwner = mergedWorkspacesWithOwner.filter((w) =>
         myAccessibleWorkspaceIds.has(String(w.id)),
       );
+    }
+
+    /**
+     * Repair bug fallout:
+     * Prior builds could accidentally create hidden workspaces on the recipient account
+     * (e.g. opening a shared workspace name via a dot/hidden key). Those rows are owned by
+     * the recipient and will keep reappearing even after local sign-out.
+     *
+     * If we have an accessible visible workspace whose name slug collides with a hidden
+     * workspace owned by the current user, delete the hidden duplicate (remote + local).
+     * This keeps "Hidden Workspaces" from listing shared workspaces.
+     */
+    if (ownerId) {
+      const visibleSlugs = new Set<string>();
+      for (const w of mergedWorkspacesWithOwner) {
+        if (!w?.id) continue;
+        if (w.kind !== 'visible') continue;
+        const nm = String(w.name || '').trim();
+        if (!nm) continue;
+        visibleSlugs.add(hiddenWorkspaceSlugFromName(nm));
+      }
+      const hiddenDupes = mergedWorkspacesWithOwner.filter((w) => {
+        if (!w?.id) return false;
+        if (String(w.owner_id || '') !== String(ownerId)) return false;
+        if (w.kind !== 'hidden') return false;
+        const nm = String(w.name || '').trim();
+        if (!nm) return false;
+        return visibleSlugs.has(hiddenWorkspaceSlugFromName(nm));
+      });
+      if (hiddenDupes.length > 0) {
+        step = 'pruneHiddenDuplicates';
+        const removed = new Set<string>();
+        for (const w of hiddenDupes) {
+          const del = await deleteWorkspaceRemote(String(w.id), {
+            allowZeroRows: true,
+            cascadeChildren: true,
+          });
+          if (del.ok) {
+            removed.add(String(w.id));
+            await purgeWorkspaceClientSide(String(w.id));
+          }
+        }
+        if (removed.size > 0) {
+          mergedWorkspacesWithOwner = mergedWorkspacesWithOwner.filter(
+            (w) => !removed.has(String(w.id)),
+          );
+        }
+      }
     }
 
     // 4) ALWAYS write merged workspaces back to local storage (hydration)
