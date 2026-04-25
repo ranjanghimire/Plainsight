@@ -12,10 +12,6 @@ const APPLE_REVIEW_EMAIL =
   (import.meta.env.VITE_APPLE_REVIEW_EMAIL as string | undefined)?.trim().toLowerCase() ||
   'apple-review@plainsight.app';
  
-const APPLE_REVIEW_PASSWORD =
-  (import.meta.env.VITE_APPLE_REVIEW_PASSWORD as string | undefined)?.trim() ||
-  'ReviewTest2026';
- 
 export type AppleReviewLoginResult =
   | { ok: true; email: string; userId: string }
   | { ok: false; error: string };
@@ -24,10 +20,12 @@ export function isAppleReviewEmail(email: string): boolean {
   return (email || '').trim().toLowerCase() === APPLE_REVIEW_EMAIL;
 }
  
-export async function appleReviewLogin(email: string): Promise<AppleReviewLoginResult> {
+export async function appleReviewLogin(email: string, password: string): Promise<AppleReviewLoginResult> {
   const normalizedEmail = (email || '').trim().toLowerCase();
+  const pw = (password || '').trim();
   if (!normalizedEmail) return { ok: false, error: 'Enter an email address.' };
   if (!isAppleReviewEmail(normalizedEmail)) return { ok: false, error: 'Not an Apple review account.' };
+  if (!pw) return { ok: false, error: 'Enter your password.' };
  
   const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
   const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
@@ -40,7 +38,7 @@ export async function appleReviewLogin(email: string): Promise<AppleReviewLoginR
     userId?: string;
     email?: string;
   }>('auth-apple-review-login', {
-    body: { email: normalizedEmail, password: APPLE_REVIEW_PASSWORD },
+    body: { email: normalizedEmail, password: pw },
   });
  
   if (error) return { ok: false, error };

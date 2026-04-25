@@ -12,6 +12,7 @@ const shellClass =
 
 export function SendCodeModal({ open, onClose, loginWithCode }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [step, setStep] = useState('email');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -22,6 +23,7 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
     if (!open) return undefined;
     const t = window.setTimeout(() => {
       setEmail('');
+      setPassword('');
       setStep('email');
       setSending(false);
       setError(null);
@@ -50,7 +52,11 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
     setError(null);
     setPaidHint(null);
     if (isAppleReviewEmail(trimmed)) {
-      const out = await appleReviewLogin(trimmed);
+      // Apple review: avoid pushing any pre-existing local data under the dev placeholder session.
+      // This mirrors the "Clear this device & continue" sign-in flow so RLS won't reject first sync.
+      // IMPORTANT: do not broadcast CLEAR here; that would reload this tab mid-login.
+      await clearAllLocalClientState('signin_clear', { broadcast: false });
+      const out = await appleReviewLogin(trimmed, password);
       setSending(false);
       if (!out.ok) {
         setError(out.error);
@@ -159,6 +165,22 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
                     required
                   />
                 </label>
+                {isAppleReviewEmail(email) ? (
+                  <label className="block">
+                    <span className="sr-only">Password</span>
+                    <input
+                      type="password"
+                      name="password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(ev) => setPassword(ev.target.value)}
+                      placeholder="Password"
+                      className="w-full rounded-xl border border-stone-200 bg-white px-3 py-3 text-base text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/80 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
+                      disabled={sending}
+                      required
+                    />
+                  </label>
+                ) : null}
                 {error ? (
                   <p className="text-sm text-red-600 dark:text-red-400" role="alert">
                     {error}
@@ -178,7 +200,13 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
                     disabled={sending}
                     className="rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-white"
                   >
-                    {sending ? 'Sending…' : 'Send code'}
+                    {isAppleReviewEmail(email)
+                      ? sending
+                        ? 'Signing in…'
+                        : 'Sign in'
+                      : sending
+                        ? 'Sending…'
+                        : 'Send code'}
                   </button>
                 </div>
               </form>

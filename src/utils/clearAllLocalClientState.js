@@ -68,8 +68,9 @@ function broadcastLogoutToOtherTabs(reason) {
  * Wipes Plainsight client persistence (localStorage + sessionStorage plainsight_* + SW caches).
  * Preserves theme (`plainsight-theme`). Restores Phase-1 local dev session placeholder.
  * @param {'logout' | 'signin_clear' | 'user_request'} reason
+ * @param {{ broadcast?: boolean }} [options] when false, does not trigger cross-tab reload
  */
-export async function clearAllLocalClientState(reason) {
+export async function clearAllLocalClientState(reason, options) {
   const keys = collectRemovableLocalStorageKeys();
   for (const k of keys) {
     try {
@@ -82,5 +83,7 @@ export async function clearAllLocalClientState(reason) {
   clearSession();
   ensureLocalSession();
   await clearServiceWorkerCaches();
-  broadcastLogoutToOtherTabs(reason);
+  if (options?.broadcast !== false) {
+    broadcastLogoutToOtherTabs(reason);
+  }
 }
