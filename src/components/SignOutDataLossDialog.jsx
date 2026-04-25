@@ -89,18 +89,17 @@ export function SignOutDataLossDialog({ open, onCancel, onConfirm }) {
                 Remove data from this device?
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-stone-600 dark:text-stone-300">
-                Signing out deletes every workspace stored locally on this device — notes, categories, and
-                anything that has not finished syncing may be gone here until you sign in again (your cloud
-                copy is restored from the server when you do).
+                When you sign out, this device removes its local workspaces. Your synced work will come back
+                the next time you sign in.
               </p>
               <ul className="mt-4 space-y-2 text-sm text-stone-600 dark:text-stone-400">
                 <li className="flex gap-2">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500/90" aria-hidden />
-                  <span>Local-only changes that never reached the server cannot be recovered after this.</span>
+                  <span>Unsynced edits stay only on this device and won&apos;t return after sign-out</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-stone-400 dark:bg-stone-500" aria-hidden />
-                  <span>Theme and similar device preferences stay on this device.</span>
+                  <span>Your theme and device preferences remain unchanged.</span>
                 </li>
               </ul>
             </div>
