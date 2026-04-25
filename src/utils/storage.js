@@ -5,6 +5,7 @@ import {
   getLocalArchivedNoteTombstones,
   saveLocalArchivedNoteTombstones,
 } from '../sync/localDB';
+import { getSession as getLocalSession } from '../auth/localSession';
 
 const WORKSPACE_PREFIX = 'workspace_';
 const MASTER_KEY = 'masterKey';
@@ -576,6 +577,7 @@ export function getWorkspaceDisplayLabelFromStorageKey(key) {
  */
 export function getHiddenWorkspaceManageEntries() {
   const workspaces = readMergedWorkspacesFromLocalStorageSync();
+  const uid = String(getLocalSession().userId || '').trim();
   const used = new Set();
   const sorted = [...workspaces].sort((a, b) => {
     const homeScore = (w) =>
@@ -587,6 +589,10 @@ export function getHiddenWorkspaceManageEntries() {
   const out = [];
   for (const w of sorted) {
     if (!w?.id || w.kind !== 'hidden') continue;
+    // Hidden Workspaces (/manage) is a "my private spaces" list.
+    // Never list collaborator/shared workspaces here, even if a buggy client persisted them
+    // as kind=hidden under another owner's id.
+    if (uid && String(w.owner_id || '') !== uid) continue;
     const storageKey = assignStorageKeyForRemoteWorkspace(w, used);
     used.add(storageKey);
     if (!storageKey.startsWith(WORKSPACE_PREFIX) || storageKey === 'workspace_home') continue;
