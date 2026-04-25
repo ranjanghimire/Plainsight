@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { sendCode } from '../auth/sendCode';
 import { checkSyncEntitlementRemote } from '../auth/checkSyncEntitlementRemote';
+import { appleReviewLogin, isAppleReviewEmail } from '../auth/appleReviewLogin';
 import { EnterCodePlaceholder } from './EnterCodePlaceholder';
 import { ExistingAccountBlockedDialog } from './ExistingAccountBlockedDialog';
 import { shouldBlockExistingAccountSignIn } from '../utils/signInExistingAccountBlock';
@@ -48,6 +49,16 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
     setSending(true);
     setError(null);
     setPaidHint(null);
+    if (isAppleReviewEmail(trimmed)) {
+      const out = await appleReviewLogin(trimmed);
+      setSending(false);
+      if (!out.ok) {
+        setError(out.error);
+        return;
+      }
+      onClose();
+      return;
+    }
     const result = await sendCode(trimmed);
     setSending(false);
     if (!result.ok) {
@@ -127,7 +138,9 @@ export function SendCodeModal({ open, onClose, loginWithCode }) {
                     Sign in to sync
                   </h2>
                   <p className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-                    Email a secure one-time code — no password on this device.
+                    {isAppleReviewEmail(email)
+                      ? 'Apple review account detected — signing in…'
+                      : 'Email a secure one-time code — no password on this device.'}
                   </p>
                 </div>
               </div>

@@ -23,10 +23,8 @@
         var KEY = 'plainsight-theme';
         try {
           var stored = localStorage.getItem(KEY);
-          var dark =
-            stored === 'dark' ||
-            (stored !== 'light' &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          // Default to light unless the user explicitly chose dark.
+          var dark = stored === 'dark';
           var root = document.documentElement;
           root.classList.toggle('dark', dark);
           root.style.colorScheme = dark ? 'dark' : 'light';

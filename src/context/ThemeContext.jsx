@@ -18,7 +18,8 @@ function readStoredTheme() {
   } catch {
     /* ignore */
   }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  // Default to light when no explicit preference is stored.
+  return false;
 }
 
 /** Keep `<html>`, `theme-color`, and `color-scheme` aligned (see blocking script in `index.html`). */

@@ -77,6 +77,37 @@ Deno.serve(async (req) => {
     return json({ error: 'Invalid user id' }, 400);
   }
 
+  /**
+   * App Store review bypass:
+   * treat the Apple review account as entitled regardless of RevenueCat state.
+   * This is intentionally narrow (exact email match) and requires service role to resolve id→email.
+   */
+  try {
+    const reviewEmail = (Deno.env.get('APPLE_REVIEW_EMAIL') ?? 'apple-review@plainsight.app')
+      .trim()
+      .toLowerCase();
+    const sbUrl = Deno.env.get('SUPABASE_URL')?.trim() ?? '';
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim() ?? '';
+    if (reviewEmail && sbUrl && serviceKey) {
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.49.1');
+      const supabase = createClient(sbUrl, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .maybeSingle();
+      const email = typeof userRow?.email === 'string' ? userRow.email.trim().toLowerCase() : '';
+      if (email && email === reviewEmail) {
+        return json({ syncEntitled: true });
+      }
+    }
+  } catch (e) {
+    // If this lookup fails, fall back to RevenueCat below.
+    console.warn('check-sync-entitlement: review override lookup failed', e);
+  }
+
   const rcUrl = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`;
 
   try {
