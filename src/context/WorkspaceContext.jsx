@@ -845,23 +845,33 @@ export function WorkspaceProvider({ children }) {
     const rows = Array.isArray(sharedWorkspaceRows) ? sharedWorkspaceRows : [];
     if (rows.length === 0) return undefined;
 
+    let cancelled = false;
     const unsubs = [];
-    for (const r of rows) {
-      const wid = String(r?.workspaceId || '').trim();
-      if (!wid) continue;
-      unsubs.push(
-        subscribeToWorkspaceActivityLogs(wid, (p) => {
-          const row = p?.newRow;
-          const actor = row?.actor_user_id ? String(row.actor_user_id) : '';
-          if (!actor || actor === String(myId)) return;
-          const activeId = activeWorkspaceIdRef.current;
-          if (activeId && String(activeId) === wid) return;
-          markSharedWorkspaceUnread(wid);
-        }),
-      );
-    }
+    void (async () => {
+      try {
+        await whenRealtimeAuthReady();
+        if (cancelled) return;
+        for (const r of rows) {
+          const wid = String(r?.workspaceId || '').trim();
+          if (!wid) continue;
+          unsubs.push(
+            subscribeToWorkspaceActivityLogs(wid, (p) => {
+              const row = p?.newRow;
+              const actor = row?.actor_user_id ? String(row.actor_user_id) : '';
+              if (!actor || actor === String(myId)) return;
+              const activeId = activeWorkspaceIdRef.current;
+              if (activeId && String(activeId) === wid) return;
+              markSharedWorkspaceUnread(wid);
+            }),
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
 
     return () => {
+      cancelled = true;
       unsubs.forEach((fn) => {
         try {
           fn();
