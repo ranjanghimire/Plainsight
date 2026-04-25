@@ -71,7 +71,7 @@ import {
 } from '../utils/storage';
 import { notifyHydrationComplete } from './hydrationBridge';
 import { getCanUseSupabase } from './syncEnabled';
-import { getSession as getLocalSession } from '../auth/localSession';
+import { getSession as getLocalSession, LOCAL_DEV_USER_ID } from '../auth/localSession';
 import { pruneArchivedNoteRows } from '../utils/archivedPrune';
 import { listWorkspaceShares } from './sharedWorkspaces';
 
@@ -98,6 +98,33 @@ async function getOwnerId(): Promise<string | null> {
 
 function ensureWorkspacePinUserId(pins: WorkspacePin[], userId: string): WorkspacePin[] {
   return pins.map((p) => ({ ...p, user_id: userId }));
+}
+
+/**
+ * When a user signs in for the first time, pre-sync local workspaces were created under the Phase-1
+ * placeholder owner id. If we keep that owner_id, fullSync will (a) refuse to push them and (b)
+ * later drop them as “not accessible”, which can purge the local UI blobs.
+ *
+ * This migration assigns those local-only workspaces to the current signed-in owner so they sync.
+ */
+export function normalizeLocalWorkspaceOwnerIdsForSession(
+  local: Workspace[],
+  ownerId: string | null,
+): { next: Workspace[]; changed: boolean } {
+  const oid = String(ownerId || '').trim();
+  if (!oid) return { next: local || [], changed: false };
+  const rows = Array.isArray(local) ? local : [];
+  let changed = false;
+  const next = rows.map((w) => {
+    if (!w || !w.id) return w;
+    const cur = String(w.owner_id || '').trim();
+    if (!cur || cur === LOCAL_DEV_USER_ID) {
+      changed = true;
+      return { ...w, owner_id: oid };
+    }
+    return w;
+  });
+  return { next, changed };
 }
 
 function keepWorkspaceOwnerIds(local: Workspace[], remote: Workspace[]): Workspace[] {
@@ -967,7 +994,16 @@ export async function fullSync(
       return fail(mkError(remoteWorkspacesRes.error.message, remoteWorkspacesRes.error));
     }
     const remoteWorkspaces = (remoteWorkspacesRes.data || []) as Workspace[];
-    let mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteWorkspaces, localWorkspaces);
+    let localForMerge = localWorkspaces;
+    if (ownerId) {
+      const normalized = normalizeLocalWorkspaceOwnerIdsForSession(localWorkspaces, ownerId);
+      if (normalized.changed) {
+        step = 'normalizeLocalWorkspaceOwners:firstSnapshot';
+        await saveLocalWorkspaces(normalized.next);
+      }
+      localForMerge = normalized.next;
+    }
+    let mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteWorkspaces, localForMerge);
     if (ownerId) {
       mergedWorkspaces = keepWorkspaceOwnerIds(mergedWorkspaces, remoteWorkspaces);
     }
@@ -991,7 +1027,16 @@ export async function fullSync(
       return fail(mkError(remoteFinalRes.error.message, remoteFinalRes.error));
     }
     const remoteFinal = (remoteFinalRes.data || []) as Workspace[];
-    mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteFinal, localFinal);
+    let localFinalForMerge = localFinal;
+    if (ownerId) {
+      const normalizedFinal = normalizeLocalWorkspaceOwnerIdsForSession(localFinal, ownerId);
+      if (normalizedFinal.changed) {
+        step = 'normalizeLocalWorkspaceOwners:secondSnapshot';
+        await saveLocalWorkspaces(normalizedFinal.next);
+      }
+      localFinalForMerge = normalizedFinal.next;
+    }
+    mergedWorkspaces = mergeRemoteAndLocalWorkspaces(remoteFinal, localFinalForMerge);
     if (ownerId) {
       mergedWorkspaces = keepWorkspaceOwnerIds(mergedWorkspaces, remoteFinal);
     }
