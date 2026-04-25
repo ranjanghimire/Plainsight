@@ -294,6 +294,24 @@ export function WorkspaceProvider({ children }) {
   const noteOrderSnapshotRef = useRef({ key: '', ids: [] });
   const workspaceKey = activeStorageKey;
 
+  const activeWorkspaceId = useMemo(() => {
+    try {
+      const key = String(activeStorageKey || '');
+      if (key.startsWith(VISIBLE_WS_PREFIX)) {
+        const candidate = key.slice(VISIBLE_WS_PREFIX.length);
+        if (isUuid(candidate)) return candidate;
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const wid = getWorkspaceIdForStorageKey(activeStorageKey);
+      return wid && isUuid(String(wid)) ? String(wid) : null;
+    } catch {
+      return null;
+    }
+  }, [activeStorageKey]);
+
   const sharedWorkspaceIdSet = useMemo(() => {
     const set = new Set();
     for (const row of sharedWorkspaceRows || []) {
@@ -324,23 +342,10 @@ export function WorkspaceProvider({ children }) {
 
   // Clear unread when the user opens that workspace.
   useEffect(() => {
-    // Prefer extracting from `ws_visible_<uuid>` since shared workspaces always use that key.
-    // Mapping lookups can be stale/missing early in session restore.
-    let wid = null;
-    try {
-      const key = String(activeStorageKey || '');
-      if (key.startsWith(VISIBLE_WS_PREFIX)) {
-        const candidate = key.slice(VISIBLE_WS_PREFIX.length);
-        if (isUuid(candidate)) wid = candidate;
-      }
-    } catch {
-      wid = null;
-    }
-    if (!wid) wid = getWorkspaceIdForStorageKey(activeStorageKey);
-    if (!wid) return;
-    if (!sharedWorkspaceIdSet.has(String(wid))) return;
-    clearSharedWorkspaceUnread(wid);
-  }, [activeStorageKey, clearSharedWorkspaceUnread, sharedWorkspaceIdSet]);
+    if (!activeWorkspaceId) return;
+    if (!sharedWorkspaceIdSet.has(String(activeWorkspaceId))) return;
+    clearSharedWorkspaceUnread(activeWorkspaceId);
+  }, [activeWorkspaceId, clearSharedWorkspaceUnread, sharedWorkspaceIdSet]);
 
   useEffect(() => {
     const ids = Array.isArray(data.notes) ? data.notes.map((n) => String(n.id)) : [];
@@ -767,9 +772,10 @@ export function WorkspaceProvider({ children }) {
           addUnsub(
             subscribeToNotes(w.id, (payload) => {
               void applyRealtimeNoteChange(w.id, payload).then(() => {
-                const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
-                if (key !== activeStorageKey) markSharedWorkspaceUnread(w.id);
-                if (key === activeStorageKey) {
+                const wid = String(w.id);
+                if (!activeWorkspaceId || wid !== String(activeWorkspaceId)) {
+                  markSharedWorkspaceUnread(wid);
+                } else {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -778,9 +784,10 @@ export function WorkspaceProvider({ children }) {
           addUnsub(
             subscribeToCategories(w.id, (payload) => {
               void applyRealtimeCategoryChange(w.id, payload).then(() => {
-                const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
-                if (key !== activeStorageKey) markSharedWorkspaceUnread(w.id);
-                if (key === activeStorageKey) {
+                const wid = String(w.id);
+                if (!activeWorkspaceId || wid !== String(activeWorkspaceId)) {
+                  markSharedWorkspaceUnread(wid);
+                } else {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -789,9 +796,10 @@ export function WorkspaceProvider({ children }) {
           addUnsub(
             subscribeToArchivedNotes(w.id, (payload) => {
               void applyRealtimeArchivedNoteChange(w.id, payload).then(() => {
-                const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
-                if (key !== activeStorageKey) markSharedWorkspaceUnread(w.id);
-                if (key === activeStorageKey) {
+                const wid = String(w.id);
+                if (!activeWorkspaceId || wid !== String(activeWorkspaceId)) {
+                  markSharedWorkspaceUnread(wid);
+                } else {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
