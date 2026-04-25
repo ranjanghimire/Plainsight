@@ -10,6 +10,11 @@ type NotifyArgs = {
 let permissionChecked = false;
 let permissionGranted = false;
 
+/** Call after login / when shared workspaces exist so iOS can prompt before first remote event. */
+export async function prefetchLocalNotificationPermission(): Promise<boolean> {
+  return ensurePermission();
+}
+
 async function ensurePermission(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return false;
   if (permissionChecked) return permissionGranted;

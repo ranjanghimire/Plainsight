@@ -9,6 +9,8 @@ import {
   useMemo,
 } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import {
   getWorkspaceKey,
   getWorkspaceNameFromKey,
@@ -116,7 +118,16 @@ import {
   markSharedWorkspaceViewed,
   getSharedWorkspaceLastViewed,
 } from '../sync/sharedWorkspaceUnread';
-import { notifyLocalPremium } from '../native/localNotifications';
+import {
+  notifyLocalPremium,
+  prefetchLocalNotificationPermission,
+} from '../native/localNotifications';
+import {
+  shouldMarkUnreadForSharedActivity,
+  shouldScheduleIosLocalNotificationForSharedNoteActivity,
+  formatSharedWorkspaceNoteNotificationBody,
+  isNativeAppInactiveForNotifications,
+} from '../sync/sharedWorkspaceActivityNotifications';
 
 /**
  * Resolve workspace UUID for menu-visible entries:
@@ -723,8 +734,7 @@ export function WorkspaceProvider({ children }) {
   useEffect(() => {
     if (!canUseSupabase || !hydrationComplete) return undefined;
     let debounce = null;
-    const onVis = () => {
-      if (document.visibilityState !== 'visible') return;
+    const bumpRealtimeBinding = () => {
       if (debounce != null) window.clearTimeout(debounce);
       debounce = window.setTimeout(() => {
         debounce = null;
@@ -738,10 +748,37 @@ export function WorkspaceProvider({ children }) {
         })();
       }, 400);
     };
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      bumpRealtimeBinding();
+    };
     document.addEventListener('visibilitychange', onVis);
+    let appListener = null;
+    let appListenerCancelled = false;
+    if (Capacitor.isNativePlatform()) {
+      void App.addListener('appStateChange', (state) => {
+        if (state.isActive) bumpRealtimeBinding();
+      }).then((handle) => {
+        if (appListenerCancelled) {
+          try {
+            handle.remove();
+          } catch {
+            /* ignore */
+          }
+        } else {
+          appListener = handle;
+        }
+      });
+    }
     return () => {
+      appListenerCancelled = true;
       document.removeEventListener('visibilitychange', onVis);
       if (debounce != null) window.clearTimeout(debounce);
+      try {
+        appListener?.remove?.();
+      } catch {
+        /* ignore */
+      }
     };
   }, [canUseSupabase, hydrationComplete]);
 
@@ -852,31 +889,35 @@ export function WorkspaceProvider({ children }) {
       try {
         await whenRealtimeAuthReady();
         if (cancelled) return;
+        if (Capacitor.isNativePlatform()) void prefetchLocalNotificationPermission();
         for (const r of rows) {
           const wid = String(r?.workspaceId || '').trim();
           if (!wid) continue;
           unsubs.push(
             subscribeToWorkspaceActivityLogs(wid, (p) => {
-              const row = p?.newRow;
-              const actor = row?.actor_user_id ? String(row.actor_user_id) : '';
-              if (!actor || actor === String(myId)) return;
-              const activeId = activeWorkspaceIdRef.current;
-              if (activeId && String(activeId) === wid) return;
+              if (
+                !shouldMarkUnreadForSharedActivity({
+                  payload: p,
+                  myUserId: String(myId),
+                  workspaceId: wid,
+                  activeWorkspaceId: activeWorkspaceIdRef.current,
+                })
+              ) {
+                return;
+              }
               markSharedWorkspaceUnread(wid);
-              // iOS local notification: shared workspace activity only.
               try {
-                const action = String(row?.action || '').trim();
-                if (action === 'note_added' || action === 'note_updated') {
-                  const workspaceName = getWorkspaceNameById(wid);
-                  const verb = action === 'note_added' ? 'created' : 'updated';
-                  // Only show as a system notification when app isn't actively in foreground.
-                  if (typeof document === 'undefined' || document.visibilityState !== 'visible') {
-                    void notifyLocalPremium({
-                      title: 'Plainsight',
-                      body: `A note was ${verb} in ‘${workspaceName}’.`,
-                    });
-                  }
-                }
+                const action = String(p?.newRow?.action || '').trim();
+                if (!shouldScheduleIosLocalNotificationForSharedNoteActivity({ action })) return;
+                const workspaceName = getWorkspaceNameById(wid);
+                void (async () => {
+                  const inactive = await isNativeAppInactiveForNotifications();
+                  if (!inactive) return;
+                  void notifyLocalPremium({
+                    title: 'Plainsight',
+                    body: formatSharedWorkspaceNoteNotificationBody({ action, workspaceName }),
+                  });
+                })();
               } catch {
                 /* ignore */
               }
@@ -898,7 +939,14 @@ export function WorkspaceProvider({ children }) {
         }
       });
     };
-  }, [canUseSupabase, hydrationComplete, sharedWorkspaceRows, markSharedWorkspaceUnread]);
+  }, [
+    canUseSupabase,
+    hydrationComplete,
+    sharedWorkspaceRows,
+    markSharedWorkspaceUnread,
+    supabaseRealtimeBindingEpoch,
+    getWorkspaceNameById,
+  ]);
 
   useEffect(() => {
     // With cloud sync: avoid writing workspace rows before hydration (duplicate Home rows on push).

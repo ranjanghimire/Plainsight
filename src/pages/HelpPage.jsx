@@ -1,5 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
+import { notifyLocalPremium } from '../native/localNotifications';
 
 const navLinks = [
   { id: 'composer', label: 'Search & new notes' },
@@ -30,8 +32,12 @@ function Section({ id, eyebrow, title, children }) {
   );
 }
 
+const showNativeNotificationSelfTest =
+  import.meta.env.DEV === true || import.meta.env.VITE_SHOW_NOTIFICATION_TEST === '1';
+
 export function HelpPage() {
   const navigate = useNavigate();
+  const [notificationSelfTestStatus, setNotificationSelfTestStatus] = useState('');
 
   /** Avoid <a href="#…">: hash changes fire `popstate`, and BackNavigationLock sends that to home. */
   const jumpToSection = useCallback((id) => {
@@ -287,6 +293,41 @@ export function HelpPage() {
                 after you do, your account and workspaces load from the server as usual.
               </p>
             </Section>
+
+            {showNativeNotificationSelfTest && Capacitor.isNativePlatform() ? (
+              <Section
+                id="dev-notifications"
+                eyebrow="Developers"
+                title="Test local notification (iOS build)"
+              >
+                <p>
+                  Use this to confirm the OS permission prompt and banner without waiting for another user.
+                  In production TestFlight builds, set{' '}
+                  <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">
+                    VITE_SHOW_NOTIFICATION_TEST=1
+                  </code>{' '}
+                  before <code className="rounded bg-stone-100 px-1.5 py-0.5 text-[13px] dark:bg-stone-800">npm run build:cap</code>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotificationSelfTestStatus('Scheduling…');
+                    void notifyLocalPremium({
+                      title: 'Plainsight',
+                      body: 'Test: shared workspace notification pipeline.',
+                    })
+                      .then(() => setNotificationSelfTestStatus('Scheduled (check Notification Center).'))
+                      .catch(() => setNotificationSelfTestStatus('Failed — see Xcode device logs.'));
+                  }}
+                  className="rounded-lg border border-amber-200/90 bg-amber-50/90 px-4 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                >
+                  Send test notification
+                </button>
+                {notificationSelfTestStatus ? (
+                  <p className="text-xs text-stone-500 dark:text-stone-400">{notificationSelfTestStatus}</p>
+                ) : null}
+              </Section>
+            ) : null}
 
             <p className="pt-6 text-center text-xs text-stone-400 dark:text-stone-500">
               Plainsight is built for momentum. Close this guide whenever you like—the menu is always
