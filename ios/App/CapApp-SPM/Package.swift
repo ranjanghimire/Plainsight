@@ -12,7 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.1"),
-        .package(name: "CapacitorLocalNotifications", path: "../../../node_modules/@capacitor/local-notifications"),
+        .package(name: "CapacitorLocalNotifications", path: "../VendorSPM/local-notifications"),
         .package(name: "CapacitorSplashScreen", path: "../VendorSPM/splash-screen"),
         .package(name: "CapacitorStatusBar", path: "../VendorSPM/status-bar")
     ],

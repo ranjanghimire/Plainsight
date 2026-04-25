@@ -25,6 +25,7 @@ if (!existsSync(packageSwift)) {
 const plugins = [
   { id: "@capacitor/splash-screen", folder: "splash-screen", spmName: "CapacitorSplashScreen" },
   { id: "@capacitor/status-bar", folder: "status-bar", spmName: "CapacitorStatusBar" },
+  { id: "@capacitor/local-notifications", folder: "local-notifications", spmName: "CapacitorLocalNotifications" },
 ];
 
 function copyVendoredPlugins() {
