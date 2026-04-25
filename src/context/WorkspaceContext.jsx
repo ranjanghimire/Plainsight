@@ -279,6 +279,7 @@ export function WorkspaceProvider({ children }) {
   const [supabaseRealtimeBindingEpoch, setSupabaseRealtimeBindingEpoch] = useState(0);
   const hydrationRetryTimerRef = useRef(null);
   const hydrationWarningRef = useRef(false);
+  const hiddenDupeDebugShownRef = useRef(false);
   /** Last rendered note id order per workspace; used to avoid reordering after local save + storage reload. */
   const noteOrderSnapshotRef = useRef({ key: '', ids: [] });
   const workspaceKey = activeStorageKey;
@@ -799,6 +800,69 @@ export function WorkspaceProvider({ children }) {
       cancelled = true;
     };
   }, [canUseSupabase, hydrationComplete]);
+
+  /**
+   * Debug (one-time banner):
+   * If hidden duplicates keep reappearing after sign-out, they are likely coming from Supabase.
+   * Show the exact offending rows so we can inspect the root cause (ids/kinds/names/slugs).
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    if (hiddenDupeDebugShownRef.current) return undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const uid = String(getLocalSession().userId || '').trim();
+        if (!uid) return;
+        const rows = await getLocalWorkspaces();
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        const visibleSlugs = new Set();
+        for (const w of list) {
+          if (!w?.id) continue;
+          if (w.kind !== 'visible') continue;
+          const nm = typeof w.name === 'string' ? w.name.trim() : '';
+          if (!nm) continue;
+          visibleSlugs.add(hiddenWorkspaceSlugFromName(nm));
+        }
+        const offenders = list
+          .filter((w) => {
+            if (!w?.id) return false;
+            if (w.kind !== 'hidden') return false;
+            if (String(w.owner_id || '') !== uid) return false;
+            const nm = typeof w.name === 'string' ? w.name.trim() : '';
+            if (!nm) return true; // corrupt hidden name, still worth surfacing
+            return visibleSlugs.has(hiddenWorkspaceSlugFromName(nm));
+          })
+          .slice(0, 8)
+          .map((w) => {
+            const nm = typeof w?.name === 'string' ? w.name.trim() : '';
+            return {
+              id: String(w.id),
+              owner_id: String(w.owner_id || ''),
+              kind: String(w.kind || ''),
+              name: nm || '(empty)',
+              slug: nm ? hiddenWorkspaceSlugFromName(nm) : '(empty)',
+              updated_at: String(w.updated_at || ''),
+              created_at: String(w.created_at || ''),
+            };
+          });
+        if (offenders.length === 0) return;
+        hiddenDupeDebugShownRef.current = true;
+        showToast(
+          `Debug: hidden workspaces colliding with visible/shared slugs (first ${offenders.length}).\n` +
+            `Please screenshot and send:\n` +
+            `${JSON.stringify(offenders, null, 2)}`,
+          { persistent: true },
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseSupabase, hydrationComplete, showToast]);
 
   /**
    * Keep shared-workspace invites/snaps fresh even when Realtime is "healthy".
