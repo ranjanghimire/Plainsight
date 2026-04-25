@@ -765,7 +765,7 @@ export function MenuPanel({ open, onClose }) {
                       Sign out
                     </span>
                     <span className="mt-0.5 block text-[11px] font-normal leading-snug text-stone-500 dark:text-stone-400">
-                      Leave this account on this device
+                      Clears local device data
                     </span>
                   </span>
                 </button>
