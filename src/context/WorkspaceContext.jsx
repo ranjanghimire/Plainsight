@@ -30,6 +30,8 @@ import {
   isCorruptWorkspaceMenuName,
   isKeyInVisibleWorkspacesList,
   isUuid,
+  collectMergedWorkspaceStorageKeys,
+  purgeOrphanWorkspaceBlobsFromLocalStorage,
   removeWorkspaceIdMapping,
   resolveWorkspaceIdForStorageKey,
   bindMergedWorkspacesToStorageKeys,
@@ -770,6 +772,31 @@ export function WorkspaceProvider({ children }) {
       if (debounce != null) window.clearTimeout(debounce);
       document.removeEventListener('visibilitychange', schedulePull);
       window.removeEventListener('focus', schedulePull);
+    };
+  }, [canUseSupabase, hydrationComplete]);
+
+  /**
+   * Cleanup: if a shared workspace was previously opened under a legacy `workspace_<slug>` key,
+   * that blob can linger and incorrectly appear under Hidden Workspaces on this device.
+   *
+   * Full sync already purges these orphans, but it can be delayed (healthy backoff). Do a local
+   * purge pass right after hydration completes.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const merged = await getLocalWorkspaces();
+        if (cancelled) return;
+        const validKeys = collectMergedWorkspaceStorageKeys(merged);
+        purgeOrphanWorkspaceBlobsFromLocalStorage(merged, validKeys);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, [canUseSupabase, hydrationComplete]);
 
