@@ -56,6 +56,7 @@ import { stabilizeWorkspaceNotesOrder } from '../utils/noteDisplayOrder';
 import { firstWordsNotePreview } from '../utils/activityLogPreview';
 import { queueFullSync, runInitialHydration } from '../sync/syncHelpers';
 import { scheduleFullSyncAfterArchivedBulkDeletes } from '../sync/persistArchivedBulkDeleteTombstones';
+import { enqueueNoteDeleteTombstone } from '../sync/noteDeleteTombstoneQueue';
 import { refreshSupabaseRealtimeJwt, whenRealtimeAuthReady } from '../sync/supabaseClient';
 import {
   getCanUseSupabase,
@@ -89,12 +90,10 @@ import {
   getLocalArchivedNoteTombstones,
   getLocalCategories,
   getLocalCategoryTombstones,
-  getLocalNoteTombstones,
   getLocalWorkspacePins,
   getLocalWorkspaces,
   saveLocalArchivedNoteTombstones,
   saveLocalCategoryTombstones,
-  saveLocalNoteTombstones,
   saveLocalWorkspacePins,
   saveLocalWorkspaces,
 } from '../sync/localDB';
@@ -1840,26 +1839,16 @@ export function WorkspaceProvider({ children }) {
       }
       return next;
     });
-    void (async () => {
-      try {
-        const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
-        const deletedAt = new Date().toISOString();
-        const existing = await getLocalNoteTombstones(workspaceId);
-        const next = [
-          { id, workspace_id: workspaceId, deleted_at: deletedAt },
-          ...existing.filter((t) => t.id !== id),
-        ];
-        await saveLocalNoteTombstones(workspaceId, next);
-      } catch {
-        /* ignore */
-      } finally {
-        queueFullSync();
-      }
-      void logWorkspaceEditActivity('note_deleted', 'Deleted note to archive', {
-        note_id: id,
-        ...(previewForLog ? { preview: previewForLog } : {}),
-      });
-    })();
+    try {
+      const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+      enqueueNoteDeleteTombstone(workspaceId, id);
+    } catch {
+      /* ignore */
+    }
+    void logWorkspaceEditActivity('note_deleted', 'Deleted note to archive', {
+      note_id: id,
+      ...(previewForLog ? { preview: previewForLog } : {}),
+    });
   }, [activeStorageKey, data.notes, logWorkspaceEditActivity]);
 
   const restoreArchivedNote = useCallback((textKey, resolvedCategory) => {
