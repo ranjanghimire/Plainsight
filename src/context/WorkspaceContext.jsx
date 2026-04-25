@@ -118,16 +118,7 @@ import {
   markSharedWorkspaceViewed,
   getSharedWorkspaceLastViewed,
 } from '../sync/sharedWorkspaceUnread';
-import {
-  notifyLocalPremium,
-  prefetchLocalNotificationPermission,
-} from '../native/localNotifications';
-import { isNativeAppInBackgroundSync } from '../native/nativeAppLifecycle';
-import {
-  shouldMarkUnreadForSharedActivity,
-  shouldScheduleIosLocalNotificationForSharedNoteActivity,
-  formatSharedWorkspaceCollaborationNotification,
-} from '../sync/sharedWorkspaceActivityNotifications';
+import { shouldMarkUnreadForSharedActivity } from '../sync/sharedWorkspaceActivityNotifications';
 
 /**
  * Resolve workspace UUID for menu-visible entries:
@@ -889,7 +880,6 @@ export function WorkspaceProvider({ children }) {
       try {
         await whenRealtimeAuthReady();
         if (cancelled) return;
-        if (Capacitor.isNativePlatform()) void prefetchLocalNotificationPermission();
         for (const r of rows) {
           const wid = String(r?.workspaceId || '').trim();
           if (!wid) continue;
@@ -906,26 +896,6 @@ export function WorkspaceProvider({ children }) {
                 return;
               }
               markSharedWorkspaceUnread(wid);
-              try {
-                const action = String(p?.newRow?.action || '').trim();
-                if (!shouldScheduleIosLocalNotificationForSharedNoteActivity({ action })) return;
-                if (!isNativeAppInBackgroundSync()) return;
-                const workspaceName = getWorkspaceNameById(wid);
-                const { title, body, threadIdentifier, summaryArgument } =
-                  formatSharedWorkspaceCollaborationNotification({
-                    action,
-                    workspaceName,
-                    workspaceId: wid,
-                  });
-                void notifyLocalPremium({
-                  title,
-                  body,
-                  threadIdentifier,
-                  summaryArgument,
-                });
-              } catch {
-                /* ignore */
-              }
             }),
           );
         }
@@ -950,7 +920,6 @@ export function WorkspaceProvider({ children }) {
     sharedWorkspaceRows,
     markSharedWorkspaceUnread,
     supabaseRealtimeBindingEpoch,
-    getWorkspaceNameById,
   ]);
 
   useEffect(() => {

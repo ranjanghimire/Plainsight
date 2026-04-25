@@ -18,7 +18,6 @@
 	},
 	"packageClassList": [
 		"AppPlugin",
-		"LocalNotificationsPlugin",
 		"SplashScreenPlugin",
 		"StatusBarPlugin"
 	]
