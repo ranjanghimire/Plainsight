@@ -83,15 +83,21 @@ const MENU_FOOTER_ROW_SIGNOUT =
 const MENU_FOOTER_ICON =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200/60 bg-gradient-to-b from-white to-stone-50/90 text-stone-500 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-[border-color,box-shadow,color,background] duration-200 group-hover:border-stone-300/80 group-hover:from-stone-50 group-hover:to-stone-100/95 group-hover:text-stone-700 group-hover:shadow-[0_1px_2px_rgba(15,23,42,0.06)] dark:border-stone-600/50 dark:from-stone-800/90 dark:to-stone-900/80 dark:text-stone-400 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:group-hover:border-stone-500/60 dark:group-hover:from-stone-700/80 dark:group-hover:to-stone-800/90 dark:group-hover:text-stone-200';
 
-export function MenuButton({ onOpen }) {
+export function MenuButton({ onOpen, showNotification }) {
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="p-2 -mr-2 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700 transition-colors"
+      className="relative p-2 -mr-2 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-100 dark:text-stone-400 dark:hover:text-stone-100 dark:hover:bg-stone-700 transition-colors"
       aria-label="Open menu"
     >
       <MenuIcon className="w-6 h-6" />
+      {showNotification ? (
+        <span
+          className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-sky-500 ring-2 ring-white dark:ring-stone-800"
+          aria-hidden
+        />
+      ) : null}
     </button>
   );
 }
@@ -152,6 +158,8 @@ export function MenuPanel({ open, onClose }) {
     visibleWorkspaces,
     sharedWorkspaces,
     pendingSharedInvites,
+    sharedWorkspaceUnread,
+    clearSharedWorkspaceUnread,
     switchVisibleWorkspace,
     openSharedWorkspace,
     createVisibleWorkspace,
@@ -642,6 +650,7 @@ export function MenuPanel({ open, onClose }) {
                     const hint = sharedWorkspaceRowHint(row);
                     const sharedKey = `${VISIBLE_WS_PREFIX}${row.workspaceId}`;
                     const isRenaming = workspaceRenameTarget?.key === sharedKey;
+                    const hasUnread = Boolean(sharedWorkspaceUnread?.[String(row.workspaceId)]);
                     if (isRenaming) {
                       return (
                         <div key={row.workspaceId} className="flex flex-col gap-2 px-1 py-1">
@@ -689,6 +698,7 @@ export function MenuPanel({ open, onClose }) {
                           },
                           () => {
                             openSharedWorkspace(row.workspaceId);
+                            clearSharedWorkspaceUnread(row.workspaceId);
                             navigate('/');
                             onClose();
                           },
@@ -704,12 +714,24 @@ export function MenuPanel({ open, onClose }) {
                         `}
                       >
                         <span className="truncate min-w-0">{row.workspaceName}</span>
-                        {hint.label ? (
-                          <span
-                            className="ml-auto shrink-0 max-w-[5.5rem] truncate text-right text-[10px] font-medium text-stone-400 dark:text-stone-500"
-                            title={hint.title}
-                          >
-                            {hint.label}
+                        {hasUnread || hint.label ? (
+                          <span className="ml-auto flex items-center gap-2 min-w-0">
+                            {hasUnread ? (
+                              <span
+                                className="shrink-0 h-2.5 w-2.5 rounded-full bg-sky-500 ring-2 ring-stone-50 dark:ring-stone-800"
+                                aria-label="Unread changes"
+                                title="New activity"
+                                role="img"
+                              />
+                            ) : null}
+                            {hint.label ? (
+                              <span
+                                className="shrink-0 max-w-[5.5rem] truncate text-right text-[10px] font-medium text-stone-400 dark:text-stone-500"
+                                title={hint.title}
+                              >
+                                {hint.label}
+                              </span>
+                            ) : null}
                           </span>
                         ) : null}
                       </button>

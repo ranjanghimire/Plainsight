@@ -166,6 +166,7 @@ function AppHeader({ onOpenSettings }) {
     visibleWorkspaces,
     getWorkspaceNameById,
     activeWorkspaceIsHidden,
+    anySharedWorkspaceUnread,
   } = useWorkspace();
   const { archiveMode } = useArchiveMode();
   const { isTagsRoute } = useTagsNav();
@@ -228,7 +229,7 @@ function AppHeader({ onOpenSettings }) {
       <div className="flex items-center gap-0.5 shrink-0">
         {!isManageRoute ? <TagsToggleButton /> : null}
         {!isManageRoute ? <ArchiveHistoryButton /> : null}
-        <MenuButton onOpen={onOpenSettings} />
+        <MenuButton onOpen={onOpenSettings} showNotification={anySharedWorkspaceUnread} />
       </div>
     </header>
   );

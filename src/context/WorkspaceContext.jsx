@@ -107,6 +107,12 @@ import {
   subscribeToWorkspaceShares,
   updateSharedWorkspaceNameSnapshot,
 } from '../sync/sharedWorkspaces';
+import {
+  readSharedWorkspaceUnread,
+  markSharedWorkspaceUnread as persistMarkSharedWorkspaceUnread,
+  clearSharedWorkspaceUnread as persistClearSharedWorkspaceUnread,
+  hasAnySharedWorkspaceUnread as computeHasAnySharedWorkspaceUnread,
+} from '../sync/sharedWorkspaceUnread';
 
 /**
  * Resolve workspace UUID for menu-visible entries:
@@ -279,11 +285,50 @@ export function WorkspaceProvider({ children }) {
     useState(false);
   /** Bumped on each successful full sync so Postgres realtime channels re-bind to the current workspace id set (e.g. after accepting a shared workspace). */
   const [supabaseRealtimeBindingEpoch, setSupabaseRealtimeBindingEpoch] = useState(0);
+  const [sharedWorkspaceUnread, setSharedWorkspaceUnread] = useState(() =>
+    readSharedWorkspaceUnread(),
+  );
   const hydrationRetryTimerRef = useRef(null);
   const hydrationWarningRef = useRef(false);
   /** Last rendered note id order per workspace; used to avoid reordering after local save + storage reload. */
   const noteOrderSnapshotRef = useRef({ key: '', ids: [] });
   const workspaceKey = activeStorageKey;
+
+  const sharedWorkspaceIdSet = useMemo(() => {
+    const set = new Set();
+    for (const row of sharedWorkspaceRows || []) {
+      if (row?.workspaceId) set.add(String(row.workspaceId));
+    }
+    return set;
+  }, [sharedWorkspaceRows]);
+
+  const markSharedWorkspaceUnread = useCallback((workspaceId) => {
+    const wid = String(workspaceId || '').trim();
+    if (!wid) return;
+    if (!sharedWorkspaceIdSet.has(wid)) return;
+    const next = persistMarkSharedWorkspaceUnread(wid);
+    setSharedWorkspaceUnread(next);
+  }, [sharedWorkspaceIdSet]);
+
+  const clearSharedWorkspaceUnread = useCallback((workspaceId) => {
+    const wid = String(workspaceId || '').trim();
+    if (!wid) return;
+    const next = persistClearSharedWorkspaceUnread(wid);
+    setSharedWorkspaceUnread(next);
+  }, []);
+
+  const anySharedWorkspaceUnread = useMemo(
+    () => computeHasAnySharedWorkspaceUnread(sharedWorkspaceUnread),
+    [sharedWorkspaceUnread],
+  );
+
+  // Clear unread when the user opens that workspace.
+  useEffect(() => {
+    const wid = getWorkspaceIdForStorageKey(activeStorageKey);
+    if (!wid) return;
+    if (!sharedWorkspaceIdSet.has(String(wid))) return;
+    clearSharedWorkspaceUnread(wid);
+  }, [activeStorageKey, clearSharedWorkspaceUnread, sharedWorkspaceIdSet]);
 
   useEffect(() => {
     const ids = Array.isArray(data.notes) ? data.notes.map((n) => String(n.id)) : [];
@@ -711,6 +756,7 @@ export function WorkspaceProvider({ children }) {
             subscribeToNotes(w.id, (payload) => {
               void applyRealtimeNoteChange(w.id, payload).then(() => {
                 const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
+                if (key !== activeStorageKey) markSharedWorkspaceUnread(w.id);
                 if (key === activeStorageKey) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
@@ -721,6 +767,7 @@ export function WorkspaceProvider({ children }) {
             subscribeToCategories(w.id, (payload) => {
               void applyRealtimeCategoryChange(w.id, payload).then(() => {
                 const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
+                if (key !== activeStorageKey) markSharedWorkspaceUnread(w.id);
                 if (key === activeStorageKey) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
@@ -731,6 +778,7 @@ export function WorkspaceProvider({ children }) {
             subscribeToArchivedNotes(w.id, (payload) => {
               void applyRealtimeArchivedNoteChange(w.id, payload).then(() => {
                 const key = getStorageKeyForWorkspaceId(w.id) || `${VISIBLE_WS_PREFIX}${w.id}`;
+                if (key !== activeStorageKey) markSharedWorkspaceUnread(w.id);
                 if (key === activeStorageKey) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
@@ -1048,13 +1096,14 @@ export function WorkspaceProvider({ children }) {
       setActiveStorageKey(key);
       setData(nextData);
       setCurrentWorkspace(`visible:${wid}`);
+      clearSharedWorkspaceUnread(wid);
       // Do not append to visibleWorkspaces: collaborators only list shared tabs under “Shared Workspaces”.
       saveAppStatePartial({ lastActiveStorageKey: key });
       bumpWorkspaceSwitch();
       void queueFullSync();
       return true;
     },
-    [bumpWorkspaceSwitch, getWorkspaceNameById],
+    [bumpWorkspaceSwitch, getWorkspaceNameById, clearSharedWorkspaceUnread],
   );
 
   const createVisibleWorkspace = useCallback(
@@ -1932,6 +1981,9 @@ export function WorkspaceProvider({ children }) {
     sharedWorkspaces: sharedWorkspaceRows,
     pendingSharedInvites,
     pendingSharedWorkspaceInvites: pendingSharedInvites,
+    sharedWorkspaceUnread,
+    anySharedWorkspaceUnread,
+    clearSharedWorkspaceUnread,
     workspaceSwitchGeneration,
     workspaceTransitionMode,
     workspaceContentTransitioning,
