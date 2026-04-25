@@ -1069,20 +1069,33 @@ export async function fullSync(
     }
 
     const myAccessibleWorkspaceIds = new Set<string>();
+    let acceptedShareNameSlugs: Set<string> | null = null;
     if (ownerId) {
       step = 'listWorkspaceShares';
       const shareRes = await listWorkspaceShares();
       if (shareRes.error) {
         return fail(mkError(shareRes.error.message, shareRes.error.details));
       }
+      acceptedShareNameSlugs = new Set<string>();
       for (const s of shareRes.data || []) {
         if (s.status !== 'accepted') continue;
         if (String(s.owner_id || '') === String(ownerId)) {
           myAccessibleWorkspaceIds.add(String(s.workspace_id));
+          // Owner shares: name collisions should still suppress accidental hidden dupes.
+          if (s.workspace_name) {
+            const nm = String(s.workspace_name || '').trim();
+            if (nm) acceptedShareNameSlugs.add(hiddenWorkspaceSlugFromName(nm));
+          }
           continue;
         }
         if (String(s.recipient_user_id || '') === String(ownerId)) {
           myAccessibleWorkspaceIds.add(String(s.workspace_id));
+          // Incoming shares: these workspaces may not exist as rows in `workspaces` for the recipient,
+          // so we must treat share names as collision sources to prune hidden `workspace_<slug>` fallout.
+          if (s.workspace_name) {
+            const nm = String(s.workspace_name || '').trim();
+            if (nm) acceptedShareNameSlugs.add(hiddenWorkspaceSlugFromName(nm));
+          }
         }
       }
       for (const w of mergedWorkspacesWithOwner) {
@@ -1114,13 +1127,17 @@ export async function fullSync(
         if (!nm) continue;
         visibleSlugs.add(hiddenWorkspaceSlugFromName(nm));
       }
+      const collisionSlugs = new Set<string>(visibleSlugs);
+      if (acceptedShareNameSlugs && acceptedShareNameSlugs.size > 0) {
+        for (const slug of acceptedShareNameSlugs) collisionSlugs.add(slug);
+      }
       const hiddenDupes = mergedWorkspacesWithOwner.filter((w) => {
         if (!w?.id) return false;
         if (String(w.owner_id || '') !== String(ownerId)) return false;
         if (w.kind !== 'hidden') return false;
         const nm = String(w.name || '').trim();
         if (!nm) return false;
-        return visibleSlugs.has(hiddenWorkspaceSlugFromName(nm));
+        return collisionSlugs.has(hiddenWorkspaceSlugFromName(nm));
       });
       if (hiddenDupes.length > 0) {
         step = 'pruneHiddenDuplicates';
