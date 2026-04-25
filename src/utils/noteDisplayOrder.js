@@ -10,8 +10,8 @@ export function noteUpdatedTsMs(n) {
 
 /**
  * Keeps stable on-screen order while merging refreshed `incomingNotes`.
- * Reuses `prevIds` order for notes still present; appends notes not in `prevIds`,
- * newest-first by edit time (e.g. collaborator adds).
+ * Notes not in `prevIds` (new or unseen) are prepended, newest edit time first;
+ * then notes that were already on screen keep their relative `prevIds` order.
  */
 export function stabilizeWorkspaceNotesOrder(prevIds, incomingNotes) {
   const list = Array.isArray(incomingNotes) ? incomingNotes : [];
@@ -38,5 +38,12 @@ export function stabilizeWorkspaceNotesOrder(prevIds, incomingNotes) {
     extra.push(note);
   }
   extra.sort((a, b) => noteUpdatedTsMs(b) - noteUpdatedTsMs(a));
-  return out.concat(extra);
+  // New / unseen ids first (newest among them), then prior on-screen order — matches “new at top”.
+  return extra.concat(out);
+}
+
+/** `Note`-shaped rows: newest `updatedAt` / `updated_at` first (collaborator sync + realtime). */
+export function sortNotesNewestFirst(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  return [...list].sort((a, b) => noteUpdatedTsMs(b) - noteUpdatedTsMs(a));
 }

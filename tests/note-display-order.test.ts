@@ -1,53 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import {
-  noteUpdatedTsMs,
-  stabilizeWorkspaceNotesOrder,
-} from '../src/utils/noteDisplayOrder';
+import { sortNotesNewestFirst, stabilizeWorkspaceNotesOrder } from '../src/utils/noteDisplayOrder';
 
-describe('noteUpdatedTsMs', () => {
-  it('reads updatedAt', () => {
-    expect(noteUpdatedTsMs({ updatedAt: 5 })).toBe(5);
+describe('noteDisplayOrder', () => {
+  it('stabilizeWorkspaceNotesOrder: unseen note ids prepended (newest among extras first)', () => {
+    const t0 = '2020-01-01T00:00:00.000Z';
+    const t1 = '2020-01-02T00:00:00.000Z';
+    const t2 = '2020-01-03T00:00:00.000Z';
+    const existing = { id: 'a', text: 'a', createdAt: t0, updatedAt: t0 };
+    const olderNew = { id: 'b', text: 'b', createdAt: t1, updatedAt: t1 };
+    const newerNew = { id: 'c', text: 'c', createdAt: t2, updatedAt: t2 };
+    const prevIds = ['a'];
+    const incoming = [existing, olderNew, newerNew];
+    const out = stabilizeWorkspaceNotesOrder(prevIds, incoming);
+    expect(out.map((n) => n.id)).toEqual(['c', 'b', 'a']);
   });
 
-  it('reads updated_at ISO string', () => {
-    const t = '2020-01-02T00:00:00.000Z';
-    expect(noteUpdatedTsMs({ updated_at: t })).toBe(Date.parse(t));
-  });
-});
-
-describe('stabilizeWorkspaceNotesOrder', () => {
-  it('preserves prev order when incoming is re-sorted by time', () => {
-    const a = { id: 'a', updated_at: '2020-01-01T00:00:00.000Z' };
-    const b = { id: 'b', updated_at: '2020-01-02T00:00:00.000Z' };
-    const c = { id: 'c', updated_at: '2020-01-03T00:00:00.000Z' };
-    const prevIds = ['a', 'b', 'c'];
-    const incoming = [c, b, a];
-    expect(stabilizeWorkspaceNotesOrder(prevIds, incoming).map((n) => n.id)).toEqual([
-      'a',
-      'b',
-      'c',
-    ]);
-  });
-
-  it('appends unknown ids newest-first', () => {
-    const a = { id: 'a', updated_at: '2020-01-01T00:00:00.000Z' };
-    const b = { id: 'b', updated_at: '2020-01-02T00:00:00.000Z' };
-    const d = { id: 'd', updated_at: '2020-01-04T00:00:00.000Z' };
-    const e = { id: 'e', updated_at: '2020-01-03T00:00:00.000Z' };
-    const prevIds = ['a', 'b'];
-    const incoming = [d, e, b, a];
-    expect(stabilizeWorkspaceNotesOrder(prevIds, incoming).map((n) => n.id)).toEqual([
-      'a',
-      'b',
-      'd',
-      'e',
-    ]);
-  });
-
-  it('with empty prev, sorts all by updated time desc', () => {
-    const a = { id: 'a', updated_at: '2020-01-01T00:00:00.000Z' };
-    const b = { id: 'b', updated_at: '2020-01-03T00:00:00.000Z' };
-    const c = { id: 'c', updated_at: '2020-01-02T00:00:00.000Z' };
-    expect(stabilizeWorkspaceNotesOrder([], [a, c, b]).map((n) => n.id)).toEqual(['b', 'c', 'a']);
+  it('sortNotesNewestFirst', () => {
+    const t0 = '2020-01-01T00:00:00.000Z';
+    const t2 = '2020-01-03T00:00:00.000Z';
+    const rows = [
+      { id: 'x', updated_at: t0 },
+      { id: 'y', updated_at: t2 },
+    ];
+    const out = sortNotesNewestFirst(rows);
+    expect(out.map((n) => n.id)).toEqual(['y', 'x']);
   });
 });

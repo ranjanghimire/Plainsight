@@ -14,6 +14,7 @@ import {
 } from './localDB';
 import { archivedNoteTagRowsFromArchived, noteTagRowsFromNotes } from './tagSync';
 import { flushWorkspaceUiIntoLocalDb, hydrateWorkspaceUiFromLocalDb } from './workspaceStorageBridge';
+import { sortNotesNewestFirst } from '../utils/noteDisplayOrder';
 
 type ChangePayload<T> = {
   event: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -106,7 +107,7 @@ export async function applyRealtimeNoteChange(
         }
       }
     }
-    await saveLocalNotes(workspaceId, nextRows);
+    await saveLocalNotes(workspaceId, sortNotesNewestFirst(nextRows));
     await saveLocalNoteTags(workspaceId, noteTagRowsFromNotes(nextRows));
     await hydrateWorkspaceUiFromLocalDb(workspaceId);
   });
