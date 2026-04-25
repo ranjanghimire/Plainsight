@@ -610,7 +610,23 @@ export function getHiddenWorkspaceManageEntries() {
     listed.add(storageKey);
   }
 
-  return out;
+  // If a base name exists (e.g. "private"), hide numbered duplicates ("private (2)").
+  // These can appear transiently when workspace rows were duplicated during account transitions.
+  const NUMBERED = /^(.+?)\s*\((\d+)\)\s*$/;
+  const canonicalLower = new Set(
+    out
+      .map((e) => String(e?.displayName || '').trim())
+      .filter((nm) => nm && !NUMBERED.test(nm))
+      .map((nm) => nm.toLowerCase()),
+  );
+  return out.filter((e) => {
+    const nm = String(e?.displayName || '').trim();
+    const m = nm.match(NUMBERED);
+    if (!m) return true;
+    const ord = parseInt(m[2], 10);
+    if (!Number.isFinite(ord) || ord < 2) return true;
+    return !canonicalLower.has(m[1].trim().toLowerCase());
+  });
 }
 
 /** Dot-command / legacy hidden keys: merged rows + orphan `workspace_*` blobs (see getHiddenWorkspaceManageEntries). */
