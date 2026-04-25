@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ArchivedNote, Category, Note } from './types';
 import {
-  getArchivedHadNonEmptyRemotePull,
   getLocalArchivedNoteTombstones,
   getLocalArchivedNotes,
   getLocalCategoryTombstones,
@@ -94,16 +93,6 @@ export type FlushWorkspaceUiOpts = {
   /** Archived note ids returned by the current server pull for this workspace. */
   remoteArchivedIdsThisPull?: Set<string> | null;
 };
-
-/** Exported for tests — when true, flush drops all UI archived rows to match an empty server pull. */
-export function shouldAuthoritativeClearArchivedOnFlush(
-  hadRemoteSnapshot: boolean,
-  remoteArchivedThisPull: Set<string> | null | undefined,
-): boolean {
-  if (!hadRemoteSnapshot) return false;
-  if (remoteArchivedThisPull == null) return false;
-  return remoteArchivedThisPull.size === 0;
-}
 
 /**
  * Merge UI workspace JSON (localStorage workspace_* keys) into plainsight_local_*
@@ -236,17 +225,16 @@ export async function flushWorkspaceUiIntoLocalDb(
   const localArch = await getLocalArchivedNotes(workspaceId);
   const aConfirmed = opts?.remoteArchivedIdsEverConfirmed;
   const aPull = opts?.remoteArchivedIdsThisPull;
-  const hadArchivedRemote = await getArchivedHadNonEmptyRemotePull(workspaceId);
-  const authoritativeEmpty = shouldAuthoritativeClearArchivedOnFlush(hadArchivedRemote, aPull);
 
   let archivedEntries = Object.values(ui.archivedNotes || {}) as {
     text?: string;
     category?: string;
     lastDeletedAt?: number;
   }[];
-  if (authoritativeEmpty) {
-    archivedEntries = [];
-  } else if (aConfirmed && aPull && aConfirmed.size > 0) {
+  // Strip UI rows the server no longer lists (including empty pull), but never drop
+  // archived text that has never been confirmed on the server — e.g. delete-to-archive
+  // before the first push (aPull can be empty while the new id is not in aConfirmed).
+  if (aConfirmed != null && aPull != null && aConfirmed.size > 0) {
     archivedEntries = archivedEntries.filter((entry) => {
       const text = typeof entry.text === 'string' ? entry.text : '';
       const id = archivedRowIdForText(workspaceId, text);

@@ -37,7 +37,6 @@ import {
   saveLocalNoteTags,
   saveLastKnownRemoteNoteIds,
   saveLastKnownRemoteArchivedNoteIds,
-  markArchivedHadNonEmptyRemotePull,
   saveLocalNoteTombstones,
   saveLocalNotes,
   saveLocalWorkspaces,
@@ -1255,9 +1254,6 @@ export async function fullSync(
       remoteCategories[wid] = cats.data;
       remoteNotes[wid] = notes.data;
       remoteArchived[wid] = arch.data;
-      if ((arch.data || []).length > 0) {
-        await markArchivedHadNonEmptyRemotePull(wid);
-      }
     }
 
     const lastKnownRemoteNoteIdsByWid: Record<string, Set<string>> = {};

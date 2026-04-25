@@ -34,8 +34,6 @@ const KEY = {
   remoteNoteIdCache: (workspaceId: string) => `plainsight_local_remote_note_id_cache_${workspaceId}`,
   /** Same for archived_notes (e.g. collaborator cleared archive). */
   remoteArchivedIdCache: (workspaceId: string) => `plainsight_local_remote_archived_id_cache_${workspaceId}`,
-  /** True after we have ever pulled a non-empty archived_notes snapshot for this workspace. */
-  archivedHadRemoteSnapshot: (workspaceId: string) => `plainsight_ws_archived_had_remote_${workspaceId}`,
 } as const;
 
 function readJson<T>(k: string, fallback: T): T {
@@ -78,7 +76,6 @@ export async function clearLocalWorkspaceData(workspaceId: string): Promise<void
     localStorage.removeItem(KEY.archivedNoteTags(workspaceId));
     localStorage.removeItem(KEY.remoteNoteIdCache(workspaceId));
     localStorage.removeItem(KEY.remoteArchivedIdCache(workspaceId));
-    localStorage.removeItem(KEY.archivedHadRemoteSnapshot(workspaceId));
   } catch {
     /* ignore */
   }
@@ -105,16 +102,6 @@ export async function saveLastKnownRemoteArchivedNoteIds(
   ids: Set<string>,
 ): Promise<void> {
   writeJson(KEY.remoteArchivedIdCache(workspaceId), [...ids]);
-}
-
-export async function markArchivedHadNonEmptyRemotePull(workspaceId: string): Promise<void> {
-  if (!workspaceId) return;
-  writeJson(KEY.archivedHadRemoteSnapshot(workspaceId), true);
-}
-
-export async function getArchivedHadNonEmptyRemotePull(workspaceId: string): Promise<boolean> {
-  if (!workspaceId) return false;
-  return readJson<boolean>(KEY.archivedHadRemoteSnapshot(workspaceId), false) === true;
 }
 
 export async function getLocalCategories(workspaceId: string): Promise<Category[]> {
