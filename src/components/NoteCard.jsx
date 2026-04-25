@@ -639,7 +639,6 @@ export function NoteCard({
                 ref={textareaRef}
                 value={editBody}
                 rows={4}
-                autoCapitalize="sentences"
                 onChange={(e) => {
                   setEditBody(e.target.value);
                 }}
