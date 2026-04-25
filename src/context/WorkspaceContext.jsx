@@ -25,6 +25,7 @@ import {
   getStorageKeyForWorkspaceId,
   getWorkspaceDisplayLabelFromStorageKey,
   getWorkspaceIdForStorageKey,
+  isLegacyHiddenWorkspaceKey,
   hiddenWorkspaceSlugFromName,
   isCorruptWorkspaceMenuName,
   isKeyInVisibleWorkspacesList,
@@ -772,6 +773,31 @@ export function WorkspaceProvider({ children }) {
     };
   }, [canUseSupabase, hydrationComplete]);
 
+  /**
+   * Keep shared-workspace invites/snaps fresh even when Realtime is "healthy".
+   * Full sync is intentionally backed off to ~5min when connected, but that leaves a long window
+   * where a recipient won't see a new invite (or an owner won't see an accept) without refresh.
+   *
+   * This is a cheap poll (workspace_shares only), not a full workspace merge.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    if (!hasCustomAuthSession()) return undefined;
+    let t = null;
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshSharedWorkspaceState();
+    };
+    // Quick initial catch-up after boot / accept/share.
+    t = window.setInterval(tick, 15_000);
+    // Run once shortly after mount in case initial shares fetch raced auth email persistence.
+    const t0 = window.setTimeout(tick, 800);
+    return () => {
+      if (t != null) window.clearInterval(t);
+      window.clearTimeout(t0);
+    };
+  }, [canUseSupabase, hydrationComplete, refreshSharedWorkspaceState]);
+
   const applyNavigateByWorkspaceName = useCallback(
     (name) => {
       if (!canOpenOrCreateHiddenWorkspace(name)) return;
@@ -869,7 +895,12 @@ export function WorkspaceProvider({ children }) {
     (workspaceId) => {
       const wid = String(workspaceId || '').trim();
       if (!wid) return false;
-      const key = getStorageKeyForWorkspaceId(wid) || `${VISIBLE_WS_PREFIX}${wid}`;
+      // Shared workspaces should always use the menu-visible `ws_visible_<uuid>` storage key.
+      // If we ever bind a shared workspace to a legacy `workspace_<slug>` key, it will:
+      // - appear under Hidden Workspaces (/manage)
+      // - show the "hidden workspace" header dot
+      // - potentially load stale/incorrect workspace blobs
+      const key = `${VISIBLE_WS_PREFIX}${wid}`;
       // Ensure shared workspaces participate in workspaceId ↔ storageKey mapping so
       // realtime apply + hydration can find the correct UI blob.
       setWorkspaceIdMapping(key, wid);
@@ -1683,8 +1714,10 @@ export function WorkspaceProvider({ children }) {
   ]);
 
   const activeWorkspaceIsHidden = useMemo(
-    () => !isKeyInVisibleWorkspacesList(activeStorageKey, visibleWorkspaces),
-    [activeStorageKey, visibleWorkspaces],
+    // Only legacy `workspace_<slug>` keys are "hidden". Shared workspaces deliberately do not
+    // appear in the personal WORKSPACES list, but they should not inherit hidden UI affordances.
+    () => isLegacyHiddenWorkspaceKey(activeStorageKey),
+    [activeStorageKey],
   );
 
   const value = {
