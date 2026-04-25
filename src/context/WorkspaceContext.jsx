@@ -116,6 +116,7 @@ import {
   markSharedWorkspaceViewed,
   getSharedWorkspaceLastViewed,
 } from '../sync/sharedWorkspaceUnread';
+import { notifyLocalPremium } from '../native/localNotifications';
 
 /**
  * Resolve workspace UUID for menu-visible entries:
@@ -862,6 +863,23 @@ export function WorkspaceProvider({ children }) {
               const activeId = activeWorkspaceIdRef.current;
               if (activeId && String(activeId) === wid) return;
               markSharedWorkspaceUnread(wid);
+              // iOS local notification: shared workspace activity only.
+              try {
+                const action = String(row?.action || '').trim();
+                if (action === 'note_added' || action === 'note_updated') {
+                  const workspaceName = getWorkspaceNameById(wid);
+                  const verb = action === 'note_added' ? 'created' : 'updated';
+                  // Only show as a system notification when app isn't actively in foreground.
+                  if (typeof document === 'undefined' || document.visibilityState !== 'visible') {
+                    void notifyLocalPremium({
+                      title: 'Plainsight',
+                      body: `A note was ${verb} in ‘${workspaceName}’.`,
+                    });
+                  }
+                }
+              } catch {
+                /* ignore */
+              }
             }),
           );
         }
