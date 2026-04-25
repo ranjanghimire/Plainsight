@@ -119,6 +119,12 @@ import {
   getSharedWorkspaceLastViewed,
 } from '../sync/sharedWorkspaceUnread';
 import { shouldMarkUnreadForSharedActivity } from '../sync/sharedWorkspaceActivityNotifications';
+import { computeActivityBadgeCatchup } from '../sync/sharedWorkspaceActivityCatchup';
+import {
+  bumpSharedWorkspaceActivityWatermark,
+  getSharedWorkspaceActivityWatermark,
+  setSharedWorkspaceActivityWatermark,
+} from '../sync/sharedWorkspaceActivityWatermark';
 
 /**
  * Resolve workspace UUID for menu-visible entries:
@@ -885,6 +891,9 @@ export function WorkspaceProvider({ children }) {
           if (!wid) continue;
           unsubs.push(
             subscribeToWorkspaceActivityLogs(wid, (p) => {
+              if (p.event === 'INSERT' && p.newRow?.created_at) {
+                bumpSharedWorkspaceActivityWatermark(wid, p.newRow.created_at);
+              }
               if (
                 !shouldMarkUnreadForSharedActivity({
                   payload: p,
@@ -913,6 +922,92 @@ export function WorkspaceProvider({ children }) {
           /* ignore */
         }
       });
+    };
+  }, [
+    canUseSupabase,
+    hydrationComplete,
+    sharedWorkspaceRows,
+    markSharedWorkspaceUnread,
+    supabaseRealtimeBindingEpoch,
+  ]);
+
+  /**
+   * After cold start or missed Realtime, poll `workspace_activity_logs` so shared-workspace
+   * badges reflect collaborator activity while the app was inactive.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    if (!hasCustomAuthSession()) return undefined;
+    const myId = getLocalSession().userId;
+    if (!myId) return undefined;
+
+    const rows = Array.isArray(sharedWorkspaceRows) ? sharedWorkspaceRows : [];
+    if (rows.length === 0) return undefined;
+
+    let cancelled = false;
+    const runCatchup = async () => {
+      try {
+        await whenRealtimeAuthReady();
+        if (cancelled) return;
+        for (const r of rows) {
+          const wid = String(r?.workspaceId || '').trim();
+          if (!wid) continue;
+          const res = await fetchWorkspaceActivityLogs(wid, 60);
+          if (cancelled) return;
+          if (res.error) continue;
+          const logs = Array.isArray(res.data) ? res.data : [];
+          const prev = getSharedWorkspaceActivityWatermark(wid);
+          const { shouldMarkUnread, nextWatermarkIso } = computeActivityBadgeCatchup(
+            logs.map((log) => ({
+              actor_user_id: log.actor_user_id,
+              created_at: log.created_at,
+            })),
+            prev,
+            {
+              myUserId: String(myId),
+              workspaceId: wid,
+              activeWorkspaceId: activeWorkspaceIdRef.current,
+            },
+          );
+          if (shouldMarkUnread) markSharedWorkspaceUnread(wid);
+          if (nextWatermarkIso) setSharedWorkspaceActivityWatermark(wid, nextWatermarkIso);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    void runCatchup();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void runCatchup();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    let appListener = null;
+    let appListenerCancelled = false;
+    if (Capacitor.isNativePlatform()) {
+      void App.addListener('appStateChange', (state) => {
+        if (state.isActive) void runCatchup();
+      }).then((handle) => {
+        if (appListenerCancelled) {
+          try {
+            handle.remove();
+          } catch {
+            /* ignore */
+          }
+        } else {
+          appListener = handle;
+        }
+      });
+    }
+    return () => {
+      cancelled = true;
+      appListenerCancelled = true;
+      document.removeEventListener('visibilitychange', onVis);
+      try {
+        appListener?.remove?.();
+      } catch {
+        /* ignore */
+      }
     };
   }, [
     canUseSupabase,

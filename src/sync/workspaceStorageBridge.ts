@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ArchivedNote, Category, Note } from './types';
 import {
+  getArchivedHadNonEmptyRemotePull,
   getLocalArchivedNoteTombstones,
   getLocalArchivedNotes,
   getLocalCategoryTombstones,
@@ -88,7 +89,21 @@ export type FlushWorkspaceUiOpts = {
   remoteIdsEverConfirmed?: Set<string> | null;
   /** Active note ids from the current server pull for this workspace. */
   remoteNoteIdsThisPull?: Set<string> | null;
+  /** Same pattern as notes, for archived_notes (shared workspace clear-all / peer deletes). */
+  remoteArchivedIdsEverConfirmed?: Set<string> | null;
+  /** Archived note ids returned by the current server pull for this workspace. */
+  remoteArchivedIdsThisPull?: Set<string> | null;
 };
+
+/** Exported for tests — when true, flush drops all UI archived rows to match an empty server pull. */
+export function shouldAuthoritativeClearArchivedOnFlush(
+  hadRemoteSnapshot: boolean,
+  remoteArchivedThisPull: Set<string> | null | undefined,
+): boolean {
+  if (!hadRemoteSnapshot) return false;
+  if (remoteArchivedThisPull == null) return false;
+  return remoteArchivedThisPull.size === 0;
+}
 
 /**
  * Merge UI workspace JSON (localStorage workspace_* keys) into plainsight_local_*
@@ -219,7 +234,29 @@ export async function flushWorkspaceUiIntoLocalDb(
   await saveLocalNoteTags(workspaceId, noteTagRowsFromNotes(mergedActiveNotes));
 
   const localArch = await getLocalArchivedNotes(workspaceId);
-  const uiArch: ArchivedNote[] = Object.values(ui.archivedNotes || {}).map(
+  const aConfirmed = opts?.remoteArchivedIdsEverConfirmed;
+  const aPull = opts?.remoteArchivedIdsThisPull;
+  const hadArchivedRemote = await getArchivedHadNonEmptyRemotePull(workspaceId);
+  const authoritativeEmpty = shouldAuthoritativeClearArchivedOnFlush(hadArchivedRemote, aPull);
+
+  let archivedEntries = Object.values(ui.archivedNotes || {}) as {
+    text?: string;
+    category?: string;
+    lastDeletedAt?: number;
+  }[];
+  if (authoritativeEmpty) {
+    archivedEntries = [];
+  } else if (aConfirmed && aPull && aConfirmed.size > 0) {
+    archivedEntries = archivedEntries.filter((entry) => {
+      const text = typeof entry.text === 'string' ? entry.text : '';
+      const id = archivedRowIdForText(workspaceId, text);
+      if (!text.trim()) return true;
+      if (aConfirmed.has(id) && !aPull.has(id)) return false;
+      return true;
+    });
+  }
+
+  const uiArch: ArchivedNote[] = archivedEntries.map(
     (entry: { text?: string; category?: string; lastDeletedAt?: number }) => {
       const text = typeof entry.text === 'string' ? entry.text : '';
       const cat =

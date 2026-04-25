@@ -160,6 +160,23 @@ describe('hydration merge — archived notes (mergeArchivedNotes)', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].text).toBe('local wins');
   });
+
+  it('omits local-only archived rows when id was confirmed on server but remote no longer has them', () => {
+    const local = [arch('gone-id', 'stale ui', '2020-01-01T00:00:00.000Z')];
+    const remote: ReturnType<typeof arch>[] = [];
+    const confirmed = new Set(['gone-id']);
+    const { merged, toPush } = mergeArchivedNotes(local, remote, { remoteIdsEverConfirmed: confirmed });
+    expect(merged).toHaveLength(0);
+    expect(toPush).toHaveLength(0);
+  });
+
+  it('still pushes brand-new local archived rows not yet confirmed on server', () => {
+    const local = [arch('new-id', 'only local', '2020-01-01T00:00:00.000Z')];
+    const remote: ReturnType<typeof arch>[] = [];
+    const { merged, toPush } = mergeArchivedNotes(local, remote, { remoteIdsEverConfirmed: new Set() });
+    expect(merged.map((x) => x.id)).toEqual(['new-id']);
+    expect(toPush.map((x) => x.id)).toEqual(['new-id']);
+  });
 });
 
 describe('hydration merge — workspace pins (mergeWorkspacePins)', () => {

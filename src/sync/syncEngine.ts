@@ -18,6 +18,7 @@ import {
 import {
   clearLocalWorkspaceData,
   getLastKnownRemoteNoteIds,
+  getLastKnownRemoteArchivedNoteIds,
   getLocalArchivedNoteTags,
   getLocalArchivedNotes,
   getLocalArchivedNoteTombstones,
@@ -35,6 +36,8 @@ import {
   saveLocalArchivedNoteTombstones,
   saveLocalNoteTags,
   saveLastKnownRemoteNoteIds,
+  saveLastKnownRemoteArchivedNoteIds,
+  markArchivedHadNonEmptyRemotePull,
   saveLocalNoteTombstones,
   saveLocalNotes,
   saveLocalWorkspaces,
@@ -1252,12 +1255,21 @@ export async function fullSync(
       remoteCategories[wid] = cats.data;
       remoteNotes[wid] = notes.data;
       remoteArchived[wid] = arch.data;
+      if ((arch.data || []).length > 0) {
+        await markArchivedHadNonEmptyRemotePull(wid);
+      }
     }
 
     const lastKnownRemoteNoteIdsByWid: Record<string, Set<string>> = {};
+    const lastKnownRemoteArchivedNoteIdsByWid: Record<string, Set<string>> = {};
     await Promise.all(
       workspaceIdsToSync.map(async (wid) => {
-        lastKnownRemoteNoteIdsByWid[wid] = await getLastKnownRemoteNoteIds(wid);
+        const [nIds, aIds] = await Promise.all([
+          getLastKnownRemoteNoteIds(wid),
+          getLastKnownRemoteArchivedNoteIds(wid),
+        ]);
+        lastKnownRemoteNoteIdsByWid[wid] = nIds;
+        lastKnownRemoteArchivedNoteIdsByWid[wid] = aIds;
       }),
     );
 
@@ -1269,9 +1281,15 @@ export async function fullSync(
     }
 
     for (const wid of workspaceIdsToSync) {
+      const archivedEverConfirmed = new Set([
+        ...lastKnownRemoteArchivedNoteIdsByWid[wid],
+        ...(remoteArchived[wid] || []).map((a) => a.id),
+      ]);
       await flushWorkspaceUiIntoLocalDb(wid, {
         remoteIdsEverConfirmed: lastKnownRemoteNoteIdsByWid[wid],
         remoteNoteIdsThisPull: new Set((remoteNotes[wid] || []).map((n) => n.id)),
+        remoteArchivedIdsEverConfirmed: archivedEverConfirmed,
+        remoteArchivedIdsThisPull: new Set((remoteArchived[wid] || []).map((a) => a.id)),
       });
     }
 
@@ -1318,7 +1336,9 @@ export async function fullSync(
       mergedNotes[wid] = mergeNotes(localNotes[wid] || [], remoteNotes[wid] || [], {
         remoteIdsEverConfirmed: lastKnownRemoteNoteIdsByWid[wid],
       });
-      mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || []);
+      mergedArchived[wid] = mergeArchivedNotes(localArchived[wid] || [], remoteArchived[wid] || [], {
+        remoteIdsEverConfirmed: lastKnownRemoteArchivedNoteIdsByWid[wid],
+      });
     }
 
     // Apply tombstones: locally deleted notes must not be resurrected by remote merges.
@@ -1451,6 +1471,7 @@ export async function fullSync(
       step = `pushArchivedNotes:${wid}`;
       const archRes = await fullSyncIpc.pushArchivedNotes(archAligned);
       if (!archRes.ok) return fail(archRes.error);
+      await saveLastKnownRemoteArchivedNoteIds(wid, new Set(archAligned.map((a) => a.id)));
 
       const catDelIds = (localCategoryTombstones[wid] || []).map((t) => t.id);
       step = `pushCategoryDeletes:${wid}`;

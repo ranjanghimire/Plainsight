@@ -32,6 +32,10 @@ const KEY = {
   pins: 'plainsight_local_workspace_pins',
   /** Ids seen on server after a successful sync; used to avoid re-upserting rows another client deleted. */
   remoteNoteIdCache: (workspaceId: string) => `plainsight_local_remote_note_id_cache_${workspaceId}`,
+  /** Same for archived_notes (e.g. collaborator cleared archive). */
+  remoteArchivedIdCache: (workspaceId: string) => `plainsight_local_remote_archived_id_cache_${workspaceId}`,
+  /** True after we have ever pulled a non-empty archived_notes snapshot for this workspace. */
+  archivedHadRemoteSnapshot: (workspaceId: string) => `plainsight_ws_archived_had_remote_${workspaceId}`,
 } as const;
 
 function readJson<T>(k: string, fallback: T): T {
@@ -73,6 +77,8 @@ export async function clearLocalWorkspaceData(workspaceId: string): Promise<void
     localStorage.removeItem(KEY.noteTags(workspaceId));
     localStorage.removeItem(KEY.archivedNoteTags(workspaceId));
     localStorage.removeItem(KEY.remoteNoteIdCache(workspaceId));
+    localStorage.removeItem(KEY.remoteArchivedIdCache(workspaceId));
+    localStorage.removeItem(KEY.archivedHadRemoteSnapshot(workspaceId));
   } catch {
     /* ignore */
   }
@@ -86,6 +92,29 @@ export async function getLastKnownRemoteNoteIds(workspaceId: string): Promise<Se
 
 export async function saveLastKnownRemoteNoteIds(workspaceId: string, ids: Set<string>): Promise<void> {
   writeJson(KEY.remoteNoteIdCache(workspaceId), [...ids]);
+}
+
+/** Archived note ids confirmed on the server in a prior successful fullSync. */
+export async function getLastKnownRemoteArchivedNoteIds(workspaceId: string): Promise<Set<string>> {
+  const arr = readJson<string[]>(KEY.remoteArchivedIdCache(workspaceId), []);
+  return new Set(arr.filter((x) => typeof x === 'string' && x.length > 0));
+}
+
+export async function saveLastKnownRemoteArchivedNoteIds(
+  workspaceId: string,
+  ids: Set<string>,
+): Promise<void> {
+  writeJson(KEY.remoteArchivedIdCache(workspaceId), [...ids]);
+}
+
+export async function markArchivedHadNonEmptyRemotePull(workspaceId: string): Promise<void> {
+  if (!workspaceId) return;
+  writeJson(KEY.archivedHadRemoteSnapshot(workspaceId), true);
+}
+
+export async function getArchivedHadNonEmptyRemotePull(workspaceId: string): Promise<boolean> {
+  if (!workspaceId) return false;
+  return readJson<boolean>(KEY.archivedHadRemoteSnapshot(workspaceId), false) === true;
 }
 
 export async function getLocalCategories(workspaceId: string): Promise<Category[]> {
