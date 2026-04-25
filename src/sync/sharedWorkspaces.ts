@@ -313,6 +313,8 @@ export function buildSharedWorkspaceRows(opts: BuildRowsOpts): {
       myId != null &&
       (s.owner_id === myId ||
         s.recipient_user_id === myId ||
+        (myEmail != null &&
+          normalizeEmail(s.recipient_email) === normalizeEmail(myEmail)) ||
         acceptedOwnerWorkspaceIds.has(String(s.workspace_id)));
 
     if (acceptedForMe) {
