@@ -212,7 +212,7 @@ export function subscribeToWorkspaceShares(onChange: () => void) {
 
 export function subscribeToWorkspaceActivityLogs(
   workspaceId: string,
-  onChange: () => void,
+  onChange: (payload: { event: 'INSERT' | 'UPDATE' | 'DELETE'; newRow: WorkspaceActivityLog | null; oldRow: WorkspaceActivityLog | null }) => void,
 ) {
   if (!hasPaidSyncSession() || !workspaceId) return () => {};
   const sb = getSupabase();
@@ -226,9 +226,16 @@ export function subscribeToWorkspaceActivityLogs(
         table: 'workspace_activity_logs',
         filter: `workspace_id=eq.${workspaceId}`,
       },
-      () => {
+      (p: any) => {
         try {
-          onChange();
+          const payload = {
+            event: (p?.eventType === 'INSERT' || p?.eventType === 'UPDATE' || p?.eventType === 'DELETE')
+              ? p.eventType
+              : 'UPDATE',
+            newRow: p?.new ? toWorkspaceActivityLog(p.new) : null,
+            oldRow: p?.old ? toWorkspaceActivityLog(p.old) : null,
+          } as const;
+          onChange(payload);
         } catch {
           /* ignore */
         }

@@ -105,6 +105,7 @@ import {
   makeWorkspacePrivate,
   shareWorkspaceByEmail,
   subscribeToWorkspaceShares,
+  subscribeToWorkspaceActivityLogs,
   updateSharedWorkspaceNameSnapshot,
 } from '../sync/sharedWorkspaces';
 import {
@@ -784,9 +785,7 @@ export function WorkspaceProvider({ children }) {
               void applyRealtimeNoteChange(w.id, payload).then(() => {
                 const wid = String(w.id);
                 const activeId = activeWorkspaceIdRef.current;
-                if (!activeId || wid !== String(activeId)) {
-                  markSharedWorkspaceUnread(wid);
-                } else {
+                if (activeId && wid === String(activeId)) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -797,9 +796,7 @@ export function WorkspaceProvider({ children }) {
               void applyRealtimeCategoryChange(w.id, payload).then(() => {
                 const wid = String(w.id);
                 const activeId = activeWorkspaceIdRef.current;
-                if (!activeId || wid !== String(activeId)) {
-                  markSharedWorkspaceUnread(wid);
-                } else {
+                if (activeId && wid === String(activeId)) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -810,9 +807,7 @@ export function WorkspaceProvider({ children }) {
               void applyRealtimeArchivedNoteChange(w.id, payload).then(() => {
                 const wid = String(w.id);
                 const activeId = activeWorkspaceIdRef.current;
-                if (!activeId || wid !== String(activeId)) {
-                  markSharedWorkspaceUnread(wid);
-                } else {
+                if (activeId && wid === String(activeId)) {
                   window.dispatchEvent(new CustomEvent('plainsight:workspace-storage-mutated'));
                 }
               });
@@ -836,6 +831,46 @@ export function WorkspaceProvider({ children }) {
       });
     };
   }, [canUseSupabase, hydrationComplete, supabaseRealtimeBindingEpoch, activeStorageKey]);
+
+  /**
+   * Shared workspace notifications: use workspace_activity_logs so we only notify on real user activity
+   * (and can ignore our own edits). This avoids false positives from background sync.
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    if (!hasCustomAuthSession()) return undefined;
+    const myId = getLocalSession().userId;
+    if (!myId) return undefined;
+
+    const rows = Array.isArray(sharedWorkspaceRows) ? sharedWorkspaceRows : [];
+    if (rows.length === 0) return undefined;
+
+    const unsubs: Array<() => void> = [];
+    for (const r of rows) {
+      const wid = String(r?.workspaceId || '').trim();
+      if (!wid) continue;
+      unsubs.push(
+        subscribeToWorkspaceActivityLogs(wid, (p) => {
+          const row = p?.newRow;
+          const actor = row?.actor_user_id ? String(row.actor_user_id) : '';
+          if (!actor || actor === String(myId)) return;
+          const activeId = activeWorkspaceIdRef.current;
+          if (activeId && String(activeId) === wid) return;
+          markSharedWorkspaceUnread(wid);
+        }),
+      );
+    }
+
+    return () => {
+      unsubs.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      });
+    };
+  }, [canUseSupabase, hydrationComplete, sharedWorkspaceRows, markSharedWorkspaceUnread]);
 
   useEffect(() => {
     // With cloud sync: avoid writing workspace rows before hydration (duplicate Home rows on push).
