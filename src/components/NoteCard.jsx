@@ -942,15 +942,15 @@ export function NoteCard({
                       {formatNoteDate(deletedAtIso)}
                     </time>
                   ) : null}
-                  {!isArchived && note.createdAt ? (
+                  {!isArchived && (note.updatedAt || note.createdAt) ? (
                     <time
-                      dateTime={note.createdAt}
+                      dateTime={note.updatedAt || note.createdAt}
                       className="min-w-0 max-w-[6.5rem] shrink truncate text-[11px] font-medium tabular-nums text-stone-500 sm:max-w-[9rem] dark:text-stone-400"
                     >
-                      {formatNoteDate(note.createdAt)}
+                      {formatNoteDate(note.updatedAt || note.createdAt)}
                     </time>
                   ) : null}
-                  {(isArchived && deletedAtIso) || (!isArchived && note.createdAt) ? (
+                  {(isArchived && deletedAtIso) || (!isArchived && (note.updatedAt || note.createdAt)) ? (
                     <span
                       className={`h-4 w-px shrink-0 ${
                         isArchived ? 'bg-neutral-200 dark:bg-neutral-600' : 'bg-stone-200 dark:bg-stone-600'
