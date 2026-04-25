@@ -349,6 +349,85 @@ export function WorkspaceProvider({ children }) {
     return { ok: true };
   }, [visibleWorkspaces]);
 
+  /**
+   * Cleanup: shared workspace names should never live under legacy hidden keys (`workspace_<slug>`).
+   * If a legacy blob exists for a slug that matches an accepted shared workspace name, remove it
+   * (and any corresponding hidden workspace row id) so /manage stops listing shared workspaces.
+   *
+   * This targets the real bug pattern we've observed on collaborator accounts (e.g. `workspace_study`).
+   */
+  useEffect(() => {
+    if (!canUseSupabase || !hydrationComplete) return undefined;
+    if (!hasCustomAuthSession()) return undefined;
+    const rows = Array.isArray(sharedWorkspaceRows) ? sharedWorkspaceRows : [];
+    if (rows.length === 0) return undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const slugs = new Set();
+        for (const r of rows) {
+          const nm = String(r?.workspaceName || '').trim();
+          if (!nm) continue;
+          slugs.add(hiddenWorkspaceSlugFromName(nm));
+        }
+        if (slugs.size === 0) return;
+
+        // Remove legacy blobs + associated hidden rows.
+        const workspaces = await getLocalWorkspaces();
+        if (cancelled) return;
+        const list = Array.isArray(workspaces) ? workspaces : [];
+        const idsToRemove = new Set();
+
+        for (const slug of slugs) {
+          const legacyKey = `workspace_${slug}`;
+          // If there's a legacy blob, determine its mapped id (or create one) so we can remove the row too.
+          let mappedId;
+          try {
+            mappedId = getWorkspaceIdForStorageKey(legacyKey);
+          } catch {
+            mappedId = undefined;
+          }
+          if (!mappedId) {
+            try {
+              mappedId = getOrCreateWorkspaceIdForStorageKey(legacyKey);
+            } catch {
+              mappedId = undefined;
+            }
+          }
+          if (mappedId) idsToRemove.add(String(mappedId));
+          try {
+            deleteWorkspace(legacyKey);
+          } catch {
+            /* ignore */
+          }
+          try {
+            removeWorkspaceIdMapping(legacyKey, mappedId);
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (idsToRemove.size > 0) {
+          // Drop matching hidden rows and any local per-workspace tables.
+          const next = list.filter((w) => !idsToRemove.has(String(w?.id || '')));
+          await saveLocalWorkspaces(next);
+          for (const id of idsToRemove) {
+            try {
+              await clearLocalWorkspaceData(id);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseSupabase, hydrationComplete, sharedWorkspaceRows]);
+
   const getWorkspaceIdByVisibleEntry = useCallback(
     (entry) => extractWorkspaceIdFromVisibleEntry(entry),
     [],
