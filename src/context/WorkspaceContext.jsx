@@ -324,7 +324,19 @@ export function WorkspaceProvider({ children }) {
 
   // Clear unread when the user opens that workspace.
   useEffect(() => {
-    const wid = getWorkspaceIdForStorageKey(activeStorageKey);
+    // Prefer extracting from `ws_visible_<uuid>` since shared workspaces always use that key.
+    // Mapping lookups can be stale/missing early in session restore.
+    let wid = null;
+    try {
+      const key = String(activeStorageKey || '');
+      if (key.startsWith(VISIBLE_WS_PREFIX)) {
+        const candidate = key.slice(VISIBLE_WS_PREFIX.length);
+        if (isUuid(candidate)) wid = candidate;
+      }
+    } catch {
+      wid = null;
+    }
+    if (!wid) wid = getWorkspaceIdForStorageKey(activeStorageKey);
     if (!wid) return;
     if (!sharedWorkspaceIdSet.has(String(wid))) return;
     clearSharedWorkspaceUnread(wid);
