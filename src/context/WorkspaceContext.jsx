@@ -339,6 +339,22 @@ export function WorkspaceProvider({ children }) {
     setSharedWorkspaceShares(localRows);
     setSharedWorkspaceRows(built.acceptedRows);
     setPendingSharedInvites(built.pendingRows);
+    // Persist a blocklist of slugs for accepted shared workspaces so we never create
+    // legacy hidden blobs (`workspace_<slug>`) for them (which would surface in /manage).
+    try {
+      const slugs = new Set();
+      for (const r of built.acceptedRows || []) {
+        const nm = String(r?.workspaceName || '').trim();
+        if (!nm) continue;
+        slugs.add(hiddenWorkspaceSlugFromName(nm));
+      }
+      localStorage.setItem(
+        'plainsight_shared_hidden_slug_blocklist_v1',
+        JSON.stringify([...slugs]),
+      );
+    } catch {
+      /* ignore */
+    }
     const cacheUid = getLocalSession().userId;
     if (cacheUid) {
       writeSharedWorkspaceMenuCache(cacheUid, {

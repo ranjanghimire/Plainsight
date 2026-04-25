@@ -10,6 +10,33 @@ import { getSession as getLocalSession } from '../auth/localSession';
 const WORKSPACE_PREFIX = 'workspace_';
 const MASTER_KEY = 'masterKey';
 
+/**
+ * Blocklist of slugs that belong to accepted shared workspaces.
+ * Used to prevent legacy hidden blobs (`workspace_<slug>`) from being created for shared workspaces,
+ * which would incorrectly surface them under /manage.
+ */
+const SHARED_HIDDEN_SLUG_BLOCKLIST_KEY = 'plainsight_shared_hidden_slug_blocklist_v1';
+
+function readSharedHiddenSlugBlocklist() {
+  try {
+    const raw = localStorage.getItem(SHARED_HIDDEN_SLUG_BLOCKLIST_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.map((x) => String(x || '').trim()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+function isBlockedLegacyHiddenWorkspaceKey(key) {
+  if (!isLegacyHiddenWorkspaceKey(key)) return false;
+  const slug = slugFromLegacyHiddenStorageKey(key);
+  if (!slug) return false;
+  const blocked = readSharedHiddenSlugBlocklist();
+  return blocked.has(String(slug));
+}
+
 /** App-level state: visible workspace list + last active storage key */
 export const APP_STATE_KEY = 'plainsight_app_state';
 
@@ -606,6 +633,9 @@ export function getHiddenWorkspaceManageEntries() {
   for (const storageKey of getAllWorkspaceKeys()) {
     if (storageKey === 'workspace_home') continue;
     if (!isLegacyHiddenWorkspaceKey(storageKey)) continue;
+    // Never list legacy hidden keys for accepted shared-workspace slugs.
+    // (They can be created by buggy clients or old builds; treat as invalid in /manage.)
+    if (isBlockedLegacyHiddenWorkspaceKey(storageKey)) continue;
     if (listed.has(storageKey)) continue;
     const id = getOrCreateWorkspaceIdForStorageKey(storageKey);
     const fromMerged = workspaces.find((w) => w.id === id && w.kind === 'hidden');
@@ -691,6 +721,13 @@ export function loadWorkspace(key) {
 }
 
 export function saveWorkspace(key, data) {
+  // Never write legacy hidden blobs for shared-workspace slugs.
+  // Those should live under ws_visible_<id>, and writing here causes /manage to list them as hidden.
+  try {
+    if (isBlockedLegacyHiddenWorkspaceKey(key)) return;
+  } catch {
+    /* ignore */
+  }
   localStorage.setItem(key, JSON.stringify(data));
 }
 
