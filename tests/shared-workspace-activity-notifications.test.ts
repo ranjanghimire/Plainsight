@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatSharedWorkspaceCollaborationNotification,
   formatSharedWorkspaceNoteNotificationBody,
   shouldMarkUnreadForSharedActivity,
   shouldScheduleIosLocalNotificationForSharedNoteActivity,
@@ -76,5 +77,18 @@ describe('sharedWorkspaceActivityNotifications', () => {
         workspaceName: 'Team',
       }),
     ).toBe(`A note was updated in ‘Team’.`);
+  });
+
+  it('formatSharedWorkspaceCollaborationNotification', () => {
+    const wid = 'aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee';
+    const add = formatSharedWorkspaceCollaborationNotification({
+      action: 'note_added',
+      workspaceName: 'Design reviews',
+      workspaceId: wid,
+    });
+    expect(add.title).toBe('Design reviews');
+    expect(add.body).toBe('A collaborator added a new note.');
+    expect(add.threadIdentifier).toBe(`plainsight.workspace.${wid}`);
+    expect(add.summaryArgument).toBe('Design reviews');
   });
 });

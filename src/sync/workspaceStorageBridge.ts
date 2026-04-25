@@ -168,7 +168,9 @@ export async function flushWorkspaceUiIntoLocalDb(
 
   const localNotes = await getLocalNotes(workspaceId);
   const rawUiNotes = Array.isArray(ui.notes) ? ui.notes : [];
-  const uiNotesForMerge =
+  const noteTombsForFlush = await getLocalNoteTombstones(workspaceId);
+  const tombNoteIdsForFlush = new Set(noteTombsForFlush.map((t) => t.id));
+  const uiNotesAfterConfirmedStrip =
     confirmed && pullIds && confirmed.size > 0
       ? rawUiNotes.filter((n) => {
           const id =
@@ -178,6 +180,13 @@ export async function flushWorkspaceUiIntoLocalDb(
           return true;
         })
       : rawUiNotes;
+  /** Never re-seed rows the user already tombstoned (avoids races before layout saves UI JSON). */
+  const uiNotesForMerge = uiNotesAfterConfirmedStrip.filter((n) => {
+    const id =
+      typeof (n as { id?: unknown }).id === 'string' ? String((n as { id: string }).id).trim() : '';
+    if (!id) return true;
+    return !tombNoteIdsForFlush.has(id);
+  });
   const uiNoteRows: Note[] = uiNotesForMerge.map((n: Record<string, unknown>) => {
     const text = typeof n.text === 'string' ? n.text : '';
     const cat =

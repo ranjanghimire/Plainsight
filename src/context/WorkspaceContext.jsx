@@ -122,11 +122,11 @@ import {
   notifyLocalPremium,
   prefetchLocalNotificationPermission,
 } from '../native/localNotifications';
+import { isNativeAppInBackgroundSync } from '../native/nativeAppLifecycle';
 import {
   shouldMarkUnreadForSharedActivity,
   shouldScheduleIosLocalNotificationForSharedNoteActivity,
-  formatSharedWorkspaceNoteNotificationBody,
-  isNativeAppInactiveForNotifications,
+  formatSharedWorkspaceCollaborationNotification,
 } from '../sync/sharedWorkspaceActivityNotifications';
 
 /**
@@ -909,15 +909,20 @@ export function WorkspaceProvider({ children }) {
               try {
                 const action = String(p?.newRow?.action || '').trim();
                 if (!shouldScheduleIosLocalNotificationForSharedNoteActivity({ action })) return;
+                if (!isNativeAppInBackgroundSync()) return;
                 const workspaceName = getWorkspaceNameById(wid);
-                void (async () => {
-                  const inactive = await isNativeAppInactiveForNotifications();
-                  if (!inactive) return;
-                  void notifyLocalPremium({
-                    title: 'Plainsight',
-                    body: formatSharedWorkspaceNoteNotificationBody({ action, workspaceName }),
+                const { title, body, threadIdentifier, summaryArgument } =
+                  formatSharedWorkspaceCollaborationNotification({
+                    action,
+                    workspaceName,
+                    workspaceId: wid,
                   });
-                })();
+                void notifyLocalPremium({
+                  title,
+                  body,
+                  threadIdentifier,
+                  summaryArgument,
+                });
               } catch {
                 /* ignore */
               }
@@ -1758,11 +1763,17 @@ export function WorkspaceProvider({ children }) {
           }
         });
       }
-      return {
+      const next = {
         ...prev,
         notes: (prev.notes || []).filter((x) => x.id !== id),
         archivedNotes: archOut,
       };
+      try {
+        saveWorkspace(activeStorageKey, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
     });
     void (async () => {
       try {

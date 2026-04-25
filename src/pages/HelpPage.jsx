@@ -315,6 +315,9 @@ export function HelpPage() {
                     void notifyLocalPremium({
                       title: 'Plainsight',
                       body: 'Test: shared workspace notification pipeline.',
+                      threadIdentifier: 'plainsight.self-test',
+                      summaryArgument: 'Self test',
+                      delayMs: 750,
                     })
                       .then(() => setNotificationSelfTestStatus('Scheduled (check Notification Center).'))
                       .catch(() => setNotificationSelfTestStatus('Failed — see Xcode device logs.'));

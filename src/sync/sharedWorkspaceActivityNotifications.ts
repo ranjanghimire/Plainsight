@@ -1,6 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-import { App } from '@capacitor/app';
-
 export type SharedWorkspaceActivityPayload = {
   event: 'INSERT' | 'UPDATE' | 'DELETE';
   newRow: {
@@ -41,16 +38,30 @@ export function formatSharedWorkspaceNoteNotificationBody(args: {
   return `A note was ${verb} in ‘${name}’.`;
 }
 
-/**
- * Native: WKWebView `document.visibilityState` is not a reliable proxy for app foreground/background.
- * Use Capacitor App state so local notifications still schedule when the app is backgrounded.
- */
-export async function isNativeAppInactiveForNotifications(): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return false;
-  try {
-    const st = await App.getState();
-    return st?.isActive !== true;
-  } catch {
-    return true;
-  }
+/** Title + body tuned for a short lock-screen read; iOS shows title prominently above body. */
+export function formatSharedWorkspaceCollaborationNotification(args: {
+  action: string;
+  workspaceName: string;
+  workspaceId: string;
+}): {
+  title: string;
+  body: string;
+  threadIdentifier: string;
+  summaryArgument: string;
+} {
+  const name = String(args.workspaceName || 'Shared workspace').trim() || 'Shared workspace';
+  const wid = String(args.workspaceId || '').trim() || 'unknown';
+  const a = String(args.action || '').trim();
+  const isAdd = a === 'note_added';
+  const title =
+    name.length > 48 ? `${name.slice(0, 45).trimEnd()}…` : name;
+  const body = isAdd
+    ? 'A collaborator added a new note.'
+    : 'A collaborator updated a note.';
+  return {
+    title,
+    body,
+    threadIdentifier: `plainsight.workspace.${wid}`,
+    summaryArgument: name.length > 32 ? `${name.slice(0, 29)}…` : name,
+  };
 }

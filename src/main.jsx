@@ -4,11 +4,13 @@ import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import './index.css'
 import App from './App.jsx'
+import { initCapacitorAppLifecycleTracking } from './native/nativeAppLifecycle'
 import { installClientErrorReporter } from './telemetry/clientErrorReporter'
 
 installClientErrorReporter()
 
 if (Capacitor.isNativePlatform()) {
+  void initCapacitorAppLifecycleTracking()
   void StatusBar.setStyle({ style: Style.Default })
 }
 

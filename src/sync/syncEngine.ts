@@ -665,6 +665,20 @@ export type PushNoteDeletesResult =
   | { ok: true; deletedIds: string[] }
   | { ok: false; error: SyncError };
 
+/**
+ * After `pushNoteDeletes`, `pushNotes` must not upsert those ids or they reappear on the server.
+ * Also drops rows still covered by remaining tombstones. Exported for Vitest.
+ */
+export function mergedNotesForUpsertAfterDeletes(
+  merged: Note[],
+  remainingTombstoneIds: Iterable<string>,
+  idsDeletedOnServerThisSync: Iterable<string>,
+): Note[] {
+  const tombs = new Set(remainingTombstoneIds);
+  const removed = new Set(idsDeletedOnServerThisSync);
+  return merged.filter((n) => !tombs.has(n.id) && !removed.has(n.id));
+}
+
 export async function pushNoteDeletes(
   workspaceId: string,
   noteIds: string[],
@@ -1403,6 +1417,7 @@ export async function fullSync(
       step = `pushNoteDeletes:${wid}`;
       const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return fail(delRes.error);
+      const removedFromServer = new Set(delRes.ok ? delRes.deletedIds : []);
       if (delIds.length) {
         const removed = new Set(delRes.deletedIds);
         localNoteTombstones[wid] = (localNoteTombstones[wid] || []).filter((t) => !removed.has(t.id));
@@ -1410,7 +1425,7 @@ export async function fullSync(
       }
       const tombIdsForUpsert = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
       const notesAligned = alignNoteCategoryIds(
-        mergedNotes[wid].merged.filter((n) => !tombIdsForUpsert.has(n.id)),
+        mergedNotesForUpsertAfterDeletes(mergedNotes[wid].merged, tombIdsForUpsert, removedFromServer),
         cats,
       );
       const archAligned = alignArchivedNoteCategoryIds(mergedArchived[wid].merged, cats);
@@ -1429,6 +1444,7 @@ export async function fullSync(
       if (!noteRes.ok) return fail(noteRes.error);
 
       const onServerNow = new Set((remoteNotes[wid] || []).map((n) => n.id));
+      for (const rid of removedFromServer) onServerNow.delete(rid);
       for (const n of notesAligned) onServerNow.add(n.id);
       await saveLastKnownRemoteNoteIds(wid, onServerNow);
 
