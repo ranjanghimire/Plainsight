@@ -13,6 +13,7 @@ import {
   logWorkspaceActivity,
   makeWorkspacePrivate,
   shareWorkspaceByEmail,
+  subscribeToWorkspaceActivityLogs,
 } from '../src/sync/sharedWorkspaces';
 import { getLocalNotes, getLocalWorkspaces } from '../src/sync/localDB';
 import {
@@ -607,6 +608,43 @@ paidDescribe('shared workspace collaboration flows (paid)', () => {
     await activateDevice(owner);
     await runWorkspaceSync(setup.workspaceId);
     expect(readWorkspaceNoteText(setup.workspaceId, noteId2)).toBe(noteText);
+  });
+
+  it('realtime: collaborator activity log reaches owner subscription', async () => {
+    const c = collaborator!;
+    const setup = await setupAcceptedSharedWorkspace(owner, c);
+    workspaceIdsToCleanup.push(setup.workspaceId);
+
+    await activateDevice(owner);
+    await whenRealtimeAuthReady();
+
+    let saw = false;
+    const unsub = subscribeToWorkspaceActivityLogs(setup.workspaceId, (p) => {
+      if (p?.event !== 'INSERT') return;
+      const row = p?.newRow;
+      if (!row?.id) return;
+      if (String(row.workspace_id) !== String(setup.workspaceId)) return;
+      if (String(row.actor_user_id) !== String(c.userId)) return;
+      if (String(row.action) !== 'note_added') return;
+      saw = true;
+    });
+
+    stashDevice(owner);
+
+    await activateDevice(c);
+    const res = await logWorkspaceActivity(setup.workspaceId, 'note_added', 'Added note', {
+      note_id: crypto.randomUUID(),
+      source: 'vitest',
+    });
+    expect(res.ok).toBe(true);
+
+    // Restore owner device snapshot and wait for the realtime event.
+    await activateDevice(owner);
+    try {
+      await waitFor(() => expect(saw).toBe(true), { timeout: 8_000, interval: 200 });
+    } finally {
+      unsub();
+    }
   });
 
   it('cross-user: collaborator deletes added note; remote and both blobs stay one-note after many fullSync rounds', async () => {
