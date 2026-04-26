@@ -138,7 +138,8 @@ export async function applyRealtimeArchivedNoteChange(
   payload: ChangePayload<ArchivedNote>,
 ): Promise<void> {
   return enqueueWorkspace(workspaceId, async () => {
-    await flushWorkspaceUiIntoLocalDb(workspaceId);
+    // Do not flush UI → DB here: a peer's realtime event can interleave after "clear all" while
+    // localStorage still holds a stale archived map; flush would resurrect rows into IndexedDB.
     const rows = await getLocalArchivedNotes(workspaceId);
     const archTombs = await getLocalArchivedNoteTombstones(workspaceId);
     let nextRows = rows;
@@ -148,8 +149,8 @@ export async function applyRealtimeArchivedNoteChange(
     } else {
       const row = payload.newRow;
       if (row?.id) {
-        // Flush may have dropped this row + tombstoned it (e.g. user restored). A stale
-        // broadcast INSERT/UPDATE can otherwise re-insert before pushArchivedDeletes lands.
+        // Bulk clear / delete tombstones: ignore stale broadcast INSERT/UPDATE with older
+        // last_deleted_at than the tomb (e.g. other client still replaying old rows).
         const tomb = archTombs.find((t) => t.id === row.id) || null;
         const tombTs = tomb ? ts(tomb.deleted_at) : Number.NaN;
         const incomingTs = ts(row.last_deleted_at);

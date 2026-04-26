@@ -66,6 +66,7 @@ import {
   hiddenWorkspaceSlugFromName,
   loadAppState,
   collectMergedWorkspaceStorageKeys,
+  normalizeLastActiveStorageKeyAfterSync,
   purgeOrphanWorkspaceBlobsFromLocalStorage,
   rebuildVisibleWorkspacesFromRemote,
   removeWorkspaceIdMapping,
@@ -330,7 +331,15 @@ export async function pushWorkspaces(
             bindMergedWorkspacesToStorageKeys(list);
             const nextVisible = rebuildVisibleWorkspacesFromRemote(list, ownerId);
             const appPrev = loadAppState();
-            saveAppState(nextVisible, appPrev.lastActiveStorageKey);
+            const mergedStorageKeys = collectMergedWorkspaceStorageKeys(list);
+            const mergedIds = new Set(list.map((w) => w.id).filter(Boolean));
+            const lastActive = normalizeLastActiveStorageKeyAfterSync({
+              lastActiveStorageKey: appPrev.lastActiveStorageKey,
+              nextVisibleWorkspaces: nextVisible,
+              mergedWorkspaceIds: mergedIds,
+              mergedStorageKeys,
+            });
+            saveAppState(nextVisible, lastActive);
             workspaceIdReplacements[oldPk] = newId;
             row = { ...row, id: newId, owner_id: ownerId };
             continue;
@@ -1191,18 +1200,12 @@ export async function fullSync(
     const nextVisible = rebuildVisibleWorkspacesFromRemote(mergedWorkspacesWithOwner, ownerId);
     const appPrev = loadAppState();
     const mergedIds = new Set(mergedWorkspacesWithOwner.map((w) => w.id));
-    let lastActive = appPrev.lastActiveStorageKey;
-    const visPrefix = 'ws_visible_';
-    if (lastActive.startsWith(visPrefix)) {
-      const wid = lastActive.slice(visPrefix.length);
-      if (!mergedIds.has(wid)) lastActive = 'workspace_home';
-    } else if (
-      lastActive.startsWith('workspace_') &&
-      lastActive !== 'workspace_home' &&
-      !mergedStorageKeys.has(lastActive)
-    ) {
-      lastActive = 'workspace_home';
-    }
+    const lastActive = normalizeLastActiveStorageKeyAfterSync({
+      lastActiveStorageKey: appPrev.lastActiveStorageKey,
+      nextVisibleWorkspaces: nextVisible,
+      mergedWorkspaceIds: mergedIds,
+      mergedStorageKeys,
+    });
     saveAppState(nextVisible, lastActive);
 
     // Owner always sees own workspaces; collaborators only sync accepted shared workspaces.

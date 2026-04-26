@@ -1312,7 +1312,9 @@ export function WorkspaceProvider({ children }) {
       clearSharedWorkspaceUnread(wid);
       markSharedWorkspaceViewed(wid);
       // Do not append to visibleWorkspaces: collaborators only list shared tabs under “Shared Workspaces”.
-      saveAppStatePartial({ lastActiveStorageKey: key });
+      // Never persist ws_visible_* as lastActive — it is not in personal visibleWorkspaces; fullSync
+      // would normalize anyway, but keeping Home avoids cold-start edge cases tied to app state.
+      saveAppStatePartial({ lastActiveStorageKey: 'workspace_home' });
       bumpWorkspaceSwitch();
       void queueFullSync();
       return true;

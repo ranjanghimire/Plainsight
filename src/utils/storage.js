@@ -82,6 +82,41 @@ export function isKeyInVisibleWorkspacesList(storageKey, visibleWorkspaces) {
   return list.some((w) => w.key === storageKey);
 }
 
+/**
+ * After fullSync rebuilds the personal menu-visible list, shared tabs use `ws_visible_<uuid>`
+ * keys that are intentionally absent from `visibleWorkspaces`. If we keep saving those as
+ * `lastActiveStorageKey`, cold starts can reopen a shared tab when anything reads app state.
+ */
+export function normalizeLastActiveStorageKeyAfterSync({
+  lastActiveStorageKey,
+  nextVisibleWorkspaces,
+  mergedWorkspaceIds,
+  mergedStorageKeys,
+}) {
+  const lastActive =
+    typeof lastActiveStorageKey === 'string' ? lastActiveStorageKey : 'workspace_home';
+  const nextVisible = Array.isArray(nextVisibleWorkspaces) ? nextVisibleWorkspaces : [];
+  const mergedIds =
+    mergedWorkspaceIds instanceof Set ? mergedWorkspaceIds : new Set(mergedWorkspaceIds || []);
+  const mergedKeys =
+    mergedStorageKeys instanceof Set ? mergedStorageKeys : new Set(mergedStorageKeys || []);
+
+  if (lastActive.startsWith(VISIBLE_WS_PREFIX)) {
+    const wid = lastActive.slice(VISIBLE_WS_PREFIX.length);
+    if (!mergedIds.has(wid)) return 'workspace_home';
+    if (!isKeyInVisibleWorkspacesList(lastActive, nextVisible)) return 'workspace_home';
+    return lastActive;
+  }
+  if (
+    lastActive.startsWith(WORKSPACE_PREFIX) &&
+    lastActive !== 'workspace_home' &&
+    !mergedKeys.has(lastActive)
+  ) {
+    return 'workspace_home';
+  }
+  return lastActive;
+}
+
 /** Legacy dot/hidden workspaces use keys workspace_<slug> (not workspace_home, not ws_visible_*). */
 export function isLegacyHiddenWorkspaceKey(storageKey) {
   return (
