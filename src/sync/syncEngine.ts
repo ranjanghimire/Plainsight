@@ -44,6 +44,7 @@ import {
 } from './localDB';
 import {
   applyArchivedTombstoneFilter,
+  applyNoteTombstoneFilter,
   mergeArchivedNotes,
   mergeCategories,
   mergeNotes,
@@ -1341,12 +1342,10 @@ export async function fullSync(
 
     // Apply tombstones: locally deleted notes must not be resurrected by remote merges.
     for (const wid of workspaceIdsToSync) {
-      const tombIds = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
-      if (tombIds.size === 0) continue;
-      mergedNotes[wid] = {
-        ...mergedNotes[wid],
-        merged: mergedNotes[wid].merged.filter((n) => !tombIds.has(n.id)),
-      };
+      const tombs = localNoteTombstones[wid] || [];
+      const { merged: m, changed } = applyNoteTombstoneFilter(mergedNotes[wid].merged, tombs);
+      if (!changed) continue;
+      mergedNotes[wid] = { ...mergedNotes[wid], merged: m };
     }
 
     // Apply tombstones: ignore remote rows that are older than a local permanent-delete tomb;
@@ -1441,11 +1440,9 @@ export async function fullSync(
       const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return fail(delRes.error);
       const removedFromServer = new Set(delRes.ok ? delRes.deletedIds : []);
-      if (delIds.length) {
-        const removed = new Set(delRes.deletedIds);
-        localNoteTombstones[wid] = (localNoteTombstones[wid] || []).filter((t) => !removed.has(t.id));
-        await saveLocalNoteTombstones(wid, localNoteTombstones[wid]);
-      }
+      // Do not remove note tombstones after a successful server delete: another client can still
+      // push a stale row; realtimeApply and merge need retained deleted_at to ignore replays (same
+      // reasoning as archived_notes tombstones).
       const tombIdsForUpsert = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
       const notesAligned = alignNoteCategoryIds(
         mergedNotesForUpsertAfterDeletes(mergedNotes[wid].merged, tombIdsForUpsert, removedFromServer),

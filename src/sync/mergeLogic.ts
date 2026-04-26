@@ -3,6 +3,7 @@ import type {
   ArchivedNoteTombstone,
   Category,
   Note,
+  NoteTombstone,
   Workspace,
   WorkspacePin,
 } from './types';
@@ -126,6 +127,17 @@ export function mergeNotes(
 
   merged.sort((a, b) => ts(b.updated_at) - ts(a.updated_at));
   return { merged, toPush, toPull };
+}
+
+/**
+ * Drop merged notes whose ids are locally tombstoned (permanent delete not yet trusted alone
+ * under multi-user races). Same rule as `applyRealtimeNoteChange` for INSERT replay.
+ */
+export function applyNoteTombstoneFilter(merged: Note[], tombs: NoteTombstone[]): { merged: Note[]; changed: boolean } {
+  if (!tombs.length) return { merged, changed: false };
+  const tombIds = new Set(tombs.map((t) => t.id));
+  const next = merged.filter((n) => !tombIds.has(n.id));
+  return { merged: next, changed: next.length !== merged.length };
 }
 
 /**
