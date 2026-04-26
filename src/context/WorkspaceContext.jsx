@@ -1843,7 +1843,12 @@ export function WorkspaceProvider({ children }) {
     });
     try {
       const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
-      enqueueNoteDeleteTombstone(workspaceId, id);
+      const reArchId = n ? archivedRowIdForText(workspaceId, n.text) : '';
+      enqueueNoteDeleteTombstone(
+        workspaceId,
+        id,
+        reArchId ? { clearArchivedRowIdForRearchive: reArchId } : undefined,
+      );
     } catch {
       /* ignore */
     }

@@ -43,6 +43,7 @@ import {
   saveLocalWorkspacePins,
 } from './localDB';
 import {
+  applyArchivedTombstoneFilter,
   mergeArchivedNotes,
   mergeCategories,
   mergeNotes,
@@ -1348,14 +1349,19 @@ export async function fullSync(
       };
     }
 
-    // Apply tombstones: locally deleted archived notes must not be resurrected by remote merges.
+    // Apply tombstones: ignore remote rows that are older than a local permanent-delete tomb;
+    // if the row is newer (re-archive), drop the obsolete tomb (see applyArchivedTombstoneFilter).
     for (const wid of workspaceIdsToSync) {
-      const tombIds = new Set((localArchivedTombstones[wid] || []).map((t) => t.id));
-      if (tombIds.size === 0) continue;
-      mergedArchived[wid] = {
-        ...mergedArchived[wid],
-        merged: mergedArchived[wid].merged.filter((n) => !tombIds.has(n.id)),
-      };
+      const tombs = localArchivedTombstones[wid] || [];
+      if (tombs.length === 0) continue;
+      const { merged: m, nextTombs, changed } = applyArchivedTombstoneFilter(
+        mergedArchived[wid].merged,
+        tombs,
+      );
+      if (!changed) continue;
+      localArchivedTombstones[wid] = nextTombs;
+      mergedArchived[wid] = { ...mergedArchived[wid], merged: m };
+      await saveLocalArchivedNoteTombstones(wid, nextTombs);
     }
 
     // Apply tombstones: locally deleted categories must not be resurrected by remote merges.
@@ -1475,8 +1481,9 @@ export async function fullSync(
       const catDelRes = await fullSyncIpc.pushCategoryDeletes(wid, catDelIds);
       if (!catDelRes.ok) return fail(catDelRes.error);
 
-      // Clear tombstones after successful remote deletes (note tombstones updated incrementally above).
-      if (archDelIds.length) await saveLocalArchivedNoteTombstones(wid, []);
+      // Do not wipe archived tombstones after a successful delete: a collaborator can still have
+      // the old row and push it; we need local tomb metadata to stay until a newer row supersedes
+      // it (applyArchivedTombstoneFilter) or delete-to-archive clears the reuse id (note queue).
       if (catDelIds.length) await saveLocalCategoryTombstones(wid, []);
     }
 

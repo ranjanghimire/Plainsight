@@ -3,7 +3,7 @@ import * as localDB from '../src/sync/localDB';
 import * as syncHelpers from '../src/sync/syncHelpers';
 import { archivedRowIdForText } from '../src/sync/workspaceStorageBridge';
 import { scheduleFullSyncAfterArchivedBulkDeletes } from '../src/sync/persistArchivedBulkDeleteTombstones';
-import { mergeArchivedNotes } from '../src/sync/mergeLogic';
+import { applyArchivedTombstoneFilter, mergeArchivedNotes } from '../src/sync/mergeLogic';
 
 const WID = '00000000-0000-4000-8000-00000000a1c9';
 
@@ -84,9 +84,31 @@ describe('archive clear — tombstones before queueFullSync', () => {
         created_at: '2020-01-01T00:00:00.000Z',
       },
     ];
-    const merged = mergeArchivedNotes([], remote);
-    const tombIds = new Set(tombs.map((t) => t.id));
-    const after = merged.merged.filter((n) => !tombIds.has(n.id));
+    const pre = mergeArchivedNotes([], remote);
+    const { merged: after } = applyArchivedTombstoneFilter(pre.merged, tombs);
     expect(after).toHaveLength(0);
+  });
+
+  it('newer last_deleted_at than tomb keeps row and drops obsolete tomb', () => {
+    const text = 're-archived after permanent delete';
+    const id = archivedRowIdForText(WID, text);
+    const remote = [
+      {
+        id,
+        workspace_id: WID,
+        text,
+        category_id: null,
+        last_deleted_at: '2026-01-10T00:00:00.000Z',
+        created_at: '2020-01-01T00:00:00.000Z',
+      },
+    ];
+    const tombs: { id: string; workspace_id: string; deleted_at: string }[] = [
+      { id, workspace_id: WID, deleted_at: '2025-01-01T00:00:00.000Z' },
+    ];
+    const pre = mergeArchivedNotes([], remote);
+    const { merged: after, nextTombs, changed } = applyArchivedTombstoneFilter(pre.merged, tombs);
+    expect(changed).toBe(true);
+    expect(after).toHaveLength(1);
+    expect(nextTombs).toHaveLength(0);
   });
 });

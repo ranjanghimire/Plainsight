@@ -1,5 +1,6 @@
 import type {
   ArchivedNote,
+  ArchivedNoteTombstone,
   Category,
   Note,
   Workspace,
@@ -167,6 +168,45 @@ export function mergeArchivedNotes(local: ArchivedNote[], remote: ArchivedNote[]
 
   merged.sort((a, b) => ts(b.last_deleted_at) - ts(a.last_deleted_at));
   return { merged, toPush, toPull };
+}
+
+function archTombTs(s: string | null | undefined): number {
+  if (!s) return Number.NaN;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : Number.NaN;
+}
+
+/**
+ * After mergeLocal+remote, drop rows a local permanent-delete tomb supersedes (same rules as
+ * `applyRealtimeArchivedNoteChange`). If a row has newer `last_deleted_at` than the tomb
+ * (re-archived after delete), keep the row and remove that tomb so we can push the live row.
+ */
+export function applyArchivedTombstoneFilter(
+  merged: ArchivedNote[],
+  tombs: ArchivedNoteTombstone[],
+): { merged: ArchivedNote[]; nextTombs: ArchivedNoteTombstone[]; changed: boolean } {
+  if (!tombs.length) return { merged, nextTombs: tombs, changed: false };
+  const byId = new Map(tombs.map((t) => [t.id, t]));
+  const toDropTomb = new Set<string>();
+  const nextMerged = merged.filter((n) => {
+    const tomb = byId.get(n.id);
+    if (!tomb) return true;
+    const tombTs = archTombTs(tomb.deleted_at);
+    const rowTs = archTombTs(n.last_deleted_at);
+    if (tomb && Number.isFinite(tombTs) && Number.isFinite(rowTs) && rowTs > tombTs) {
+      toDropTomb.add(n.id);
+      return true;
+    }
+    if (tomb && Number.isFinite(tombTs) && Number.isFinite(rowTs) && tombTs >= rowTs) {
+      return false;
+    }
+    return true;
+  });
+  const nextTombs = toDropTomb.size
+    ? tombs.filter((t) => !toDropTomb.has(t.id))
+    : tombs;
+  const changed = nextMerged.length !== merged.length || nextTombs !== tombs;
+  return { merged: nextMerged, nextTombs, changed };
 }
 
 /**
