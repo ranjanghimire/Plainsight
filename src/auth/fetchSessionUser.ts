@@ -1,5 +1,9 @@
 /**
  * Phase 4: validate opaque session via Edge Function (RLS + anon key).
+ *
+ * `loggedIn:false` without `staleNetwork` is ambiguous: the edge function uses the same
+ * shape for expired/missing sessions and for some infra failures. Callers must not treat it
+ * as proof the user should be logged out (see AuthProvider session restore).
  */
 
 import { invokeEdgeFunction } from './functionsInvoke';

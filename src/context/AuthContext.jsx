@@ -15,7 +15,6 @@ import {
   persistLastKnownSyncEntitledForMenu,
 } from '../sync/syncEnabled';
 import {
-  clearSession,
   ensureLocalSession,
   getSession as getLocalSession,
   LOCAL_DEV_SESSION_TOKEN,
@@ -124,14 +123,18 @@ export function AuthProvider({ children }) {
           });
           return;
         }
-        setAuthConnectivityDegraded(false);
-        persistLastKnownSyncEntitledForMenu(false);
-        clearSharedWorkspaceMenuCache(getLocalSession().userId);
-        clearSession();
-        setSyncRemoteActive(false);
-        clearAuthDisplayEmailStorage();
-        setAuthEmail(null);
-        ensureLocalSession();
+        // `auth-session-user` returns loggedIn:false for expired sessions, missing rows, and
+        // transient DB/network failures — the client cannot tell them apart. Clearing here
+        // caused false "signed out" on flaky PWAs while notes stayed in localStorage, which
+        // could leave the device without a dev placeholder session and block "existing account"
+        // sign-in (shouldBlockExistingAccountSignIn). Keep OTP credentials until explicit
+        // Sign out; show the same degraded indicator as unreliable connectivity.
+        setAuthConnectivityDegraded(true);
+        void sendClientErrorReport({
+          type: 'auth.session_degraded',
+          message:
+            'Session restore: ambiguous not-logged-in response; keeping local session (use Sign out to clear)',
+        });
         return;
       }
 
