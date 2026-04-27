@@ -93,6 +93,7 @@ import {
   getLocalWorkspacePins,
   getLocalWorkspaces,
   saveLocalArchivedNoteTombstones,
+  saveLocalCategories,
   saveLocalCategoryTombstones,
   saveLocalWorkspacePins,
   saveLocalWorkspaces,
@@ -2062,6 +2063,42 @@ export function WorkspaceProvider({ children }) {
         archivedNotes: arch,
       };
     });
+    // Keep local DB category ids stable across renames so sync updates the existing row
+    // instead of inserting a new `categories` row and leaving the old one orphaned.
+    void (async () => {
+      try {
+        const workspaceId = getOrCreateWorkspaceIdForStorageKey(activeStorageKey);
+        const cats = await getLocalCategories(workspaceId);
+        const oldRow = (cats || []).find((c) => c?.name === oldName);
+        if (!oldRow?.id) return;
+
+        const existingNew = (cats || []).find((c) => c?.name === trimmed);
+        const bump = new Date(Date.now() + 2 * 60_000).toISOString();
+
+        // If the user renamed into an existing category name, treat as a merge:
+        // keep the destination row id and tombstone the old id so sync deletes it.
+        if (existingNew?.id && String(existingNew.id) !== String(oldRow.id)) {
+          const existingTombs = await getLocalCategoryTombstones(workspaceId);
+          const nextTombs = [
+            ...(existingTombs || []).filter((t) => t.id !== oldRow.id),
+            { id: oldRow.id, workspace_id: workspaceId, deleted_at: bump },
+          ];
+          await saveLocalCategoryTombstones(workspaceId, nextTombs);
+          await saveLocalCategories(
+            workspaceId,
+            (cats || []).filter((c) => String(c?.id || '') !== String(oldRow.id)),
+          );
+          return;
+        }
+
+        const next = (cats || []).map((c) =>
+          c?.id === oldRow.id ? { ...c, name: trimmed, updated_at: bump } : c,
+        );
+        await saveLocalCategories(workspaceId, next);
+      } catch {
+        /* ignore */
+      }
+    })();
     void logWorkspaceEditActivity('category_renamed', 'Renamed category', {
       from: oldName,
       to: trimmed,

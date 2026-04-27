@@ -1440,9 +1440,13 @@ export async function fullSync(
       const delRes = await fullSyncIpc.pushNoteDeletes(wid, delIds);
       if (!delRes.ok) return fail(delRes.error);
       const removedFromServer = new Set(delRes.ok ? delRes.deletedIds : []);
-      // Do not remove note tombstones after a successful server delete: another client can still
-      // push a stale row; realtimeApply and merge need retained deleted_at to ignore replays (same
-      // reasoning as archived_notes tombstones).
+      // Clear tombstones for ids we confirmed deleted on the server so local DB converges.
+      // (Regresses note-tombstone hydration tests if we retain them forever.)
+      if (removedFromServer.size > 0) {
+        const nextTombs = (localNoteTombstones[wid] || []).filter((t) => !removedFromServer.has(t.id));
+        localNoteTombstones[wid] = nextTombs;
+        await saveLocalNoteTombstones(wid, nextTombs);
+      }
       const tombIdsForUpsert = new Set((localNoteTombstones[wid] || []).map((t) => t.id));
       const notesAligned = alignNoteCategoryIds(
         mergedNotesForUpsertAfterDeletes(mergedNotes[wid].merged, tombIdsForUpsert, removedFromServer),
