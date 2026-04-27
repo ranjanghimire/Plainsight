@@ -2085,13 +2085,10 @@ export function WorkspaceProvider({ children }) {
       setOwnerSharedWorkspaceIdsCache(new Set());
       return undefined;
     }
+    // Do not clear shared menu cache when `!canUseSupabase` (entitlements / flags still loading).
+    // That produced empty "Shared Workspaces" on cold start until `refreshSharedWorkspaceState`
+    // refetched, even when readInitialSharedMenuFromCache + owner id cache were valid.
     if (!canUseSupabase) {
-      if (hydrationComplete) {
-        setSharedWorkspaceShares([]);
-        setSharedWorkspaceRows([]);
-        setPendingSharedInvites([]);
-        setOwnerSharedWorkspaceIdsCache(new Set());
-      }
       return undefined;
     }
     if (!hydrationComplete) return undefined;

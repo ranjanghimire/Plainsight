@@ -123,6 +123,33 @@ export function getOptimisticLastKnownSyncEntitledForMenu(): boolean | null {
   }
 }
 
+export type SharedWorkspacesMenuGatingInput = {
+  hasCustomAuthSession: boolean;
+  syncEntitled: boolean;
+  syncRemoteActive: boolean;
+  sharedRowCount: number;
+  pendingInviteCount: number;
+  /** `getOwnerSharedWorkspaceIdsCache().size` — owner-shared id persistence without waiting for fetch */
+  ownerSharedWorkspaceIdCacheSize: number;
+};
+
+/**
+ * Renders the real Shared Workspaces list (not the free-plan upsell) as soon as either live flags
+ * are on, a persisted “had sync” menu hint is set, or local cache indicates prior shared work.
+ * Avoids cold-start flicker while RevenueCat / gating load.
+ */
+export function shouldShowSharedWorkspacesMenuContent(
+  opts: SharedWorkspacesMenuGatingInput,
+): boolean {
+  if (!opts.hasCustomAuthSession) return false;
+  if (opts.syncEntitled && opts.syncRemoteActive) return true;
+  if (getOptimisticLastKnownSyncEntitledForMenu() === true) return true;
+  if (opts.sharedRowCount > 0) return true;
+  if (opts.pendingInviteCount > 0) return true;
+  if (opts.ownerSharedWorkspaceIdCacheSize > 0) return true;
+  return false;
+}
+
 /** @internal RevenueCat (SyncEntitlementContext). */
 export function setSyncEntitlementActive(active: boolean): void {
   if (syncEntitledFlag === active) return;

@@ -5,13 +5,18 @@ import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useSyncEntitlement } from '../context/SyncEntitlementContext';
 import { useAuth } from '../context/AuthContext';
-import { VISIBLE_WS_PREFIX, getOwnerSharedWorkspaceIdsForMenu } from '../utils/storage';
+import {
+  VISIBLE_WS_PREFIX,
+  getOwnerSharedWorkspaceIdsCache,
+  getOwnerSharedWorkspaceIdsForMenu,
+} from '../utils/storage';
 import {
   getSyncEntitled,
   getSyncRemoteActive,
   getOptimisticLastKnownSyncEntitledForMenu,
   hasCustomAuthSession,
   setSyncRemoteActive as persistSyncRemoteActive,
+  shouldShowSharedWorkspacesMenuContent,
   subscribeSyncGating,
 } from '../sync/syncEnabled';
 import {
@@ -310,8 +315,19 @@ export function MenuPanel({ open, onClose }) {
     }
   };
 
-  const isPaidCollabEnabled =
-    customAuthSession && syncEntitled && syncRemoteActive;
+  /** Real shared list + actions (not free-plan blurb) — uses persisted hints so cold start matches last session. */
+  const isPaidCollabEnabled = useMemo(
+    () =>
+      shouldShowSharedWorkspacesMenuContent({
+        hasCustomAuthSession: customAuthSession,
+        syncEntitled,
+        syncRemoteActive,
+        sharedRowCount: (sharedWorkspaces || []).length,
+        pendingInviteCount: (pendingSharedInvites || []).length,
+        ownerSharedWorkspaceIdCacheSize: getOwnerSharedWorkspaceIdsCache().size,
+      }),
+    [customAuthSession, syncEntitled, syncRemoteActive, sharedWorkspaces, pendingSharedInvites],
+  );
   const canManageSharedWorkspace = (row) =>
     Boolean(
       row &&
