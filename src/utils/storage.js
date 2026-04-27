@@ -821,6 +821,22 @@ export function setOwnerSharedWorkspaceIdsCache(ids) {
   }
 }
 
+/**
+ * Menu: owner-shared workspace UUIDs (hide under WORKSPACES; list under Shared Workspaces).
+ * Unions live share rows with `getOwnerSharedWorkspaceIdsCache()` so cold start does not wait on
+ * RevenueCat / remote-sync gating (which briefly returned an empty Set and duplicated rows).
+ */
+export function getOwnerSharedWorkspaceIdsForMenu(sharedWorkspaceRows, hasCustomAuthSession) {
+  const fromLive = new Set();
+  for (const row of sharedWorkspaceRows || []) {
+    if (row?.isOwner && row?.workspaceId) {
+      fromLive.add(String(row.workspaceId));
+    }
+  }
+  if (!hasCustomAuthSession) return fromLive;
+  return new Set([...fromLive, ...getOwnerSharedWorkspaceIdsCache()]);
+}
+
 /** Accepted + pending shared workspace menu rows, keyed by Plainsight user id (OTP session). */
 const SHARED_WS_MENU_CACHE_PREFIX = 'plainsight_shared_ws_menu_v1_';
 
